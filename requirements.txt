@@ -1,0 +1,4 @@
+hikari==2.0.0.dev101
+git+https://github.com/FasterSpeeding/Tanjun.git
+asyncpg==0.24.0
+aiobungie==0.2.5b7

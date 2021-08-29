@@ -1,0 +1,14 @@
+{
+    "reportGeneralTypeIssues": "error",
+    "typeCheckingMode": "strict",
+    "venvPath": ".",
+    "venv": ".venv",
+    "reportUnboundVariable": false,
+    "reportUndefinedVariable": true,
+    "reportMissingTypeStubs": false,
+    "reportUnknownMemberType": false,
+    "reportUnknownVariableType": false,
+    "reportUnknownArgumentType": false,
+    "reportUnknownParameterType": false,
+    "reportUnusedImport": "warning"
+}
