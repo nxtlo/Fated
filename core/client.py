@@ -24,14 +24,19 @@
 from __future__ import annotations
 
 import logging
+import os
+import traceback
 import typing
 
 import aiobungie
+import asyncpg
+import click
 import hikari
 import tanjun
 from hikari import traits
+from hikari.internal import aio
 
-from core.psql import pool
+from core.psql.pool import PgxPool
 from core.utils import config as config_
 from core.utils import net
 
@@ -46,39 +51,23 @@ class Tsujigiri(hikari.GatewayBot):
         self.config = config_.Config()
 
         # aiobungie destiny client.
+        # TODO inject this as a dependency
         self.bungie: typing.Final[aiobungie.Client] = aiobungie.Client(
             self.config.BUNGIE_TOKEN  # type: ignore
         )
-
-        # asyncpg pool
-        self.pool = pool.PgxPool(debug=True)()
-
-        # aiohttp networking.
-        self.net = net.HTTPNet(3)
 
     def sub(self) -> None:
         self.event_manager.subscribe(
             hikari.GuildMessageCreateEvent, self.on_message_create
         )
         self.event_manager.subscribe(hikari.StartedEvent, self.on_ready)
-        self.event_manager.subscribe(hikari.StoppingEvent, self.on_stopping)
 
     async def on_message_create(self, msg: hikari.GuildMessageCreateEvent) -> None:
         if msg.is_bot or not msg.is_human:
             return
 
-        # http tests.
-        if "?api" in str(msg.content):
-            api = await self.net.mock()
-            logging.info(api)
-
-        logging.info("Recived {} from {}".format(msg.content, msg.author_id))
-
     async def on_ready(self, event: hikari.StartedEvent) -> None:
         logging.info("Bot is ready.")
-
-    async def on_stopping(self, event: hikari.StoppingEvent) -> None:
-        await self.net.close()
 
 
 def build_bot() -> traits.GatewayBotAware:
@@ -96,7 +85,43 @@ def build_client(bot: traits.GatewayBotAware) -> tanjun.Client:
         tanjun.Client.from_gateway_bot(
             bot, mention_prefix=True, set_global_commands=True
         )
+        .add_type_dependency(asyncpg.pool.Pool, PgxPool())  # db pool
+        .add_type_dependency(net.HTTPNet, net.HTTPNet)  # http client session.
         .load_modules("core.components.meta")
+        .load_modules("core.components.mod")
+        .load_modules("core.components.api")
         .add_prefix("?")
     )
     return client
+
+
+@click.group(name="main", invoke_without_command=True, options_metavar="[options]")
+@click.pass_context
+def main(ctx: click.Context) -> None:
+    if ctx.invoked_subcommand is None:
+        build_bot().run()
+
+
+@main.group(short_help="Handles the db configs.", options_metavar="[options]")
+def db() -> None:
+    pass
+
+
+@db.command(name="init", short_help="Build the database tables.")
+def init() -> None:
+    loop = aio.get_or_make_loop()
+    try:
+        loop.run_until_complete(PgxPool.create_pool(build=True))
+    except Exception:
+        click.echo(f"Couldn't build the daatabse tables.", err=True)
+        traceback.print_exc()
+
+
+@main.command(name="format", short_help="Format the bot code.")
+def format_code() -> None:
+    try:
+        os.system("black core")
+        os.system("isort core")
+        os.system("codespell core -w")
+    except Exception:
+        pass

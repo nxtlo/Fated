@@ -63,16 +63,15 @@ rely = _Rely()
 class HTTPNet:
     """A client to make http requests with."""
 
-    __slots__: typing.Sequence[str] = ("_session", "max_timeout", "_lock")
+    __slots__: typing.Sequence[str] = ("_session", "_lock")
 
-    def __init__(self, max_timeout: int | None = None, /) -> None:
-        self.max_timeout = max_timeout
+    def __init__(self) -> None:
         self._session: aiohttp.ClientSession | None = None
         self._lock = asyncio.Lock()
 
     async def acquire(self) -> None:
         if self._session is None:
-            self._session = aiohttp.ClientSession(timeout=self.max_timeout)
+            self._session = aiohttp.ClientSession()
 
     async def close(self) -> None:
         if self._session is not None and not self._session.closed:
@@ -82,7 +81,7 @@ class HTTPNet:
                 raise RuntimeError("Couldn't close session.") from e
         self._session = None
 
-    async def _request(
+    async def request(
         self, method: str, url: str | URL, getter: typing.Any | None = None, **kwargs
     ) -> data_binding.JSONish:
         while True:
@@ -97,7 +96,7 @@ class HTTPNet:
                                     return data[getter]
                                 except KeyError:
                                     _LOG.error(
-                                        "{} key was not found. returnig real data.".format(
+                                        "{} key was not found. returning real data.".format(
                                             getter
                                         )
                                     )
@@ -107,6 +106,13 @@ class HTTPNet:
                             )
                         return data
                     await self.error_handle(response)
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, _, __, ___) -> None:
+        await self.close()
+        return None
 
     @staticmethod
     async def error_handle(response: aiohttp.ClientResponse, /) -> None:
@@ -153,8 +159,4 @@ class HTTPNet:
         if 500 <= status < 500:
             raise InternalError(*real_data)
 
-    # TODO write all api we're gonna use here methods here.
-
-    async def mock(self) -> data_binding.JSONish:
-        mock_api = "https://www.testjsonapi.com/users/"
-        return await self._request("GET", mock_api)
+    # TODO implement all requests we need here.

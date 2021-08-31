@@ -23,18 +23,30 @@
 
 from __future__ import annotations
 
-import os
-import asyncio
+__all__: list[str] = ["parse_code", "with_block"]
 
-from core.client import main
+import typing
 
-if os.name != "nt":
-    try:
-        import uvloop
-    except ImportError:
-        pass
-    else:
-        asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 
-if __name__ == "__main__":
-    main()
+def parse_code(*, code: str, lang: str = "sql") -> str:
+    """Parse and replace a language specific code.
+
+    Example
+    -------
+    ```sql
+        SELECT * FROM table WHERE id = $1
+            INNER JOIN table2
+        ON table.id
+        GROUP BY <> DESC
+        LIMIT 2
+    ```
+    This removes the ```sql``` code blocks and returns the original code.
+    """
+    if code.startswith(f"```{lang}") and code.endswith("```"):
+        return code.replace(f"```", "").replace(lang, "")
+    return code
+
+
+def with_block(data: typing.Any, *, lang: str = "hs") -> str:
+    """Adds code blocks to a any text."""
+    return f"```{lang}\n{data}\n```"

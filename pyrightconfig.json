@@ -11,5 +11,6 @@
     "reportUnknownArgumentType": false,
     "reportUnknownParameterType": false,
     "reportUnusedImport": "warning",
-    "reportUnusedVariable": "warning"
+    "reportUnusedVariable": "warning",
+    "reportOptionalMemberAccess": "warning"
 }

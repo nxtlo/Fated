@@ -21,6 +21,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+"""Commands that you can use for any meta stuff."""
+
 from __future__ import annotations
 
 import math  # type: ignore[import]
@@ -31,9 +33,9 @@ import hikari
 __all__: list[str] = ["component"]
 
 import tanjun
-from tanjun import abc as tabc
+from tanjun import abc
 
-component = tanjun.Component()
+component = tanjun.Component(name="meta_component")
 
 
 class QuickMath:
@@ -67,14 +69,14 @@ class QuickMath:
 
 @component.with_command
 @tanjun.as_message_command("ping")
-async def ping(ctx: tabc.Context, /) -> None:
+async def ping(ctx: abc.Context, /) -> None:
     """Pong."""
     await ctx.respond("Pong!.")
 
 
 @component.with_command
 @tanjun.as_message_command("about", "botinfo", "bot")
-async def about_command(ctx: tabc.Context) -> None:
+async def about_command(ctx: abc.Context) -> None:
     """Info about the bot itself."""
     return None
 
@@ -83,7 +85,7 @@ async def about_command(ctx: tabc.Context) -> None:
 @tanjun.with_argument("member", converters=tanjun.to_member, default=None)
 @tanjun.with_parser
 @tanjun.as_message_command("avatar")
-async def avatar_view(ctx: tabc.Context, /, member: hikari.Member) -> None:
+async def avatar_view(ctx: abc.Context, /, member: hikari.Member) -> None:
     """View of your discord avatar or other member."""
     member = member or ctx.author
     avatar = member.avatar_url or member.default_avatar_url
@@ -95,10 +97,10 @@ async def avatar_view(ctx: tabc.Context, /, member: hikari.Member) -> None:
 @tanjun.with_greedy_argument("query", converters=(str,))
 @tanjun.with_parser
 @tanjun.as_message_command("say")
-async def say_command(ctx: tabc.Context, query: str) -> None:
+async def say_command(ctx: abc.Context, query: str) -> None:
     await ctx.respond(query)
 
 
 @tanjun.as_loader
-def load_meta(client: tabc.Client) -> None:
+def load_meta(client: tanjun.Client) -> None:
     client.add_component(component.copy())
