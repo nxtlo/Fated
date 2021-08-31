@@ -22,14 +22,11 @@
 # SOFTWARE.
 
 from __future__ import annotations
-from core.utils import config
 
 import os
 import asyncio
-import hikari
-import tanjun
 
-from core import Amaya
+from core.client import build_bot
 
 if os.name != "nt":
     try:
@@ -40,13 +37,8 @@ if os.name != "nt":
         asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 
 def run() -> None:
-    bot = Amaya(config.BOT_TOKEN ,intents=hikari.Intents.ALL)
-    (
-        tanjun.Client.from_gateway_bot(bot)
-        .load_modules("core.components.meta")
-        .add_prefix("<>")
-    )
-    bot.run(asyncio_debug=True, check_for_updates=True)
+    bot = build_bot()
+    bot.run()
 
 if __name__ == "__main__":
     run()

@@ -25,35 +25,45 @@
 
 from __future__ import annotations
 
-__all__: typing.Sequence[str] = (
-    "BOT_TOKEN",
-    "BUNGIE_TOKEN",
-    "DB_USER",
-    "DB_PASSWORD",
-    "DB_HOST",
-    "DB_PORT",
-    "RAPID_TOKEN",
-)
+__all__: typing.Sequence[str] = ("Config",)
 
 import typing
 
-BOT_TOKEN: typing.Final[str] = ""
-"""The bot's token."""
+import attr
+import hikari
 
-BUNGIE_TOKEN: typing.Final[str | None] = None
-"""Bungie api key for interacting with aiobungie."""
 
-DB_USER: typing.Final[str] = ""
-"""Your database username."""
+@attr.define(repr=False, weakref_slot=False, slots=True)
+class Config:
+    """Handle the bot's configs."""
 
-DB_PASSWORD: typing.Final[str | int] = ""
-"""Your database password. this can be an int or a string."""
+    BOT_TOKEN: typing.Final[str] = attr.field(default="TOKEN")
+    """The bot's token."""
 
-DB_HOST: typing.Final[str] = "127.0.0.1"
-"""Your database host. default to `127.0.0.1`"""
+    BUNGIE_TOKEN: typing.Final[str | None] = attr.field(default=None)
+    """Bungie api key for interacting with aiobungie."""
 
-DB_PORT: typing.Final[str | int] = 5432
-"""Your database's port. Defaults to 5432."""
+    DB_USER: typing.Final[str] = attr.field(default="PSQL_USER")
+    """Your database username."""
 
-RAPID_TOKEN: typing.Final[str | None] = None
-"""Rapid api token for urban def command."""
+    DB_PASSWORD: typing.Final[str | int] = attr.field(default=":SQL_PASSWORD")
+    """Your database password. this can be an int or a string."""
+
+    DB_HOST: typing.Final[str] = attr.field(default="127.0.0.1")
+    """Your database host. default to `127.0.0.1`"""
+
+    DB_PORT: typing.Final[int] = attr.field(default=5432)
+    """Your database's port. Defaults to 5432."""
+
+    RAPID_TOKEN: typing.Final[str | None] = attr.field(default=None)
+    """Rapid api token for urban def command."""
+
+    CACHE: hikari.CacheComponents = attr.field(
+        default=(
+            hikari.CacheComponents.GUILD_CHANNELS
+            | hikari.CacheComponents.GUILDS
+            | hikari.CacheComponents.MEMBERS
+            | hikari.CacheComponents.ROLES
+        )
+    )
+    """The bot's cache settings."""

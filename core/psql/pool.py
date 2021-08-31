@@ -25,7 +25,6 @@ from __future__ import annotations
 
 __all__: typing.Sequence[str] = ("PgxPool",)
 
-import asyncio
 import copy
 import logging
 import pathlib
@@ -39,12 +38,14 @@ from core.utils import config
 
 SelfT = typing.TypeVar("SelfT", bound="PgxPool")
 
+LOG: typing.Final[logging.Logger] = logging.getLogger(__name__)
+
 
 @attr.define(weakref_slot=False, slots=True, init=True, kw_only=True)
 class PgxPool:
     """An asyncpg pool."""
 
-    _pool: asyncpg.pool.Pool = attr.field(default=asyncpg.Pool, repr=False)
+    _pool: asyncpg.Pool = attr.field(default=asyncpg.Pool, repr=False)
     """The pool itself."""
 
     debug: bool = attr.field(repr=True, default=False)
@@ -54,37 +55,46 @@ class PgxPool:
         """Returns a shallow copy of the pool for attrs safe access."""
         return copy.copy(self)
 
-    def __call__(self) -> typing.Generator[typing.Any, None, asyncpg.Pool]:
+    def __call__(self) -> typing.Generator[typing.Any, None, asyncpg.pool.Pool]:
         loop = aio.get_or_make_loop()
-        return loop.run_until_complete(self.create_pool())
+        loop.set_debug(self.debug)
+        return loop.run_until_complete(self.create_pool())  # type: ignore
+
+    @property
+    def pool(self) -> asyncpg.Pool:
+        """Access to `self._pool`."""
+        return self._pool
 
     @property
     def clone(self: SelfT) -> SelfT:
+        """Returns a clone of the pool."""
         return self.__copy__()
 
     @classmethod
-    async def create_pool(cls) -> asyncpg.pool.Pool:
+    async def create_pool(cls) -> asyncpg.pool.Pool | None:
+        config_ = config.Config()
         """Returns an asyncpg new pool and creates the tables."""
-        cls._pool = await asyncpg.create_pool(
-            user=config.DB_USER,
-            password=config.DB_PASSWORD,
-            host=config.DB_HOST,
-            port=config.DB_PORT,
+        cls._pool = await asyncpg.create_pool(  # type: ignore
+            user=config_.DB_USER,
+            password=config_.DB_PASSWORD,
+            host=config_.DB_HOST,
+            port=config_.DB_PORT,
         )
-
-        async with cls._pool.acquire() as conn:
-            try:
-                tables = cls.tables()
-                await conn.execute(tables)
-            except Exception as e:
-                raise e from None
+        tables = cls.tables()
+        await cls._pool_build__(cls._pool, tables)  # type: ignore
         return cls._pool
 
-    def serve(self) -> None:
-        """Runs the pool."""
-        loop = aio.get_or_make_loop()
-        loop.set_debug(self.debug)
-        loop.run_until_complete(self.create_pool())
+    @staticmethod
+    async def _pool_build__(pool: asyncpg.Pool, schema: str, /) -> None:
+        async with pool.acquire() as conn:
+            try:
+                await conn.execute(schema)
+                LOG.info("Building tables success.", stacklevel=2)
+            except asyncpg.exceptions.PostgresError as exc:
+                raise RuntimeError("Failed to build tahe database tables.") from exc
+            finally:
+                await pool.release(conn)
+                LOG.info("Released connections from pool.")
 
     # Methods under are just typed asyncpg.Pool methods.
     # Also since the pool already aquires the connection for us
@@ -113,14 +123,11 @@ class PgxPool:
     ) -> list[asyncpg.Record]:
         return await self._pool.fetchval(sql, *args, column, timeout)
 
-    async def close(self, pool: asyncpg.pool.Pool) -> None:
-        for tries in range(3):
-            try:
-                if pool._closing:
-                    await asyncio.sleep(1 + tries * 2)
-            except asyncpg.exceptions.InterfaceError as e:
-                raise e
-        await pool.close()
+    async def close(self) -> None:
+        try:
+            await self._pool.close()
+        except asyncpg.exceptions.InterfaceError as e:
+            raise e
 
     @staticmethod
     def tables() -> str:

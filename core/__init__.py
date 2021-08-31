@@ -22,7 +22,3 @@
 # SOFTWARE.
 
 from __future__ import annotations
-
-__all__: list[str] = ["Amaya"]
-
-from .amaya import Amaya
