@@ -25,15 +25,20 @@
 
 from __future__ import annotations
 
-import math  # type: ignore[import]
-import typing
-
-import hikari
 
 __all__: list[str] = ["component"]
 
+import math  # type: ignore[import]
+import sys
+import typing
+
+import asyncpg
+import hikari
 import tanjun
 from tanjun import abc
+
+from core.psql.pool import PgxPool
+from core.utils import net
 
 component = tanjun.Component(name="meta_component")
 
@@ -72,6 +77,56 @@ class QuickMath:
 async def ping(ctx: abc.Context, /) -> None:
     """Pong."""
     await ctx.respond("Pong!.")
+
+
+@component.with_slash_command
+@tanjun.with_guild_check
+@tanjun.with_author_permission_check(
+    hikari.Permissions.MANAGE_GUILD,
+    error_message="You need to be a guild manager to execute this command",
+)
+@tanjun.with_str_slash_option(
+    "prefix", "The prefix you want to set.", converters=str, default=None
+)
+@tanjun.as_slash_command("prefix", "Change the bot prefix to a custom one.")
+async def set_prefix(
+    ctx: tanjun.abc.Context,
+    prefix: str | None,
+    pool: PgxPool = tanjun.injected(type=asyncpg.Pool),
+) -> None:
+
+    if prefix is None:
+        await ctx.respond("You must provide a prefix.")
+        return
+
+    if len(prefix) > 5:
+        await ctx.respond("Prefix length cannot be more than 5")
+        return
+
+    try:
+        await pool.execute(
+            "INSERT INTO guilds(id, prefix) VALUES($1, $2)", ctx.guild_id, prefix
+        )
+        await ctx.respond(f"Prefix changed to {prefix}")
+    except asyncpg.exceptions.PostgresError:
+        await ctx.respond(f"Failed to set the prefix {sys.exc_info()[1]}")
+
+
+@component.with_message_command
+@tanjun.with_argument("color", greedy=True)
+@tanjun.with_parser
+@tanjun.as_message_command("colour", "Returns a view of a color by its hex.")
+async def color_fn(
+    ctx: tanjun.abc.Context,
+    color: int,
+) -> None:
+
+    embed = hikari.Embed()
+    embed.set_author(name=ctx.author.username)
+    image = f"https://some-random-api.ml/canvas/colorviewer?hex={color}"
+    embed.set_image(image)
+    embed.title = f'0x{color}'
+    await ctx.respond(embed=embed)
 
 
 @component.with_command

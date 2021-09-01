@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import logging
 import os
+import sys
 import traceback
 import typing
 
@@ -70,6 +71,15 @@ class Tsujigiri(hikari.GatewayBot):
         logging.info("Bot is ready.")
 
 
+async def get_prefix(
+    ctx: tanjun.abc.Context, pool: PgxPool = tanjun.injected(type=asyncpg.pool.Pool)
+) -> str | typing.Sequence[str]:
+    query: str = "SELECT prefix FROM guilds WHERE id = $1"
+    if (prefix := await pool.fetchval(query, ctx.guild_id)) is not None:
+        return str(prefix)
+    return ()
+
+
 def build_bot() -> traits.GatewayBotAware:
     config = config_.Config()
     intents = hikari.Intents.ALL_UNPRIVILEGED | hikari.Intents.GUILD_MEMBERS
@@ -90,6 +100,7 @@ def build_client(bot: traits.GatewayBotAware) -> tanjun.Client:
         .load_modules("core.components.meta")
         .load_modules("core.components.mod")
         .load_modules("core.components.api")
+        .set_prefix_getter(get_prefix)
         .add_prefix("?")
     )
     return client
@@ -98,6 +109,7 @@ def build_client(bot: traits.GatewayBotAware) -> tanjun.Client:
 @click.group(name="main", invoke_without_command=True, options_metavar="[options]")
 @click.pass_context
 def main(ctx: click.Context) -> None:
+    print(sys.argv)
     if ctx.invoked_subcommand is None:
         build_bot().run()
 

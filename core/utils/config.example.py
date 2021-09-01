@@ -40,13 +40,16 @@ class Config:
     BOT_TOKEN: typing.Final[str] = attr.field(default="TOKEN")
     """The bot's token."""
 
+    DB_NAME: typing.Final[str] = attr.field(default="NAME")
+    """Your database name."""
+
     BUNGIE_TOKEN: typing.Final[str | None] = attr.field(default=None)
     """Bungie api key for interacting with aiobungie."""
 
     DB_USER: typing.Final[str] = attr.field(default="PSQL_USER")
     """Your database username."""
 
-    DB_PASSWORD: typing.Final[str | int] = attr.field(default=":SQL_PASSWORD")
+    DB_PASSWORD: typing.Final[str | int] = attr.field(default="PSQL_PASSWORD")
     """Your database password. this can be an int or a string."""
 
     DB_HOST: typing.Final[str] = attr.field(default="127.0.0.1")

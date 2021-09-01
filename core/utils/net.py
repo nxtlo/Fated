@@ -28,16 +28,16 @@ from __future__ import annotations
 import asyncio
 import logging
 import typing
+
 from http import HTTPStatus as http
 
 import aiohttp
 import attr
 import multidict
-from hikari.internal import data_binding
 from yarl import URL
 
 _LOG: typing.Final[logging.Logger] = logging.getLogger(__name__)
-
+logging.basicConfig(level=logging.DEBUG)
 
 class _Rely:
 
@@ -59,6 +59,7 @@ class _Rely:
 
 rely = _Rely()
 
+JsonObject = dict[str, typing.Any] | list[dict[str, typing.Any]] | None
 
 class HTTPNet:
     """A client to make http requests with."""
@@ -83,13 +84,23 @@ class HTTPNet:
 
     async def request(
         self, method: str, url: str | URL, getter: typing.Any | None = None, **kwargs
-    ) -> data_binding.JSONish:
+    ) -> JsonObject | bytes | None:
+        data: JsonObject | bytes = None
         while True:
             async with rely:
                 await self.acquire()
-                async with self._session.request(method, url, **kwargs) as response:  # type: ignore
+                async with self._session.request(method, url, **kwargs) as response:
                     if http.MULTIPLE_CHOICES > response.status >= http.OK:
+                        _LOG.debug(f"{method} Request Success from {str(response.real_url)}")
+
+                        if response.content_type == f"image/{'png' or 'jpg' or 'gif'}":
+                            data = await response.read()
+                            return data
+
                         data = await response.json(encoding="utf-8")
+                        if data is None:
+                            return None
+
                         if getter:
                             if isinstance(data, dict):
                                 try:
@@ -117,7 +128,7 @@ class HTTPNet:
     @staticmethod
     async def error_handle(response: aiohttp.ClientResponse, /) -> None:
         json_data = await response.json()
-        real_data: data_binding.JSONArray = [
+        real_data: list[typing.Any] = [
             str(response.real_url),
             response.headers,
             json_data,
@@ -128,25 +139,25 @@ class HTTPNet:
         class NotFound(RuntimeError):
             url: str | URL = attr.field()
             headers: multidict.CIMultiDictProxy[str] = attr.field()
-            data: data_binding.JSONish = attr.field()
+            data: JsonObject = attr.field()
 
         @attr.define(weakref_slot=False, repr=False)
         class BadRequest(RuntimeError):
             url: str | URL = attr.field()
             headers: multidict.CIMultiDictProxy[str] = attr.field()
-            data: data_binding.JSONish = attr.field()
+            data: JsonObject = attr.field()
 
         @attr.define(weakref_slot=False, repr=False)
         class Forbidden(RuntimeError):
             url: str | URL = attr.field()
             headers: multidict.CIMultiDictProxy[str] = attr.field()
-            data: data_binding.JSONish = attr.field()
+            data: JsonObject = attr.field()
 
         @attr.define(weakref_slot=False, repr=False)
         class InternalError(RuntimeError):
             url: str | URL = attr.field()
             headers: multidict.CIMultiDictProxy[str] = attr.field()
-            data: data_binding.JSONish = attr.field()
+            data: JsonObject = attr.field()
 
         if response.status == http.NOT_FOUND:
             raise NotFound(*real_data)

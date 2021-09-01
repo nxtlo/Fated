@@ -26,7 +26,6 @@ from __future__ import annotations
 __all__: typing.Sequence[str] = ("PgxPool",)
 
 import asyncio
-import copy
 import logging
 import os
 import pathlib
@@ -36,7 +35,7 @@ import asyncpg
 import attr
 import colorlog
 
-from core.utils import config
+from core.utils import config, traits
 
 SelfT = typing.TypeVar("SelfT", bound="PgxPool")
 
@@ -45,15 +44,11 @@ logging.basicConfig(level=logging.INFO)
 
 
 @attr.define(weakref_slot=False, slots=True, init=True, kw_only=True)
-class PgxPool(asyncpg.pool.Pool):  # type: ignore
+class PgxPool(traits.PoolRunner):
     """An asyncpg pool."""
 
     _pool: asyncpg.Pool = attr.field(default=asyncpg.Pool, repr=False)
     """The pool itself."""
-
-    def __copy__(self: SelfT) -> SelfT:
-        """Returns a shallow copy of the pool for attrs safe access."""
-        return copy.copy(self)
 
     def __call__(self) -> typing.Coroutine[None, None, asyncpg.pool.Pool | None]:
         asyncio.get_running_loop()
@@ -64,15 +59,12 @@ class PgxPool(asyncpg.pool.Pool):  # type: ignore
         """Access to `self._pool`."""
         return self._pool
 
-    def clone(self: SelfT) -> SelfT:
-        """Returns a clone of the pool."""
-        return self.__copy__()
-
     @classmethod
     async def create_pool(cls, *, build: bool = False) -> asyncpg.pool.Pool | None:
         config_ = config.Config()
         """Returns an asyncpg new pool and creates the tables."""
         cls._pool = await asyncpg.create_pool(  # type: ignore
+            database=config_.DB_NAME,
             user=config_.DB_USER,
             password=config_.DB_PASSWORD,
             host=config_.DB_HOST,
@@ -96,37 +88,37 @@ class PgxPool(asyncpg.pool.Pool):  # type: ignore
     # Also since the pool already acquires the connection for us
     # we don't need to re-aquire.
 
-    # We also ignore the types.
-
-    async def execute(self, sql: str, /, *args, timeout: float | None = None) -> None:  # type: ignore
+    async def execute(
+        self, sql: str, /, *args: typing.Any, timeout: float | None = None
+    ) -> None:
         await self._pool.execute(sql, *args, timeout)
 
-    async def fetch(  # type: ignore
+    async def fetch(
         self,
         sql: str,
         /,
-        *args: typing.Sequence[typing.Any],
+        *args: typing.Any,
         timeout: float | None = None,
     ) -> list[asyncpg.Record]:
         return await self._pool.fetch(sql, *args, timeout)
 
-    async def fetchrow(  # type: ignore
+    async def fetchrow(
         self,
         sql: str,
         /,
-        *args: typing.Sequence[typing.Any],
+        *args: typing.Any,
         timeout: float | None = None,
     ) -> list[asyncpg.Record]:
         return await self._pool.fetchrow(sql, *args, timeout)
 
-    async def fetchval(  # type: ignore
+    async def fetchval(
         self,
         sql: str,
         /,
-        *args: typing.Sequence[typing.Any],
+        *args: typing.Any,
         column: int | None = None,
         timeout: float | None = None,
-    ) -> list[asyncpg.Record]:
+    ) -> typing.Any:
         return await self._pool.fetchval(sql, *args, column, timeout)
 
     async def close(self) -> None:

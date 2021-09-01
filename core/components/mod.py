@@ -27,7 +27,8 @@ from __future__ import annotations
 
 __all__: list[str] = ["component"]
 
-import typing
+
+import sys
 
 import asyncpg
 import tanjun
@@ -65,24 +66,26 @@ async def run_sql(
     """
 
     query = format.parse_code(code=query)
-    result: None | typing.Sequence[str] = None
+    result: None | list[asyncpg.Record] = None
+
     try:
         result = await pool.fetch(query)
 
         # SQL Code error
     except asyncpg.exceptions.PostgresSyntaxError:
-        return await ctx.respond(f"```hs\n{sys.exc_info()[1]}\n```")  # type: ignore
+        await ctx.respond(format.with_block(sys.exc_info()[1]))
+        return
 
         # Tables doesn't exists.
     except asyncpg.exceptions.UndefinedTableError:
-        return await ctx.respond(f"```hs\n{sys.exc_info()[1]}\n```")  # type: ignore
+        await ctx.respond(format.with_block(sys.exc_info()[1]))
+        return
 
     if result is None:
         await ctx.respond("Nothing found.")
+        return
 
-    # We need an else here otherwise it will send both results.
-    else:
-        await ctx.respond(f"```hs\n{result}\n```")
+    await ctx.respond(format.with_block(result))
 
 
 @tanjun.as_loader
