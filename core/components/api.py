@@ -43,7 +43,7 @@ from core.utils import consts, format
 from core.utils import net as net_
 from core.utils.config import Config
 
-component = tanjun.Component(name='api')
+component = tanjun.Component(name="api")
 config = Config()
 
 API: dict[str, str] = {

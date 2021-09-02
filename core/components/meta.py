@@ -28,12 +28,13 @@ from __future__ import annotations
 __all__: list[str] = ["component"]
 
 import sys
+
 import asyncpg
 import hikari
 import tanjun
+from aiobungie.internal import time
 from tanjun import abc
 
-from aiobungie.internal import time
 from core.psql.pool import PgxPool
 from core.utils import format
 
@@ -105,10 +106,13 @@ async def color_fn(
     embed.title = f"0x{color}"
     await ctx.respond(embed=embed)
 
+
 @component.with_message_command
 @tanjun.as_message_command("uptime", "Shows how long the bot been up for.")
 async def uptime(ctx: tanjun.abc.SlashContext) -> None:
-    await ctx.respond(f"Benn up for: {time.human_timedelta(ctx.client.metadata['uptime'], suffix=False)}")
+    await ctx.respond(
+        f"Benn up for: *{time.human_timedelta(ctx.client.metadata['uptime'], suffix=False)}*"
+    )
 
 
 @component.with_slash_command
@@ -117,6 +121,7 @@ async def about_command(
     ctx: abc.SlashContext, pool: PgxPool = tanjun.injected(type=asyncpg.Pool)
 ) -> None:
     """Info about the bot itself."""
+    print(ctx.client)
 
     if ctx.cache:
         bot = ctx.cache.get_me()

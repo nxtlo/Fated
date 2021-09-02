@@ -28,12 +28,12 @@ import logging
 import os
 import traceback
 import typing
-from aiobungie.internal import time
 
 import asyncpg
 import click
 import hikari
 import tanjun
+from aiobungie.internal import time
 from hikari import traits as hikari_traits
 from hikari.internal import aio
 
@@ -99,7 +99,7 @@ def build_client(bot: hikari_traits.GatewayBotAware) -> tanjun.Client:
         .set_prefix_getter(get_prefix)
         .add_prefix("?")
     )
-    client.metadata['uptime'] = datetime.datetime.utcnow()
+    client.metadata["uptime"] = datetime.datetime.utcnow()
     return client
 
 
