@@ -29,6 +29,8 @@ import random
 import typing
 
 COLOR: typing.Final[dict[str, int]] = {
-    'invis': 0x36393F,
-    'random': random.randint(0, 0XFFFFFF)
+    "invis": 0x36393F,
+    "random": random.randint(0, 0xFFFFFF),
 }
+
+JsonObject = dict[str, typing.Any] | list[dict[str, typing.Any]] | None

@@ -28,29 +28,32 @@ from __future__ import annotations
 __all__: list[str] = ["component"]
 
 import json
-import hikari
-import tanjun
 import random
 
+import hikari
+import tanjun
+from aiobungie.internal import time
+from hikari.internal.time import (
+    fast_iso8601_datetime_string_to_datetime as fast_datetime,
+)
+from hikari.undefined import UNDEFINED
 from tanjun import abc as tabc
 
-from hikari.internal.time import fast_iso8601_datetime_string_to_datetime as fast_datetime
-from hikari.undefined import UNDEFINED
-
-from aiobungie.internal import time
-
-from core.utils import format, consts
-from core.utils.config import Config
+from core.utils import consts, format
 from core.utils import net as net_
+from core.utils.config import Config
 
-component = tanjun.Component()
+component = tanjun.Component(name='api')
 config = Config()
 
 API: dict[str, str] = {
-    "anime": "https://api.jikan.moe/v3", 
-    "urban": "https://mashape-community-urban-dictionary.p.rapidapi.com/define"
-    }
+    "anime": "https://api.jikan.moe/v3",
+    "urban": "https://mashape-community-urban-dictionary.p.rapidapi.com/define",
+}
 """A dict that holds api endpoints."""
+
+# TODO: Make all two commands in one command.
+
 
 @component.with_slash_command
 @tanjun.with_str_slash_option("name", "The anime name")
@@ -60,11 +63,14 @@ async def get_anime(
     name: str,
     net: net_.HTTPNet = tanjun.injected(type=net_.HTTPNet),
 ) -> None:
+
+    await ctx.defer()
     async with net as cli:
-        await ctx.defer()
         if (
             raw_anime := await cli.request(
                 "GET",
+                # TODO: change the anime query to be a custom option
+                # * So we can return anime or manga.
                 f'{API["anime"]}/search/anime?q={name}/Zero&page=1&limit=1',
             )
         ) is not None:
@@ -81,7 +87,7 @@ async def get_anime(
                     url=anime.get("url", UNDEFINED),
                 )
 
-                embed.set_thumbnail(anime.get("image_url", None))
+                embed.set_image(anime.get("image_url", None))
                 meta_data = (
                     ("Episodes", anime.get("episodes", UNDEFINED)),
                     ("Score", anime.get("score", UNDEFINED)),
@@ -101,28 +107,93 @@ async def get_anime(
                     ("Being aired", anime.get("airing", UNDEFINED)),
                 )
                 for k, v in meta_data:
-                    embed.add_field(name=k, value=v, inline=False)
-                await ctx.edit_initial_response(embed=embed)
+                    embed.add_field(name=k, value=v, inline=True)
+                await ctx.respond(embed=embed)
+
+
+@component.with_slash_command
+@tanjun.with_str_slash_option("name", "The manga name")
+@tanjun.with_str_slash_option("genre", "The manga's genre", default=None)
+@tanjun.as_slash_command("manga", "Returns basic information about a manga.")
+async def get_manga(
+    ctx: tabc.SlashContext,
+    name: str,
+    genre: str | None,
+    net: net_.HTTPNet = tanjun.injected(type=net_.HTTPNet),
+) -> None:
+
+    await ctx.defer()
+    async with net as cli:
+        if (
+            raw_manga := await cli.request(
+                "GET",
+                f'{API["anime"]}/search/manga?q={name}/Zero&page=1&limit=1&genre={genre}',
+            )
+        ) is not None:
+            if type(raw_manga) is dict:
+                try:
+                    anime = raw_manga["results"][0]
+                except KeyError:
+                    await ctx.respond("Anime was not found.")
+                    return
+
+                embed = hikari.Embed(
+                    title=anime.get("title", UNDEFINED),
+                    description=anime.get("synopsis", UNDEFINED),
+                    url=anime.get("url", UNDEFINED),
+                )
+
+                embed.set_image(anime.get("image_url", None))
+                meta_data = (
+                    ("Chapters", anime.get("chapters", UNDEFINED)),
+                    ("Volumes", anime.get("volumes", UNDEFINED)),
+                    ("Type", anime.get("type", UNDEFINED)),
+                    ("Score", anime.get("score", UNDEFINED)),
+                    (
+                        "Published at",
+                        time.human_timedelta(
+                            time.clean_date(anime.get("start_date", UNDEFINED))
+                        ),
+                    ),
+                    (
+                        "Ended at",
+                        time.human_timedelta(
+                            time.clean_date(anime.get("end_date", UNDEFINED))
+                        ),
+                    ),
+                    ("Community members", anime.get("members", UNDEFINED)),
+                    ("Being published", anime.get("publishing", UNDEFINED)),
+                )
+                for k, v in meta_data:
+                    embed.add_field(name=k, value=v, inline=True)
+                await ctx.respond(embed=embed)
+
 
 @component.with_slash_command
 @tanjun.with_str_slash_option("name", "The name of the definition.")
 @tanjun.as_slash_command("def", "Returns a definition given a name.")
-async def define(ctx: tanjun.abc.SlashContext, name: str, net: net_.HTTPNet = tanjun.injected(type=net_.HTTPNet)) -> None:
+async def define(
+    ctx: tanjun.abc.SlashContext,
+    name: str,
+    net: net_.HTTPNet = tanjun.injected(type=net_.HTTPNet),
+) -> None:
     async with net as cli:
         await ctx.defer()
 
         headers: dict[str, str] = {
-            "x-rapidapi-key": config.RAPID_TOKEN, 
-            'x-rapidapi-host': 'mashape-community-urban-dictionary.p.rapidapi.com'
-            }
+            "x-rapidapi-key": config.RAPID_TOKEN,
+            "x-rapidapi-host": "mashape-community-urban-dictionary.p.rapidapi.com",
+        }
 
         try:
-            resp = await cli.request("GET", API["urban"], headers=headers, params={"term": name.lower()})
+            resp = await cli.request(
+                "GET", API["urban"], headers=headers, params={"term": name.lower()}
+            )
         except Exception as exc:
             raise RuntimeError("Couldn't make the definition request") from exc
 
         try:
-            defn = random.choice(resp['list']) # type: ignore
+            defn = random.choice(resp["list"])  # type: ignore
 
         except IndexError:
             await ctx.respond(f"Couldn't find definition about `{name}`")
@@ -143,20 +214,16 @@ async def define(ctx: tanjun.abc.SlashContext, name: str, net: net_.HTTPNet = ta
         embed = (
             hikari.Embed(
                 title=f"Definition for {name}",
-                description=(
-                    definition
-                    .replace("]", "")
-                    .replace("[", "")
-                )
-                ,
-                colour=consts.COLOR['invis'],
-                timestamp=fast_datetime(date) # type: ignore[None]
+                description=(definition.replace("]", "").replace("[", "")),
+                colour=consts.COLOR["invis"],
+                timestamp=fast_datetime(date),  # type: ignore[None]
             )
             .set_author(name=author, url=url)
             .add_field("Example", example.replace("]", "").replace("[", ""))
-            .set_footer(text=f'\U0001f44d {up_voted} - \U0001f44e {down_votes}')
+            .set_footer(text=f"\U0001f44d {up_voted} - \U0001f44e {down_votes}")
         )
         await ctx.respond(embed=embed)
+
 
 @component.with_message_command
 @tanjun.with_owner_check(halt_execution=True)
@@ -183,9 +250,7 @@ async def run_net(
     async with net as cli:
         try:
             result = await cli.request("GET", url)
-            formatted = format.with_block(
-                json.dumps(result), lang="json"
-            )
+            formatted = format.with_block(json.dumps(result), lang="json")
 
         except Exception as exc:
             await ctx.respond(f"```hs\n{exc}\n```")

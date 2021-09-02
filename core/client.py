@@ -23,16 +23,17 @@
 
 from __future__ import annotations
 
+import datetime
 import logging
 import os
 import traceback
 import typing
+from aiobungie.internal import time
 
 import asyncpg
 import click
 import hikari
 import tanjun
-
 from hikari import traits as hikari_traits
 from hikari.internal import aio
 
@@ -44,7 +45,7 @@ from core.utils import net
 class Tsujigiri(hikari.GatewayBot):
     """The bot."""
 
-    def __init__(self, token: str, **kws) -> None:
+    def __init__(self, token: str, **kws: typing.Any) -> None:
         super().__init__(token, **kws)
 
     def sub(self) -> None:
@@ -56,7 +57,7 @@ class Tsujigiri(hikari.GatewayBot):
     async def on_message_create(self, msg: hikari.GuildMessageCreateEvent) -> None:
         if msg.is_bot or not msg.is_human:
             return
-        
+
     async def on_ready(self, _: hikari.StartedEvent) -> None:
         logging.info("Bot is ready.")
 
@@ -98,6 +99,7 @@ def build_client(bot: hikari_traits.GatewayBotAware) -> tanjun.Client:
         .set_prefix_getter(get_prefix)
         .add_prefix("?")
     )
+    client.metadata['uptime'] = datetime.datetime.utcnow()
     return client
 
 

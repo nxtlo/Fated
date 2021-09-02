@@ -1,3 +1,5 @@
+// Some errors are disables due to pyright crying over anything
+// Like asyncpg for an example
 {
     "reportGeneralTypeIssues": "error",
     "typeCheckingMode": "strict",
@@ -5,11 +7,13 @@
     "venv": ".venv",
     "reportUnboundVariable": false,
     "reportUndefinedVariable": true,
+    // Some modules doesn't have stubs
+    // so we just ignore them.
     "reportMissingTypeStubs": false,
     "reportUnknownMemberType": false,
     "reportUnknownVariableType": false,
-    "reportUnknownArgumentType": false,
-    "reportUnknownParameterType": false,
+    "reportUnknownArgumentType": "information",
+    "reportUnknownParameterType": "error",
     "reportUnusedImport": "warning",
     "reportUnusedVariable": "warning",
     "reportOptionalMemberAccess": "warning"

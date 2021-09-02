@@ -23,11 +23,19 @@
 
 from __future__ import annotations
 
-__all__: list[str] = ["PoolRunner"]
+import aiohttp
+
+__all__: list[str] = ["PoolRunner", "NetRunner"]
 
 import typing
 
 import asyncpg
+import yarl
+
+if typing.TYPE_CHECKING:
+    import types
+
+    from . import consts
 
 
 class PoolRunner(typing.Protocol):
@@ -167,3 +175,57 @@ class PoolRunner(typing.Protocol):
     def tables() -> str:
         """The sql schema file"""
         raise NotImplementedError
+
+
+class NetRunner(typing.Protocol):
+    """An interface for our http client."""
+
+    __slots__: typing.Sequence[str] = ()
+
+    async def acquire(self) -> None:
+        """Acquires the session if its closed or set to None."""
+
+    async def close(self) -> None:
+        """Closes the http session."""
+
+    async def request(
+        self, method: str, url: str | yarl.URL, getter: typing.Any, **kwargs: typing.Any
+    ) -> consts.JsonObject:
+        """Perform an http request
+
+        Parameters
+        ----------
+        method : `str`
+            The http request method.
+            This can be `GET`. `POST`. `PUT`. `DELETE`. etc.
+
+        ## NOTE
+
+            if you're performing any request
+            that requires Auth you'll need to pass headers
+            to the kwargs like this `headers={'X-API-KEY': ...}`
+
+        url : `str` | `yarl.URL`
+            The api url. This also can be used as a `yarl.URL(...)` object.
+        getter: `typing.Any`
+            if your data is a dict[..., ...] You can use this
+            parameter to get something specific value from the dict
+            This is equl to `request['key']` -> `request(getter='key')`
+        kwargs : `typing.Any`
+            Other keyword arguments you can pass to the request.
+        """
+
+    async def __aenter__(self) -> NetRunner:
+        """`async with` for context management."""
+
+    async def __aexit__(
+        self,
+        _: BaseException | None,
+        __: BaseException | None,
+        ___: types.TracebackType | None,
+    ) -> None:
+        """Closes the session when making the requests with `async with`."""
+
+    @staticmethod
+    async def error_handle(response: aiohttp.ClientResponse, /) -> None:
+        """Handling the request errors."""

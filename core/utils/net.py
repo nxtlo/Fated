@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import types
 import typing
 from http import HTTPStatus as http
 
@@ -34,6 +35,9 @@ import aiohttp
 import attr
 import multidict
 from yarl import URL
+
+from . import traits
+from .consts import JsonObject
 
 _LOG: typing.Final[logging.Logger] = logging.getLogger(__name__)
 logging.basicConfig(level=logging.DEBUG)
@@ -50,7 +54,12 @@ class _Rely:
     async def __aenter__(self) -> None:
         await self.acquire()
 
-    async def __aexit__(self, _, __, ___) -> None:
+    async def __aexit__(
+        self,
+        _: BaseException | None,
+        __: BaseException | None,
+        ___: types.TracebackType | None,
+    ) -> None:
         self._lock.release()
 
     async def acquire(self) -> None:
@@ -59,10 +68,8 @@ class _Rely:
 
 rely = _Rely()
 
-JsonObject = dict[str, typing.Any] | list[dict[str, typing.Any]] | None
 
-
-class HTTPNet:
+class HTTPNet(traits.NetRunner):
     """A client to make http requests with."""
 
     __slots__: typing.Sequence[str] = ("_session", "_lock")
@@ -84,13 +91,19 @@ class HTTPNet:
         self._session = None
 
     async def request(
-        self, method: str, url: str | URL, getter: typing.Any | None = None, **kwargs
+        self,
+        method: str,
+        url: str | URL,
+        getter: typing.Any | None = None,
+        **kwargs: typing.Any,
     ) -> JsonObject | None:
         data: JsonObject | None = None
         while True:
             async with rely:
                 await self.acquire()
-                async with self._session.request(method, url, **kwargs) as response:
+                async with self._session.request(
+                    method, URL(url) if type(url) is URL else url, **kwargs
+                ) as response:
                     if http.MULTIPLE_CHOICES > response.status >= http.OK:
                         _LOG.debug(
                             f"{method} Request Success from {str(response.real_url)}"
@@ -120,7 +133,12 @@ class HTTPNet:
     async def __aenter__(self):
         return self
 
-    async def __aexit__(self, _, __, ___) -> None:
+    async def __aexit__(
+        self,
+        _: BaseException | None,
+        __: BaseException | None,
+        ___: types.TracebackType | None,
+    ) -> None:
         await self.close()
         return None
 

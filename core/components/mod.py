@@ -37,7 +37,7 @@ from tanjun import abc
 from core.psql import pool as pool_
 from core.utils import format
 
-component = tanjun.Component(name="mod_component")
+component = tanjun.Component(name="mod")
 
 
 @component.with_message_command

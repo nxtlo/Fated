@@ -27,48 +27,17 @@ from __future__ import annotations
 
 __all__: list[str] = ["component"]
 
-import math  # type: ignore[import]
 import sys
-import typing
-
 import asyncpg
 import hikari
-
 import tanjun
 from tanjun import abc
 
+from aiobungie.internal import time
 from core.psql.pool import PgxPool
+from core.utils import format
 
-component = tanjun.Component(name="meta_component")
-
-
-class QuickMath:
-
-    __slots__: typing.Sequence[str] = ("_left", "_op", "_right")
-
-    ALLOWED: typing.Set[str] = {"+", "-", "*", "**", "/", ""}
-
-    def __init__(self, left: int | float, op: str, right: int | float) -> None:
-        self._left = left
-        self._op = op
-        self._right = right
-
-    @property
-    def left(self) -> int | float:
-        return self._left
-
-    @property
-    def right(self) -> int | float:
-        return self._right
-
-    @property
-    def op(self) -> str:
-        """The operator."""
-        return self._op
-
-    def parse(self) -> int | float:
-        # TODO: Implement this.
-        ...
+component = tanjun.Component(name="meta")
 
 
 @component.with_command
@@ -107,15 +76,27 @@ async def set_prefix(
         await pool.execute(
             "INSERT INTO guilds(id, prefix) VALUES($1, $2)", ctx.guild_id, prefix
         )
-        await ctx.edit_initial_response(f"Prefix changed to {prefix}")
+    except asyncpg.exceptions.UniqueViolationError:
+        await pool.execute(
+            "UPDATE guilds SET prefix = $1 WHERE id = $2", prefix, ctx.guild_id
+        )
+        await ctx.respond(f"Prefix updated to {prefix}")
+        return
     except asyncpg.exceptions.PostgresError:
-        await ctx.respond(f"Failed to set the prefix {sys.exc_info()[1]}")
+        await ctx.respond(
+            f"Failed to set the prefix {format.with_block(sys.exc_info()[1])}"
+        )
+
+    await ctx.edit_initial_response(f"Prefix set to {prefix}")
 
 
 @component.with_slash_command
 @tanjun.with_str_slash_option("color", "The color hex code.")
 @tanjun.as_slash_command("colour", "Returns a view of a color by its hex.")
-async def color_fn(ctx: tanjun.abc.Context, color: int,) -> None:
+async def color_fn(
+    ctx: tanjun.abc.Context,
+    color: int,
+) -> None:
 
     embed = hikari.Embed()
     embed.set_author(name=ctx.author.username)
@@ -124,12 +105,54 @@ async def color_fn(ctx: tanjun.abc.Context, color: int,) -> None:
     embed.title = f"0x{color}"
     await ctx.respond(embed=embed)
 
+@component.with_message_command
+@tanjun.as_message_command("uptime", "Shows how long the bot been up for.")
+async def uptime(ctx: tanjun.abc.SlashContext) -> None:
+    await ctx.respond(f"Benn up for: {time.human_timedelta(ctx.client.metadata['uptime'], suffix=False)}")
+
 
 @component.with_slash_command
 @tanjun.as_slash_command("about", "Information about the bot itself.")
-async def about_command(ctx: abc.SlashContext) -> None:
+async def about_command(
+    ctx: abc.SlashContext, pool: PgxPool = tanjun.injected(type=asyncpg.Pool)
+) -> None:
     """Info about the bot itself."""
-    return None
+
+    if ctx.cache:
+        bot = ctx.cache.get_me()
+        cache = ctx.cache
+
+    from hikari._about import __version__ as hikari_version
+    from tanjun import __version__ as tanjun_version
+
+    embed = hikari.Embed(
+        title=bot.username,
+        description="Information about the bot",
+        url="https://github.com/nxtlo/Tsujigiri",
+    )
+    embed.set_footer(text=f"Hikari {hikari_version} - Tanjun {tanjun_version}")
+    embed.set_author(name=str(bot.id))
+
+    await ctx.defer()
+    if (
+        guild_prefix := await pool.fetchval(
+            "SELECT prefix FROM guilds WHERE id = $1", ctx.guild_id
+        ),
+    ) is not None:
+        embed.add_field("Guild prefix", guild_prefix)
+
+    embed.add_field(
+        "Cache",
+        f"Members: {len(cache.get_members_view())}\n"
+        f"Available guilds: {len(cache.get_available_guilds_view())}\n"
+        f"Channels: {len(cache.get_guild_channels_view())}",
+        inline=False,
+    )
+
+    if bot.avatar_url:
+        embed.set_thumbnail(bot.avatar_url)
+
+    await ctx.respond(embed=embed)
 
 
 @component.with_slash_command(copy=True)
