@@ -28,11 +28,11 @@ import os
 import traceback
 import typing
 
-import aiobungie
 import asyncpg
 import click
 import hikari
 import tanjun
+
 from hikari import traits as hikari_traits
 from hikari.internal import aio
 
@@ -56,8 +56,8 @@ class Tsujigiri(hikari.GatewayBot):
     async def on_message_create(self, msg: hikari.GuildMessageCreateEvent) -> None:
         if msg.is_bot or not msg.is_human:
             return
-
-    async def on_ready(self, event: hikari.StartedEvent) -> None:
+        
+    async def on_ready(self, _: hikari.StartedEvent) -> None:
         logging.info("Bot is ready.")
 
 

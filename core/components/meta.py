@@ -33,6 +33,7 @@ import typing
 
 import asyncpg
 import hikari
+
 import tanjun
 from tanjun import abc
 
@@ -111,14 +112,10 @@ async def set_prefix(
         await ctx.respond(f"Failed to set the prefix {sys.exc_info()[1]}")
 
 
-@component.with_message_command
-@tanjun.with_argument("color", greedy=True)
-@tanjun.with_parser
-@tanjun.as_message_command("colour", "Returns a view of a color by its hex.")
-async def color_fn(
-    ctx: tanjun.abc.Context,
-    color: int,
-) -> None:
+@component.with_slash_command
+@tanjun.with_str_slash_option("color", "The color hex code.")
+@tanjun.as_slash_command("colour", "Returns a view of a color by its hex.")
+async def color_fn(ctx: tanjun.abc.Context, color: int,) -> None:
 
     embed = hikari.Embed()
     embed.set_author(name=ctx.author.username)
@@ -128,18 +125,17 @@ async def color_fn(
     await ctx.respond(embed=embed)
 
 
-@component.with_command
-@tanjun.as_message_command("about", "botinfo", "bot")
-async def about_command(ctx: abc.Context) -> None:
+@component.with_slash_command
+@tanjun.as_slash_command("about", "Information about the bot itself.")
+async def about_command(ctx: abc.SlashContext) -> None:
     """Info about the bot itself."""
     return None
 
 
-@component.with_command(copy=True)
-@tanjun.with_argument("member", converters=tanjun.to_member, default=None)
-@tanjun.with_parser
-@tanjun.as_message_command("avatar")
-async def avatar_view(ctx: abc.Context, /, member: hikari.Member) -> None:
+@component.with_slash_command(copy=True)
+@tanjun.with_member_slash_option("member", "The discord member", default=None)
+@tanjun.as_slash_command("avatar", "Returns the avatar of a discord member or yours.")
+async def avatar_view(ctx: abc.SlashContext, /, member: hikari.Member) -> None:
     """View of your discord avatar or other member."""
     member = member or ctx.author
     avatar = member.avatar_url or member.default_avatar_url

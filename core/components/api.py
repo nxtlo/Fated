@@ -28,20 +28,29 @@ from __future__ import annotations
 __all__: list[str] = ["component"]
 
 import json
-
 import hikari
 import tanjun
-from aiobungie.internal import time
-from hikari.undefined import UNDEFINED
+import random
+
 from tanjun import abc as tabc
 
-from core.utils import format
+from hikari.internal.time import fast_iso8601_datetime_string_to_datetime as fast_datetime
+from hikari.undefined import UNDEFINED
+
+from aiobungie.internal import time
+
+from core.utils import format, consts
+from core.utils.config import Config
 from core.utils import net as net_
 
 component = tanjun.Component()
+config = Config()
 
-API: dict[str, str] = {"anime": "https://api.jikan.moe/v3"}
-
+API: dict[str, str] = {
+    "anime": "https://api.jikan.moe/v3", 
+    "urban": "https://mashape-community-urban-dictionary.p.rapidapi.com/define"
+    }
+"""A dict that holds api endpoints."""
 
 @component.with_slash_command
 @tanjun.with_str_slash_option("name", "The anime name")
@@ -95,6 +104,59 @@ async def get_anime(
                     embed.add_field(name=k, value=v, inline=False)
                 await ctx.edit_initial_response(embed=embed)
 
+@component.with_slash_command
+@tanjun.with_str_slash_option("name", "The name of the definition.")
+@tanjun.as_slash_command("def", "Returns a definition given a name.")
+async def define(ctx: tanjun.abc.SlashContext, name: str, net: net_.HTTPNet = tanjun.injected(type=net_.HTTPNet)) -> None:
+    async with net as cli:
+        await ctx.defer()
+
+        headers: dict[str, str] = {
+            "x-rapidapi-key": config.RAPID_TOKEN, 
+            'x-rapidapi-host': 'mashape-community-urban-dictionary.p.rapidapi.com'
+            }
+
+        try:
+            resp = await cli.request("GET", API["urban"], headers=headers, params={"term": name.lower()})
+        except Exception as exc:
+            raise RuntimeError("Couldn't make the definition request") from exc
+
+        try:
+            defn = random.choice(resp['list']) # type: ignore
+
+        except IndexError:
+            await ctx.respond(f"Couldn't find definition about `{name}`")
+            return
+
+        except hikari.NotFoundError:
+            pass
+
+        else:
+            example: str = defn["example"]
+            definition: str = defn["definition"]
+            up_voted: int = defn["thumbs_up"]
+            down_votes: int = defn["thumbs_down"]
+            date: str = defn["written_on"]
+            url: str = defn["permalink"]
+            author: str = defn["author"]
+
+        embed = (
+            hikari.Embed(
+                title=f"Definition for {name}",
+                description=(
+                    definition
+                    .replace("]", "")
+                    .replace("[", "")
+                )
+                ,
+                colour=consts.COLOR['invis'],
+                timestamp=fast_datetime(date) # type: ignore[None]
+            )
+            .set_author(name=author, url=url)
+            .add_field("Example", example.replace("]", "").replace("[", ""))
+            .set_footer(text=f'\U0001f44d {up_voted} | \U0001f44e `{down_votes}`')
+        )
+        await ctx.respond(embed=embed)
 
 @component.with_message_command
 @tanjun.with_owner_check(halt_execution=True)
@@ -122,7 +184,7 @@ async def run_net(
         try:
             result = await cli.request("GET", url)
             formatted = format.with_block(
-                json.dumps(result, separators=(", ", ": ")), lang="py"
+                json.dumps(result), lang="json"
             )
 
         except Exception as exc:
