@@ -25,7 +25,6 @@ from __future__ import annotations
 
 import logging
 import os
-import sys
 import traceback
 import typing
 
@@ -34,10 +33,10 @@ import asyncpg
 import click
 import hikari
 import tanjun
-from hikari import traits
+from hikari import traits as hikari_traits
 from hikari.internal import aio
 
-from core.psql.pool import PgxPool
+from core.psql import pool as pool_
 from core.utils import config as config_
 from core.utils import net
 
@@ -47,15 +46,6 @@ class Tsujigiri(hikari.GatewayBot):
 
     def __init__(self, token: str, **kws) -> None:
         super().__init__(token, **kws)
-
-        # bot configs
-        self.config = config_.Config()
-
-        # aiobungie destiny client.
-        # TODO inject this as a dependency
-        self.bungie: typing.Final[aiobungie.Client] = aiobungie.Client(
-            self.config.BUNGIE_TOKEN  # type: ignore
-        )
 
     def sub(self) -> None:
         self.event_manager.subscribe(
@@ -72,7 +62,8 @@ class Tsujigiri(hikari.GatewayBot):
 
 
 async def get_prefix(
-    ctx: tanjun.abc.Context, pool: PgxPool = tanjun.injected(type=asyncpg.pool.Pool)
+    ctx: tanjun.abc.Context,
+    pool: pool_.PgxPool = tanjun.injected(type=asyncpg.pool.Pool),
 ) -> str | typing.Sequence[str]:
     query: str = "SELECT prefix FROM guilds WHERE id = $1"
     if (prefix := await pool.fetchval(query, ctx.guild_id)) is not None:
@@ -80,8 +71,12 @@ async def get_prefix(
     return ()
 
 
-def build_bot() -> traits.GatewayBotAware:
+def build_bot() -> hikari_traits.GatewayBotAware:
+    # This is only global to pass it between
+    # The bot and the client
+    global config
     config = config_.Config()
+
     intents = hikari.Intents.ALL_UNPRIVILEGED | hikari.Intents.GUILD_MEMBERS
     bot = Tsujigiri(config.BOT_TOKEN, intents=intents)
     bot.sub()
@@ -89,13 +84,13 @@ def build_bot() -> traits.GatewayBotAware:
     return bot
 
 
-def build_client(bot: traits.GatewayBotAware) -> tanjun.Client:
-    # TODO: Add config as a dependency
+def build_client(bot: hikari_traits.GatewayBotAware) -> tanjun.Client:
+    # TODO: Add config as a dependency and aiobungie client here.
     client = (
         tanjun.Client.from_gateway_bot(
             bot, mention_prefix=True, set_global_commands=True
         )
-        .add_type_dependency(asyncpg.pool.Pool, PgxPool())  # db pool
+        .add_type_dependency(asyncpg.pool.Pool, pool_.PgxPool())  # db pool
         .add_type_dependency(net.HTTPNet, net.HTTPNet)  # http client session.
         .load_modules("core.components.meta")
         .load_modules("core.components.mod")
@@ -109,7 +104,6 @@ def build_client(bot: traits.GatewayBotAware) -> tanjun.Client:
 @click.group(name="main", invoke_without_command=True, options_metavar="[options]")
 @click.pass_context
 def main(ctx: click.Context) -> None:
-    print(sys.argv)
     if ctx.invoked_subcommand is None:
         build_bot().run()
 
@@ -123,7 +117,7 @@ def db() -> None:
 def init() -> None:
     loop = aio.get_or_make_loop()
     try:
-        loop.run_until_complete(PgxPool.create_pool(build=True))
+        loop.run_until_complete(pool_.PgxPool.create_pool(build=True))
     except Exception:
         click.echo(f"Couldn't build the daatabse tables.", err=True)
         traceback.print_exc()
