@@ -25,7 +25,6 @@
 
 from __future__ import annotations
 
-
 __all__: list[str] = ["component"]
 
 import math  # type: ignore[import]
@@ -38,7 +37,6 @@ import tanjun
 from tanjun import abc
 
 from core.psql.pool import PgxPool
-from core.utils import net
 
 component = tanjun.Component(name="meta_component")
 
@@ -90,7 +88,7 @@ async def ping(ctx: abc.Context, /) -> None:
 )
 @tanjun.as_slash_command("prefix", "Change the bot prefix to a custom one.")
 async def set_prefix(
-    ctx: tanjun.abc.Context,
+    ctx: tanjun.abc.SlashContext,
     prefix: str | None,
     pool: PgxPool = tanjun.injected(type=asyncpg.Pool),
 ) -> None:
@@ -103,11 +101,12 @@ async def set_prefix(
         await ctx.respond("Prefix length cannot be more than 5")
         return
 
+    await ctx.defer()
     try:
         await pool.execute(
             "INSERT INTO guilds(id, prefix) VALUES($1, $2)", ctx.guild_id, prefix
         )
-        await ctx.respond(f"Prefix changed to {prefix}")
+        await ctx.edit_initial_response(f"Prefix changed to {prefix}")
     except asyncpg.exceptions.PostgresError:
         await ctx.respond(f"Failed to set the prefix {sys.exc_info()[1]}")
 
@@ -125,7 +124,7 @@ async def color_fn(
     embed.set_author(name=ctx.author.username)
     image = f"https://some-random-api.ml/canvas/colorviewer?hex={color}"
     embed.set_image(image)
-    embed.title = f'0x{color}'
+    embed.title = f"0x{color}"
     await ctx.respond(embed=embed)
 
 

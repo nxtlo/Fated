@@ -28,7 +28,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import typing
-
 from http import HTTPStatus as http
 
 import aiohttp
@@ -38,6 +37,7 @@ from yarl import URL
 
 _LOG: typing.Final[logging.Logger] = logging.getLogger(__name__)
 logging.basicConfig(level=logging.DEBUG)
+
 
 class _Rely:
 
@@ -60,6 +60,7 @@ class _Rely:
 rely = _Rely()
 
 JsonObject = dict[str, typing.Any] | list[dict[str, typing.Any]] | None
+
 
 class HTTPNet:
     """A client to make http requests with."""
@@ -84,18 +85,16 @@ class HTTPNet:
 
     async def request(
         self, method: str, url: str | URL, getter: typing.Any | None = None, **kwargs
-    ) -> JsonObject | bytes | None:
-        data: JsonObject | bytes = None
+    ) -> JsonObject | None:
+        data: JsonObject | None = None
         while True:
             async with rely:
                 await self.acquire()
                 async with self._session.request(method, url, **kwargs) as response:
                     if http.MULTIPLE_CHOICES > response.status >= http.OK:
-                        _LOG.debug(f"{method} Request Success from {str(response.real_url)}")
-
-                        if response.content_type == f"image/{'png' or 'jpg' or 'gif'}":
-                            data = await response.read()
-                            return data
+                        _LOG.debug(
+                            f"{method} Request Success from {str(response.real_url)}"
+                        )
 
                         data = await response.json(encoding="utf-8")
                         if data is None:

@@ -31,12 +31,62 @@ import json
 
 import hikari
 import tanjun
+from aiobungie.internal import time
+from hikari.undefined import UNDEFINED
 from tanjun import abc as tabc
 
 from core.utils import format
 from core.utils import net as net_
 
 component = tanjun.Component()
+
+API: dict[str, str] = {"anime": "https://api.jikan.moe/v3"}
+
+
+@component.with_slash_command
+@tanjun.with_str_slash_option("name", "The anime name")
+@tanjun.as_slash_command("anime", "Returns basic information about an anime.")
+async def get_anime(
+    ctx: tabc.SlashContext,
+    name: str,
+    net: net_.HTTPNet = tanjun.injected(type=net_.HTTPNet),
+) -> None:
+    async with net as cli:
+        await ctx.defer()
+        if (
+            raw_anime := await cli.request(
+                "GET",
+                f'{API["anime"]}/search/anime?q={name}/Zero&page=1&limit=1',
+            )
+        ) is not None:
+            if type(raw_anime) is dict:
+                try:
+                    anime = raw_anime["results"][0]
+                except KeyError:
+                    await ctx.respond("Anime was not found.")
+                    return
+
+                embed = hikari.Embed(
+                    title=anime.get("title", UNDEFINED),
+                    description=anime.get("synopsis", UNDEFINED),
+                    url=anime.get("url", UNDEFINED),
+                )
+
+                embed.set_thumbnail(anime.get("image_url", None))
+                meta_data = (
+                    ("Episodes", anime.get("episodes", UNDEFINED)),
+                    ("Score", anime.get("score", UNDEFINED)),
+                    (
+                        "Aired at",
+                        time.human_timedelta(anime.get("start_date", UNDEFINED)),
+                    ),
+                    ("Finished at", anime.get("end_date", UNDEFINED)),
+                    ("Community members", anime.get("members", UNDEFINED)),
+                    ("Being aired", anime.get("airing", UNDEFINED)),
+                )
+                for k, v in meta_data:
+                    embed.add_field(name=k, value=v, inline=False)
+                await ctx.edit_initial_response(embed=embed)
 
 
 @component.with_message_command
