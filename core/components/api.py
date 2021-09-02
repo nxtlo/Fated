@@ -78,9 +78,16 @@ async def get_anime(
                     ("Score", anime.get("score", UNDEFINED)),
                     (
                         "Aired at",
-                        time.human_timedelta(anime.get("start_date", UNDEFINED)),
+                        time.human_timedelta(
+                            time.clean_date(anime.get("start_date", UNDEFINED))
+                        ),
                     ),
-                    ("Finished at", anime.get("end_date", UNDEFINED)),
+                    (
+                        "Finished at",
+                        time.human_timedelta(
+                            time.clean_date(anime.get("end_date", UNDEFINED))
+                        ),
+                    ),
                     ("Community members", anime.get("members", UNDEFINED)),
                     ("Being aired", anime.get("airing", UNDEFINED)),
                 )
