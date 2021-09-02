@@ -154,7 +154,7 @@ async def define(ctx: tanjun.abc.SlashContext, name: str, net: net_.HTTPNet = ta
             )
             .set_author(name=author, url=url)
             .add_field("Example", example.replace("]", "").replace("[", ""))
-            .set_footer(text=f'\U0001f44d {up_voted} | \U0001f44e `{down_votes}`')
+            .set_footer(text=f'\U0001f44d {up_voted} - \U0001f44e {down_votes}')
         )
         await ctx.respond(embed=embed)
 
