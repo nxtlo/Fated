@@ -46,7 +46,7 @@ component = tanjun.Component(name="mod")
 @tanjun.with_parser
 @tanjun.as_message_command("sql")
 async def run_sql(
-    ctx: abc.Context,
+    ctx: abc.MessageContext,
     query: str,
     pool: pool_.PgxPool = tanjun.injected(type=asyncpg.pool.Pool),
 ) -> None:

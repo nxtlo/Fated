@@ -43,7 +43,7 @@ component = tanjun.Component(name="meta")
 
 @component.with_command
 @tanjun.as_message_command("ping")
-async def ping(ctx: abc.Context, /) -> None:
+async def ping(ctx: abc.MessageContext, /) -> None:
     """Pong."""
     await ctx.respond("Pong!.")
 
@@ -95,7 +95,7 @@ async def set_prefix(
 @tanjun.with_str_slash_option("color", "The color hex code.")
 @tanjun.as_slash_command("colour", "Returns a view of a color by its hex.")
 async def color_fn(
-    ctx: tanjun.abc.Context,
+    ctx: tanjun.abc.MessageContext,
     color: int,
 ) -> None:
 
@@ -175,7 +175,7 @@ async def avatar_view(ctx: abc.SlashContext, /, member: hikari.Member) -> None:
 @tanjun.with_greedy_argument("query", converters=(str,))
 @tanjun.with_parser
 @tanjun.as_message_command("say")
-async def say_command(ctx: abc.Context, query: str) -> None:
+async def say_command(ctx: abc.MessageContext, query: str) -> None:
     await ctx.respond(query)
 
 

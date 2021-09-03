@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 import types
 import typing
 from http import HTTPStatus as http
@@ -90,6 +91,7 @@ class HTTPNet(traits.NetRunner):
                 raise RuntimeError("Couldn't close session.") from e
         self._session = None
 
+    @typing.final
     async def request(
         self,
         method: str,
@@ -97,38 +99,52 @@ class HTTPNet(traits.NetRunner):
         getter: typing.Any | None = None,
         **kwargs: typing.Any,
     ) -> JsonObject | None:
+        async with rely:
+            return await self._request(method, url, getter, **kwargs)
+
+    @typing.final
+    async def _request(
+        self,
+        method: str,
+        url: str | URL,
+        getter: typing.Any | None = None,
+        **kwargs: typing.Any,
+    ) -> JsonObject | None:
         data: JsonObject | None = None
-        while True:
-            async with rely:
-                await self.acquire()
-                async with self._session.request(
-                    method, URL(url) if type(url) is URL else url, **kwargs
-                ) as response:
-                    if http.MULTIPLE_CHOICES > response.status >= http.OK:
-                        _LOG.debug(
-                            f"{method} Request Success from {str(response.real_url)}"
-                        )
-
-                        data = await response.json(encoding="utf-8")
-                        if data is None:
-                            return None
-
-                        if getter:
-                            if isinstance(data, dict):
-                                try:
-                                    return data[getter]
-                                except KeyError:
-                                    _LOG.error(
-                                        "{} key was not found. returning real data.".format(
-                                            getter
-                                        )
-                                    )
-                                    return data
-                            raise TypeError(
-                                f"Data must be a dict not {type(data).__name__}"
+        while 1:
+            aquired_time = time.monotonic()
+            for _ in range(int(aquired_time)):
+                try:
+                    await self.acquire()
+                    async with self._session.request(
+                        method, URL(url) if type(url) is URL else url, **kwargs
+                    ) as response:
+                        if http.MULTIPLE_CHOICES > response.status >= http.OK:
+                            _LOG.debug(
+                                f"{method} Request Success from {str(response.real_url)}"
                             )
-                        return data
-                    await self.error_handle(response)
+
+                            data = await response.json(encoding="utf-8")
+                            if data is None:
+                                return None
+
+                            if getter:
+                                if isinstance(data, dict):
+                                    try:
+                                        return data[getter]
+                                    except KeyError:
+                                        raise NotFound(
+                                            response.real_url, response.headers, data
+                                        )
+
+                                raise TypeError(
+                                    f"Data must be a dict not {type(data).__name__}"
+                                )
+                            return data
+                        await self.error_handle(response)
+                    await asyncio.sleep(aquired_time * 2 + 1)
+                except aiohttp.ContentTypeError:
+                    pass
 
     async def __aenter__(self):
         return self
@@ -152,30 +168,6 @@ class HTTPNet(traits.NetRunner):
         ]
 
         # too lazy to define them somewhere else.
-        @attr.define(weakref_slot=False, repr=False)
-        class NotFound(RuntimeError):
-            url: str | URL = attr.field()
-            headers: multidict.CIMultiDictProxy[str] = attr.field()
-            data: JsonObject = attr.field()
-
-        @attr.define(weakref_slot=False, repr=False)
-        class BadRequest(RuntimeError):
-            url: str | URL = attr.field()
-            headers: multidict.CIMultiDictProxy[str] = attr.field()
-            data: JsonObject = attr.field()
-
-        @attr.define(weakref_slot=False, repr=False)
-        class Forbidden(RuntimeError):
-            url: str | URL = attr.field()
-            headers: multidict.CIMultiDictProxy[str] = attr.field()
-            data: JsonObject = attr.field()
-
-        @attr.define(weakref_slot=False, repr=False)
-        class InternalError(RuntimeError):
-            url: str | URL = attr.field()
-            headers: multidict.CIMultiDictProxy[str] = attr.field()
-            data: JsonObject = attr.field()
-
         if response.status == http.NOT_FOUND:
             raise NotFound(*real_data)
         if response.status == http.BAD_REQUEST:
@@ -188,3 +180,31 @@ class HTTPNet(traits.NetRunner):
             raise InternalError(*real_data)
 
     # TODO implement all requests we need here.
+
+
+@attr.define(weakref_slot=False, repr=False)
+class NotFound(RuntimeError):
+    url: str | URL = attr.field()
+    headers: multidict.CIMultiDictProxy[str] = attr.field()
+    data: JsonObject = attr.field()
+
+
+@attr.define(weakref_slot=False, repr=False)
+class BadRequest(RuntimeError):
+    url: str | URL = attr.field()
+    headers: multidict.CIMultiDictProxy[str] = attr.field()
+    data: JsonObject = attr.field()
+
+
+@attr.define(weakref_slot=False, repr=False)
+class Forbidden(RuntimeError):
+    url: str | URL = attr.field()
+    headers: multidict.CIMultiDictProxy[str] = attr.field()
+    data: JsonObject = attr.field()
+
+
+@attr.define(weakref_slot=False, repr=False)
+class InternalError(RuntimeError):
+    url: str | URL = attr.field()
+    headers: multidict.CIMultiDictProxy[str] = attr.field()
+    data: JsonObject = attr.field()

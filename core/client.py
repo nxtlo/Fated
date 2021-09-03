@@ -63,7 +63,7 @@ class Tsujigiri(hikari.GatewayBot):
 
 
 async def get_prefix(
-    ctx: tanjun.abc.Context,
+    ctx: tanjun.abc.MessageContext,
     pool: pool_.PgxPool = tanjun.injected(type=asyncpg.pool.Pool),
 ) -> str | typing.Sequence[str]:
     query: str = "SELECT prefix FROM guilds WHERE id = $1"

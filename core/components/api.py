@@ -28,7 +28,7 @@ from __future__ import annotations
 __all__: list[str] = ["component"]
 
 import json
-import random
+from random import choice
 
 import hikari
 import tanjun
@@ -36,7 +36,7 @@ from aiobungie.internal import time
 from hikari.internal.time import (
     fast_iso8601_datetime_string_to_datetime as fast_datetime,
 )
-from hikari.undefined import UNDEFINED
+from hikari.undefined import UNDEFINED, UndefinedOr
 from tanjun import abc as tabc
 
 from core.utils import consts, format
@@ -54,60 +54,97 @@ API: dict[str, str] = {
 
 # TODO: Make all two commands in one command.
 
+GENRES: dict[str, int] = {
+    "Action": 1,
+    "Advanture": 2,
+    "Drama": 8,
+    "Daemons": 6,
+    "Ecchi": 9,
+    "Magic": 16,
+    "Sci Fi": 24,
+    "Shounen": 27,
+    "Harem": 35,
+    "Seinen": 42,
+}
+"""Anime only genres."""
+
 
 @component.with_slash_command
-@tanjun.with_str_slash_option("name", "The anime name")
+@tanjun.with_str_slash_option("name", "The anime name", default=None)
+@tanjun.with_bool_slash_option("random", "Returns a random anime", default=True)
+@tanjun.with_str_slash_option(
+    "genre", "The anime genre", default=choice(list(GENRES.keys())), choices=(name for name in GENRES.keys())
+)
 @tanjun.as_slash_command("anime", "Returns basic information about an anime.")
 async def get_anime(
     ctx: tabc.SlashContext,
     name: str,
+    random: bool | None,
+    genre: str,
     net: net_.HTTPNet = tanjun.injected(type=net_.HTTPNet),
 ) -> None:
 
     await ctx.defer()
     async with net as cli:
+
+        if random is True and name is None:
+            # This is True by default in case the name is None.
+            path = f"https://api.jikan.moe/v3/genre/anime/{GENRES[genre]}/1"
+        else:
+            path = (
+                f'{API["anime"]}/search/anime?q={str(name).lower()}/Zero&page=1&limit=1'
+            )
+
         if (
             raw_anime := await cli.request(
                 "GET",
+                path,
                 # TODO: change the anime query to be a custom option
                 # * So we can return anime or manga.
-                f'{API["anime"]}/search/anime?q={name}/Zero&page=1&limit=1',
+                getter="anime" if random and genre else "results",
             )
         ) is not None:
-            if type(raw_anime) is dict:
+            if isinstance(raw_anime, list):
+                if name is None and random:
+                    anime = choice(raw_anime)
                 try:
-                    anime = raw_anime["results"][0]
-                except KeyError:
+                    anime = raw_anime[0]
+                except (KeyError, TypeError):
                     await ctx.respond("Anime was not found.")
+                    await ctx.mark_not_found()
                     return
 
                 embed = hikari.Embed(
                     title=anime.get("title", UNDEFINED),
                     description=anime.get("synopsis", UNDEFINED),
-                    url=anime.get("url", UNDEFINED),
+                    url=anime.get("url", str(UNDEFINED)),
+                    colour=consts.COLOR["invis"],
                 )
 
                 embed.set_image(anime.get("image_url", None))
+
+                start_date: UndefinedOr[str] = UNDEFINED
+                end_date: UndefinedOr[str] = UNDEFINED
+                if (
+                    raw_start_date := anime.get(
+                        "start_date" if not random or not genre else "airing_start"
+                    )
+                ) is not None:
+                    start_date = time.human_timedelta(time.clean_date(raw_start_date))
+
+                if (raw_end_date := anime.get("end_date")) is not None:
+                    end_date = time.human_timedelta(time.clean_date(raw_end_date))
+
                 meta_data = (
                     ("Episodes", anime.get("episodes", UNDEFINED)),
                     ("Score", anime.get("score", UNDEFINED)),
-                    (
-                        "Aired at",
-                        time.human_timedelta(
-                            time.clean_date(anime.get("start_date", UNDEFINED))
-                        ),
-                    ),
-                    (
-                        "Finished at",
-                        time.human_timedelta(
-                            time.clean_date(anime.get("end_date", UNDEFINED))
-                        ),
-                    ),
+                    ("Aired at", start_date),
+                    ("Finished at", end_date),
                     ("Community members", anime.get("members", UNDEFINED)),
                     ("Being aired", anime.get("airing", UNDEFINED)),
                 )
                 for k, v in meta_data:
-                    embed.add_field(name=k, value=v, inline=True)
+                    embed.add_field(k, str(v), inline=True)
                 await ctx.respond(embed=embed)
 
 
@@ -128,11 +165,12 @@ async def get_manga(
             raw_manga := await cli.request(
                 "GET",
                 f'{API["anime"]}/search/manga?q={name}/Zero&page=1&limit=1&genre={genre}',
+                getter="results",
             )
         ) is not None:
-            if type(raw_manga) is dict:
+            if isinstance(raw_manga, list):
                 try:
-                    anime = raw_manga["results"][0]
+                    anime = raw_manga[0]
                 except KeyError:
                     await ctx.respond("Anime was not found.")
                     return
@@ -140,33 +178,47 @@ async def get_manga(
                 embed = hikari.Embed(
                     title=anime.get("title", UNDEFINED),
                     description=anime.get("synopsis", UNDEFINED),
-                    url=anime.get("url", UNDEFINED),
+                    url=anime.get("url", str(UNDEFINED)),
+                    colour=consts.COLOR["invis"],
                 )
 
                 embed.set_image(anime.get("image_url", None))
+                start_date: UndefinedOr[str] = UNDEFINED
+                end_date: UndefinedOr[str] = UNDEFINED
+
+                if (raw_start_date := anime.get("start_date")) is not None:
+                    start_date = time.human_timedelta(time.clean_date(raw_start_date))
+
+                if (raw_end_date := anime.get("end_date")) is not None:
+                    end_date = time.human_timedelta(time.clean_date(raw_end_date))
+
                 meta_data = (
                     ("Chapters", anime.get("chapters", UNDEFINED)),
                     ("Volumes", anime.get("volumes", UNDEFINED)),
                     ("Type", anime.get("type", UNDEFINED)),
                     ("Score", anime.get("score", UNDEFINED)),
-                    (
-                        "Published at",
-                        time.human_timedelta(
-                            time.clean_date(anime.get("start_date", UNDEFINED))
-                        ),
-                    ),
-                    (
-                        "Ended at",
-                        time.human_timedelta(
-                            time.clean_date(anime.get("end_date", UNDEFINED))
-                        ),
-                    ),
+                    ("Published at", start_date),
+                    ("Ended at", end_date),
                     ("Community members", anime.get("members", UNDEFINED)),
                     ("Being published", anime.get("publishing", UNDEFINED)),
                 )
                 for k, v in meta_data:
-                    embed.add_field(name=k, value=v, inline=True)
+                    embed.add_field(name=k, value=str(v), inline=True)
                 await ctx.respond(embed=embed)
+
+
+@component.with_slash_command
+@tanjun.with_str_slash_option("name", "The name of the anime character.")
+@tanjun.as_slash_command("char", "Returns a random picture of an anime character.")
+async def character(
+    ctx: tanjun.abc.SlashContext,
+    char: str,
+    net: net_.HTTPNet = tanjun.injected(type=net_.HTTPNet),
+) -> None:
+    await ctx.defer()
+    async with net as cli:
+        if (anime_char := await cli.request("GET", "")) is not None:
+            pass
 
 
 @component.with_slash_command
@@ -193,7 +245,7 @@ async def define(
             raise RuntimeError("Couldn't make the definition request") from exc
 
         try:
-            defn = random.choice(resp["list"])  # type: ignore
+            defn = choice(resp["list"])  # type: ignore
 
         except IndexError:
             await ctx.respond(f"Couldn't find definition about `{name}`")
@@ -231,7 +283,9 @@ async def define(
 @tanjun.with_parser
 @tanjun.as_message_command("net")
 async def run_net(
-    ctx: tabc.Context, url: str, net: net_.HTTPNet = tanjun.injected(type=net_.HTTPNet)
+    ctx: tabc.MessageContext,
+    url: str,
+    net: net_.HTTPNet = tanjun.injected(type=net_.HTTPNet),
 ) -> None:
     """Make a GET http request to an api or else.
 
