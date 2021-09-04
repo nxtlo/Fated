@@ -133,7 +133,7 @@ class HTTPNet(traits.NetRunner):
                                     try:
                                         return data[getter]
                                     except KeyError:
-                                        raise NotFound(
+                                        raise LookupError(
                                             response.real_url, response.headers, data
                                         )
 

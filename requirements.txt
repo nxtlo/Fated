@@ -1,4 +1,4 @@
-git+https://github.com/hikari-py/hikari.git
-git+https://github.com/FasterSpeeding/Tanjun@task/components # Components
+git+https://github.com/hikari-py/hikari@master
+git+https://github.com/FasterSpeeding/Tanjun@master
 asyncpg==0.24.0
 aiobungie==0.2.5b7
