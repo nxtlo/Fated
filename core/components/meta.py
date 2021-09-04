@@ -24,6 +24,7 @@
 """Commands that you can use for any meta stuff."""
 
 from __future__ import annotations
+from functools import cache
 
 __all__: list[str] = ["component"]
 
@@ -32,6 +33,7 @@ import sys
 import asyncpg
 import hikari
 import tanjun
+
 from aiobungie.internal import time
 from tanjun import abc
 
@@ -90,15 +92,18 @@ async def set_prefix(
 
     await ctx.edit_initial_response(f"Prefix set to {prefix}")
 
+@component.with_message_command
+@tanjun.as_message_command("invite")
+async def invite(ctx: tanjun.abc.MessageContext) -> None:
+    """Gets you an invite link for the bot."""
+    me = ctx.cache.get_me() if ctx.cache else await ctx.rest.fetch_my_user()
+    route = f'https://discord.com/api/oauth2/authorize?client_id={me.id}&permissions=0&scope=bot'
+    await ctx.respond(route)
 
 @component.with_slash_command
 @tanjun.with_str_slash_option("color", "The color hex code.")
 @tanjun.as_slash_command("colour", "Returns a view of a color by its hex.")
-async def color_fn(
-    ctx: tanjun.abc.MessageContext,
-    color: int,
-) -> None:
-
+async def color_fn(ctx: tanjun.abc.MessageContext, color: int) -> None:
     embed = hikari.Embed()
     embed.set_author(name=ctx.author.username)
     image = f"https://some-random-api.ml/canvas/colorviewer?hex={color}"
@@ -110,6 +115,7 @@ async def color_fn(
 @component.with_message_command
 @tanjun.as_message_command("uptime", "Shows how long the bot been up for.")
 async def uptime(ctx: tanjun.abc.SlashContext) -> None:
+    """Chack the uptime for the bot."""
     await ctx.respond(
         f"Benn up for: *{time.human_timedelta(ctx.client.metadata['uptime'], suffix=False)}*"
     )
@@ -121,7 +127,6 @@ async def about_command(
     ctx: abc.SlashContext, pool: PgxPool = tanjun.injected(type=asyncpg.Pool)
 ) -> None:
     """Info about the bot itself."""
-    print(ctx.client)
 
     if ctx.cache:
         bot = ctx.cache.get_me()

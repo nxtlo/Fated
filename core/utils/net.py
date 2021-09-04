@@ -27,7 +27,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import time
 import types
 import typing
 from http import HTTPStatus as http
@@ -35,6 +34,7 @@ from http import HTTPStatus as http
 import aiohttp
 import attr
 import multidict
+import yuyo
 from yarl import URL
 
 from . import traits
@@ -110,15 +110,18 @@ class HTTPNet(traits.NetRunner):
         getter: typing.Any | None = None,
         **kwargs: typing.Any,
     ) -> JsonObject | None:
+
         data: JsonObject | None = None
+        backoff = yuyo.Backoff(max_retries=6)
         while 1:
-            aquired_time = time.monotonic()
-            for _ in range(6):
+            async for _ in backoff:
                 try:
                     await self.acquire()
                     async with self._session.request(
                         method, URL(url) if type(url) is URL else url, **kwargs
                     ) as response:
+                        response.raise_for_status()
+
                         if http.MULTIPLE_CHOICES > response.status >= http.OK:
                             _LOG.debug(
                                 f"{method} Request Success from {str(response.real_url)}"
@@ -141,10 +144,17 @@ class HTTPNet(traits.NetRunner):
                                     f"Data must be a dict not {type(data).__name__}"
                                 )
                             return data
-                        await self.error_handle(response)
-                    await asyncio.sleep(aquired_time * 2 + 1)
-                except aiohttp.ContentTypeError:
-                    pass
+
+                    await self.error_handle(response)
+
+                except RateLimited as exc:
+                    _LOG.warn(
+                        f"We're being ratelimited for {exc.retry_after:,}: {exc.message}"
+                    )
+                    backoff.set_next_backoff(exc.retry_after)
+
+                except (aiohttp.ContentTypeError, aiohttp.ClientPayloadError):
+                    raise
 
     async def __aenter__(self):
         return self
@@ -167,6 +177,12 @@ class HTTPNet(traits.NetRunner):
             json_data,
         ]
 
+        try:
+            real_data.append(response.headers["error"])
+            real_data.append(response.headers["type"])
+        except KeyError:
+            pass
+
         # too lazy to define them somewhere else.
         if response.status == http.NOT_FOUND:
             raise NotFound(*real_data)
@@ -174,6 +190,12 @@ class HTTPNet(traits.NetRunner):
             raise BadRequest(*real_data)
         if response.status == http.FORBIDDEN:
             raise Forbidden(*real_data)
+        if response.status == http.TOO_MANY_REQUESTS:
+            retry_after = response.headers["Retry-After"]
+            message = response.headers["message"]
+            raise RateLimited(
+                *real_data, message=message, retry_after=float(retry_after)
+            )
 
         status = http(response.status)
         if 500 <= status < 500:
@@ -187,6 +209,15 @@ class NotFound(RuntimeError):
     url: str | URL = attr.field()
     headers: multidict.CIMultiDictProxy[str] = attr.field()
     data: JsonObject = attr.field()
+
+
+@attr.define(weakref_slot=False, repr=False)
+class RateLimited(RuntimeError):
+    url: str | URL = attr.field()
+    headers: multidict.CIMultiDictProxy[str] = attr.field()
+    data: JsonObject = attr.field()
+    retry_after: float = attr.field()
+    message: str = attr.field()
 
 
 @attr.define(weakref_slot=False, repr=False)

@@ -87,9 +87,10 @@ def build_bot() -> hikari_traits.GatewayBotAware:
 
 def build_client(bot: hikari_traits.GatewayBotAware) -> tanjun.Client:
     # TODO: Add config as a dependency and aiobungie client here.
+    global_command: bool | hikari.Snowflake = True
     client = (
         tanjun.Client.from_gateway_bot(
-            bot, mention_prefix=True, set_global_commands=True
+            bot, mention_prefix=True, set_global_commands=global_command
         )
         .add_type_dependency(asyncpg.pool.Pool, pool_.PgxPool())  # db pool
         .add_type_dependency(net.HTTPNet, net.HTTPNet)  # http client session.

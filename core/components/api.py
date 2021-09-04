@@ -25,9 +25,6 @@
 
 from __future__ import annotations
 
-from hikari.internal.attr_extensions import generate_deep_copier
-from tanjun.errors import NotEnoughArgumentsError
-
 __all__: list[str] = ["component"]
 
 import json
@@ -36,7 +33,7 @@ from random import choice
 
 import hikari
 import tanjun
-from aiobungie.internal import time, helpers
+from aiobungie.internal import time
 from hikari.internal.time import (
     fast_iso8601_datetime_string_to_datetime as fast_datetime,
 )
@@ -80,7 +77,12 @@ class Jian:
         self._net = client
 
     async def get_anime(
-        self, ctx: tanjun.abc.SlashContext, name: str | None = None, *, random: bool | None = None, genre: str
+        self,
+        ctx: tanjun.abc.SlashContext,
+        name: str | None = None,
+        *,
+        random: bool | None = None,
+        genre: str,
     ) -> hikari.Embed | None:
         async with self._net as cli:
 
@@ -90,13 +92,13 @@ class Jian:
             else:
                 path = f'{API["anime"]}/search/anime?q={str(name).lower()}/Zero&page=1&limit=1'
 
-            # This kinda brain fuck but it will raise KeyError 
-            # error if we don't check before we make the actual request. 
+            # This kinda brain fuck but it will raise KeyError
+            # error if we don't check before we make the actual request.
             if genre is not None and random and name is None:
-                getter = 'anime'
+                getter = "anime"
                 start = "airing_start"
             else:
-                getter = 'results'
+                getter = "results"
                 start = "start_date"
 
             if (
@@ -109,7 +111,9 @@ class Jian:
                 if isinstance(raw_anime, list):
                     if name is None and random:
                         anime = choice(raw_anime)
-                        genres: list[str] = list(map(lambda tag: tag['name'], anime['genres'])) 
+                        genres: list[str] = list(
+                            map(lambda tag: tag["name"], anime["genres"])
+                        )
                     else:
                         try:
                             anime = raw_anime[0]
@@ -123,7 +127,7 @@ class Jian:
                         url=anime.get("url", str(UNDEFINED)),
                         colour=consts.COLOR["invis"],
                     )
-                    
+
                     try:
                         embed.set_footer(text=", ".join(genres))
                     except UnboundLocalError:
@@ -152,8 +156,10 @@ class Jian:
                     for k, v in meta_data:
                         embed.add_field(k, str(v), inline=True)
                 return embed
-            
-    async def get_manga(self, ctx: tanjun.abc.SlashContext ,name: str, /) -> hikari.Embed | None:
+
+    async def get_manga(
+        self, ctx: tanjun.abc.SlashContext, name: str, /
+    ) -> hikari.Embed | None:
         async with self._net as cli:
             if (
                 raw_manga := await cli.request(
@@ -181,7 +187,9 @@ class Jian:
                     end_date: UndefinedOr[str] = UNDEFINED
 
                     if (raw_start_date := anime.get("start_date")) is not None:
-                        start_date = time.human_timedelta(time.clean_date(raw_start_date))
+                        start_date = time.human_timedelta(
+                            time.clean_date(raw_start_date)
+                        )
 
                     if (raw_end_date := anime.get("end_date")) is not None:
                         end_date = time.human_timedelta(time.clean_date(raw_end_date))
@@ -221,7 +229,7 @@ async def get_anime(
     await ctx.defer()
     jian = Jian(net)
     anime = await jian.get_anime(ctx, name, random=random, genre=genre)
-    await ctx.respond(embed=anime) # type: ignore
+    await ctx.respond(embed=anime)  # type: ignore
 
 
 @component.with_slash_command
@@ -237,21 +245,7 @@ async def get_manga(
     await ctx.defer()
     jian = Jian(net)
     manga = await jian.get_manga(ctx, name)
-    await ctx.respond(embed=manga) # type: ignore
-
-
-@component.with_slash_command
-@tanjun.with_str_slash_option("name", "The name of the anime character.")
-@tanjun.as_slash_command("char", "Returns a random picture of an anime character.")
-async def character(
-    ctx: tanjun.abc.SlashContext,
-    char: str,
-    net: net_.HTTPNet = tanjun.injected(type=net_.HTTPNet),
-) -> None:
-    await ctx.defer()
-    async with net as cli:
-        if (anime_char := await cli.request("GET", "")) is not None:
-            pass
+    await ctx.respond(embed=manga)  # type: ignore
 
 
 @component.with_slash_command
