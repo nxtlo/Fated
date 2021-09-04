@@ -25,14 +25,18 @@
 
 from __future__ import annotations
 
+from hikari.internal.attr_extensions import generate_deep_copier
+from tanjun.errors import NotEnoughArgumentsError
+
 __all__: list[str] = ["component"]
 
 import json
+import typing
 from random import choice
 
 import hikari
 import tanjun
-from aiobungie.internal import time
+from aiobungie.internal import time, helpers
 from hikari.internal.time import (
     fast_iso8601_datetime_string_to_datetime as fast_datetime,
 )
@@ -69,11 +73,142 @@ GENRES: dict[str, int] = {
 """Anime only genres."""
 
 
+class Jian:
+    __slots__: typing.Sequence[str] = ("_net",)
+
+    def __init__(self, client: net_.HTTPNet) -> None:
+        self._net = client
+
+    async def get_anime(
+        self, ctx: tanjun.abc.SlashContext, name: str | None = None, *, random: bool | None = None, genre: str
+    ) -> hikari.Embed | None:
+        async with self._net as cli:
+
+            if random is True and name is None:
+                # This is True by default in case the name is None.
+                path = f"{API['anime']}/genre/anime/{GENRES[genre]}/1"
+            else:
+                path = f'{API["anime"]}/search/anime?q={str(name).lower()}/Zero&page=1&limit=1'
+
+            # This kinda brain fuck but it will raise KeyError 
+            # error if we don't check before we make the actual request. 
+            if genre is not None and random and name is None:
+                getter = 'anime'
+                start = "airing_start"
+            else:
+                getter = 'results'
+                start = "start_date"
+
+            if (
+                raw_anime := await cli.request(
+                    "GET",
+                    path,
+                    getter=getter,
+                )
+            ) is not None:
+                if isinstance(raw_anime, list):
+                    if name is None and random:
+                        anime = choice(raw_anime)
+                        genres: list[str] = list(map(lambda tag: tag['name'], anime['genres'])) 
+                    else:
+                        try:
+                            anime = raw_anime[0]
+                        except (KeyError, TypeError):
+                            await ctx.mark_not_found()
+                            return
+
+                    embed = hikari.Embed(
+                        title=anime.get("title", UNDEFINED),
+                        description=anime.get("synopsis", UNDEFINED),
+                        url=anime.get("url", str(UNDEFINED)),
+                        colour=consts.COLOR["invis"],
+                    )
+                    
+                    try:
+                        embed.set_footer(text=", ".join(genres))
+                    except UnboundLocalError:
+                        pass
+
+                    embed.set_image(anime.get("image_url", None))
+
+                    start_date: UndefinedOr[str] = UNDEFINED
+                    end_date: UndefinedOr[str] = UNDEFINED
+                    if (raw_start_date := anime.get(start)) is not None:
+                        start_date = time.human_timedelta(
+                            time.clean_date(raw_start_date)
+                        )
+
+                    if (raw_end_date := anime.get("end_date")) is not None:
+                        end_date = time.human_timedelta(time.clean_date(raw_end_date))
+
+                    meta_data = (
+                        ("Episodes", anime.get("episodes", UNDEFINED)),
+                        ("Score", anime.get("score", UNDEFINED)),
+                        ("Aired at", start_date),
+                        ("Finished at", end_date),
+                        ("Community members", anime.get("members", UNDEFINED)),
+                        ("Being aired", anime.get("airing", UNDEFINED)),
+                    )
+                    for k, v in meta_data:
+                        embed.add_field(k, str(v), inline=True)
+                return embed
+            
+    async def get_manga(self, ctx: tanjun.abc.SlashContext ,name: str, /) -> hikari.Embed | None:
+        async with self._net as cli:
+            if (
+                raw_manga := await cli.request(
+                    "GET",
+                    f'{API["anime"]}/search/manga?q={name}/Zero&page=1&limit=1',
+                    getter="results",
+                )
+            ) is not None:
+                if isinstance(raw_manga, list):
+                    try:
+                        anime = raw_manga[0]
+                    except KeyError:
+                        await ctx.respond("Anime was not found.")
+                        return
+
+                    embed = hikari.Embed(
+                        title=anime.get("title", UNDEFINED),
+                        description=anime.get("synopsis", UNDEFINED),
+                        url=anime.get("url", str(UNDEFINED)),
+                        colour=consts.COLOR["invis"],
+                    )
+
+                    embed.set_image(anime.get("image_url", None))
+                    start_date: UndefinedOr[str] = UNDEFINED
+                    end_date: UndefinedOr[str] = UNDEFINED
+
+                    if (raw_start_date := anime.get("start_date")) is not None:
+                        start_date = time.human_timedelta(time.clean_date(raw_start_date))
+
+                    if (raw_end_date := anime.get("end_date")) is not None:
+                        end_date = time.human_timedelta(time.clean_date(raw_end_date))
+
+                    meta_data = (
+                        ("Chapters", anime.get("chapters", UNDEFINED)),
+                        ("Volumes", anime.get("volumes", UNDEFINED)),
+                        ("Type", anime.get("type", UNDEFINED)),
+                        ("Score", anime.get("score", UNDEFINED)),
+                        ("Published at", start_date),
+                        ("Ended at", end_date),
+                        ("Community members", anime.get("members", UNDEFINED)),
+                        ("Being published", anime.get("publishing", UNDEFINED)),
+                    )
+                    for k, v in meta_data:
+                        embed.add_field(k, str(v), inline=True)
+                    return embed
+
+
 @component.with_slash_command
 @tanjun.with_str_slash_option("name", "The anime name", default=None)
 @tanjun.with_bool_slash_option("random", "Returns a random anime", default=True)
 @tanjun.with_str_slash_option(
-    "genre", "The anime genre", default=choice(list(GENRES.keys())), choices=(name for name in GENRES.keys())
+    "genre",
+    "The anime genre",
+    default=choice(list(GENRES.keys())),
+    choices=(name for name in GENRES.keys()),
 )
 @tanjun.as_slash_command("anime", "Returns basic information about an anime.")
 async def get_anime(
@@ -83,69 +218,10 @@ async def get_anime(
     genre: str,
     net: net_.HTTPNet = tanjun.injected(type=net_.HTTPNet),
 ) -> None:
-
     await ctx.defer()
-    async with net as cli:
-
-        if random is True and name is None:
-            # This is True by default in case the name is None.
-            path = f"https://api.jikan.moe/v3/genre/anime/{GENRES[genre]}/1"
-        else:
-            path = (
-                f'{API["anime"]}/search/anime?q={str(name).lower()}/Zero&page=1&limit=1'
-            )
-
-        if (
-            raw_anime := await cli.request(
-                "GET",
-                path,
-                # TODO: change the anime query to be a custom option
-                # * So we can return anime or manga.
-                getter="anime" if random and genre else "results",
-            )
-        ) is not None:
-            if isinstance(raw_anime, list):
-                if name is None and random:
-                    anime = choice(raw_anime)
-                try:
-                    anime = raw_anime[0]
-                except (KeyError, TypeError):
-                    await ctx.respond("Anime was not found.")
-                    await ctx.mark_not_found()
-                    return
-
-                embed = hikari.Embed(
-                    title=anime.get("title", UNDEFINED),
-                    description=anime.get("synopsis", UNDEFINED),
-                    url=anime.get("url", str(UNDEFINED)),
-                    colour=consts.COLOR["invis"],
-                )
-
-                embed.set_image(anime.get("image_url", None))
-
-                start_date: UndefinedOr[str] = UNDEFINED
-                end_date: UndefinedOr[str] = UNDEFINED
-                if (
-                    raw_start_date := anime.get(
-                        "start_date" if not random or not genre else "airing_start"
-                    )
-                ) is not None:
-                    start_date = time.human_timedelta(time.clean_date(raw_start_date))
-
-                if (raw_end_date := anime.get("end_date")) is not None:
-                    end_date = time.human_timedelta(time.clean_date(raw_end_date))
-
-                meta_data = (
-                    ("Episodes", anime.get("episodes", UNDEFINED)),
-                    ("Score", anime.get("score", UNDEFINED)),
-                    ("Aired at", start_date),
-                    ("Finished at", end_date),
-                    ("Community members", anime.get("members", UNDEFINED)),
-                    ("Being aired", anime.get("airing", UNDEFINED)),
-                )
-                for k, v in meta_data:
-                    embed.add_field(k, str(v), inline=True)
-                await ctx.respond(embed=embed)
+    jian = Jian(net)
+    anime = await jian.get_anime(ctx, name, random=random, genre=genre)
+    await ctx.respond(embed=anime) # type: ignore
 
 
 @component.with_slash_command
@@ -158,53 +234,10 @@ async def get_manga(
     genre: str | None,
     net: net_.HTTPNet = tanjun.injected(type=net_.HTTPNet),
 ) -> None:
-
     await ctx.defer()
-    async with net as cli:
-        if (
-            raw_manga := await cli.request(
-                "GET",
-                f'{API["anime"]}/search/manga?q={name}/Zero&page=1&limit=1&genre={genre}',
-                getter="results",
-            )
-        ) is not None:
-            if isinstance(raw_manga, list):
-                try:
-                    anime = raw_manga[0]
-                except KeyError:
-                    await ctx.respond("Anime was not found.")
-                    return
-
-                embed = hikari.Embed(
-                    title=anime.get("title", UNDEFINED),
-                    description=anime.get("synopsis", UNDEFINED),
-                    url=anime.get("url", str(UNDEFINED)),
-                    colour=consts.COLOR["invis"],
-                )
-
-                embed.set_image(anime.get("image_url", None))
-                start_date: UndefinedOr[str] = UNDEFINED
-                end_date: UndefinedOr[str] = UNDEFINED
-
-                if (raw_start_date := anime.get("start_date")) is not None:
-                    start_date = time.human_timedelta(time.clean_date(raw_start_date))
-
-                if (raw_end_date := anime.get("end_date")) is not None:
-                    end_date = time.human_timedelta(time.clean_date(raw_end_date))
-
-                meta_data = (
-                    ("Chapters", anime.get("chapters", UNDEFINED)),
-                    ("Volumes", anime.get("volumes", UNDEFINED)),
-                    ("Type", anime.get("type", UNDEFINED)),
-                    ("Score", anime.get("score", UNDEFINED)),
-                    ("Published at", start_date),
-                    ("Ended at", end_date),
-                    ("Community members", anime.get("members", UNDEFINED)),
-                    ("Being published", anime.get("publishing", UNDEFINED)),
-                )
-                for k, v in meta_data:
-                    embed.add_field(name=k, value=str(v), inline=True)
-                await ctx.respond(embed=embed)
+    jian = Jian(net)
+    manga = await jian.get_manga(ctx, name)
+    await ctx.respond(embed=manga) # type: ignore
 
 
 @component.with_slash_command

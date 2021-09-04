@@ -113,7 +113,7 @@ class HTTPNet(traits.NetRunner):
         data: JsonObject | None = None
         while 1:
             aquired_time = time.monotonic()
-            for _ in range(int(aquired_time)):
+            for _ in range(6):
                 try:
                     await self.acquire()
                     async with self._session.request(
