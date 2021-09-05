@@ -40,6 +40,7 @@ from core.utils import format
 
 component = tanjun.Component(name="mod")
 
+
 @component.with_message_command
 @tanjun.with_owner_check(halt_execution=True)
 @tanjun.with_greedy_argument("query", converters=str)
@@ -96,10 +97,13 @@ async def run_sql(
 @tanjun.with_parser
 @tanjun.as_message_command("kick")
 async def kick(
-    ctx: tanjun.abc.MessageContext, member: hikari.Member, /, reason: hikari.UndefinedOr[str]
+    ctx: tanjun.abc.MessageContext,
+    member: hikari.Member,
+    /,
+    reason: hikari.UndefinedOr[str],
 ) -> None:
     """Kick someone out of the guild
-    
+
     Parameters:
         member : `hikari.Member`
             The member you want to kick.
@@ -112,10 +116,12 @@ async def kick(
         return
 
     if ctx.cache:
-        member = ctx.cache.get_member(ctx.guild_id, member.id) #type:ignore
+        member = ctx.cache.get_member(ctx.guild_id, member.id)  # type:ignore
     else:
         try:
-            member = await ctx.client.rest.fetch_member(ctx.guild_id, member.id) #type:ignore
+            member = await ctx.client.rest.fetch_member(
+                ctx.guild_id, member.id  # type:ignore
+            )
         except hikari.HTTPError:
             await ctx.respond("Couldn't find the member in cache nor rest.")
             return
@@ -143,10 +149,13 @@ async def kick(
 @tanjun.with_parser
 @tanjun.as_message_command("ban")
 async def ban(
-    ctx: tanjun.abc.MessageContext, member: hikari.Member, /, reason: hikari.UndefinedOr[str]
+    ctx: tanjun.abc.MessageContext,
+    member: hikari.Member,
+    /,
+    reason: hikari.UndefinedOr[str],
 ) -> None:
     """Ban someone out of the guild
-    
+
     Parameters:
         member : `hikari.Member`
             The member you want to kick.
@@ -159,10 +168,12 @@ async def ban(
         return
 
     if ctx.cache:
-        member = ctx.cache.get_member(ctx.guild_id, member.id) #type:ignore
+        member = ctx.cache.get_member(ctx.guild_id, member.id)  # type:ignore
     else:
         try:
-            member = await ctx.client.rest.fetch_member(ctx.guild_id, member.id) #type:ignore
+            member = await ctx.client.rest.fetch_member(
+                ctx.guild_id, member.id  # type:ignore
+            )
         except hikari.HTTPError:
             await ctx.respond("Couldn't find the member in cache nor rest.")
             return

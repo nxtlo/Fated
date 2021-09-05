@@ -24,12 +24,10 @@
 """Commands that you can use for any meta stuff."""
 
 from __future__ import annotations
-from functools import cache
 
 __all__: list[str] = ["component"]
 
 import sys
-
 import asyncpg
 import hikari
 import tanjun
@@ -37,18 +35,22 @@ import tanjun
 from aiobungie.internal import time
 from tanjun import abc
 
+from time import perf_counter
 from core.psql.pool import PgxPool
 from core.utils import format
 
 component = tanjun.Component(name="meta")
 
 
-@component.with_command
-@tanjun.as_message_command("ping")
-async def ping(ctx: abc.MessageContext, /) -> None:
+@component.with_slash_command
+@tanjun.as_slash_command("ping", "The bot's latency")
+async def ping(ctx: abc.SlashContext, /) -> None:
     """Pong."""
-    await ctx.respond("Pong!.")
-
+    start_time = perf_counter()
+    await ctx.rest.fetch_my_user()
+    time_taken = (perf_counter() - start_time) * 1_000
+    heartbeat_latency = ctx.shards.heartbeat_latency * 1_000 if ctx.shards else float("NAN")
+    await ctx.edit_last_response(f"PONG\n - REST: {time_taken:.0f}ms\n - Gateway: {heartbeat_latency:.0f}ms")
 
 @component.with_slash_command
 @tanjun.with_guild_check
@@ -63,7 +65,7 @@ async def ping(ctx: abc.MessageContext, /) -> None:
 async def set_prefix(
     ctx: tanjun.abc.SlashContext,
     prefix: str | None,
-    pool: PgxPool = tanjun.injected(type=asyncpg.Pool),
+    pool: PgxPool = tanjun.injected(type=asyncpg.pool.Pool),
 ) -> None:
 
     if prefix is None:
@@ -92,13 +94,15 @@ async def set_prefix(
 
     await ctx.edit_initial_response(f"Prefix set to {prefix}")
 
+
 @component.with_message_command
 @tanjun.as_message_command("invite")
 async def invite(ctx: tanjun.abc.MessageContext) -> None:
     """Gets you an invite link for the bot."""
     me = ctx.cache.get_me() if ctx.cache else await ctx.rest.fetch_my_user()
-    route = f'https://discord.com/api/oauth2/authorize?client_id={me.id}&permissions=0&scope=bot'
+    route = f"https://discord.com/api/oauth2/authorize?client_id={me.id}&permissions=0&scope=bot"
     await ctx.respond(route)
+
 
 @component.with_slash_command
 @tanjun.with_str_slash_option("color", "The color hex code.")
@@ -113,7 +117,7 @@ async def color_fn(ctx: tanjun.abc.MessageContext, color: int) -> None:
 
 
 @component.with_message_command
-@tanjun.as_message_command("uptime", "Shows how long the bot been up for.")
+@tanjun.as_message_command("uptime")
 async def uptime(ctx: tanjun.abc.SlashContext) -> None:
     """Chack the uptime for the bot."""
     await ctx.respond(
@@ -124,7 +128,7 @@ async def uptime(ctx: tanjun.abc.SlashContext) -> None:
 @component.with_slash_command
 @tanjun.as_slash_command("about", "Information about the bot itself.")
 async def about_command(
-    ctx: abc.SlashContext, pool: PgxPool = tanjun.injected(type=asyncpg.Pool)
+    ctx: abc.SlashContext, pool: PgxPool = tanjun.injected(type=asyncpg.pool.Pool)
 ) -> None:
     """Info about the bot itself."""
 

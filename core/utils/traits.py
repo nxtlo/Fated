@@ -31,26 +31,25 @@ import typing
 
 import asyncpg
 import yarl
+from hikari.internal.fast_protocol import FastProtocolChecking
 
 if typing.TYPE_CHECKING:
     import types
-
     from . import consts
 
 
-class PoolRunner(typing.Protocol):
+@typing.runtime_checkable
+class PoolRunner(FastProtocolChecking, typing.Protocol):
     """A typed asyncpg pool protocol."""
 
     __slots__: typing.Sequence[str] = ()
 
     def __call__(self) -> typing.Coroutine[None, None, asyncpg.pool.Pool | None]:
         """An overloaded call method to acquire a pool connection."""
-        raise NotImplementedError
 
     @property
     def pool(self) -> asyncpg.Pool:
         """Access to `self._pool`."""
-        raise NotImplementedError
 
     @classmethod
     async def create_pool(cls, *, build: bool = False) -> asyncpg.pool.Pool | None:
@@ -67,8 +66,6 @@ class PoolRunner(typing.Protocol):
         `asyncpg.pool.Pool` | `None`
             An asyncpg connection pool or None.
         """
-
-        raise NotImplementedError
 
     async def execute(
         self, sql: str, /, *args: typing.Any, timeout: float | None = None
@@ -89,7 +86,6 @@ class PoolRunner(typing.Protocol):
         `builtins.NoneType`
             None
         """
-        raise NotImplementedError
 
     async def fetch(
         self,
@@ -114,7 +110,6 @@ class PoolRunner(typing.Protocol):
         `typing.List[asyncpg.Record]`
             A typing of an asyncpg Records.
         """
-        raise NotImplementedError
 
     async def fetchrow(
         self,
@@ -139,7 +134,6 @@ class PoolRunner(typing.Protocol):
         `typing.List[asyncpg.Record]`
             The first row found in an asyncpg Record.
         """
-        raise NotImplementedError
 
     async def fetchval(
         self,
@@ -165,22 +159,25 @@ class PoolRunner(typing.Protocol):
         `typing.Any`
             First Any value found in the first record.
         """
-        raise NotImplementedError
 
     async def close(self) -> None:
         """Closes the database."""
-        raise NotImplementedError
 
     @staticmethod
     def tables() -> str:
         """The sql schema file"""
-        raise NotImplementedError
 
 
-class NetRunner(typing.Protocol):
+@typing.runtime_checkable
+class NetRunner(FastProtocolChecking, typing.Protocol):
     """An interface for our http client."""
 
     __slots__: typing.Sequence[str] = ()
+
+    # This is required here for injecting it
+    # to the client.
+    def __call__(self) -> None:
+        raise NotImplementedError
 
     async def acquire(self) -> None:
         """Acquires the session if its closed or set to None."""
@@ -189,7 +186,7 @@ class NetRunner(typing.Protocol):
         """Closes the http session."""
 
     async def request(
-        self, method: str, url: str | yarl.URL, getter: typing.Any, **kwargs: typing.Any
+        self, method: str, url: str | yarl.URL, getter: typing.Any | None = None, **kwargs: typing.Any
     ) -> consts.JsonObject:
         """Perform an http request
 
@@ -199,11 +196,11 @@ class NetRunner(typing.Protocol):
             The http request method.
             This can be `GET`. `POST`. `PUT`. `DELETE`. etc.
 
-        ## NOTE
-
-            if you're performing any request
-            that requires Auth you'll need to pass headers
-            to the kwargs like this `headers={'X-API-KEY': ...}`
+        Note
+        ----
+        if you're performing any request
+        that requires Auth you'll need to pass headers
+        to the kwargs like this `headers={'X-API-KEY': ...}`
 
         url : `str` | `yarl.URL`
             The api url. This also can be used as a `yarl.URL(...)` object.

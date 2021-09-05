@@ -35,6 +35,7 @@ import aiohttp
 import attr
 import multidict
 import yuyo
+from hikari import _about as about
 from yarl import URL
 
 from . import traits
@@ -73,11 +74,10 @@ rely = _Rely()
 class HTTPNet(traits.NetRunner):
     """A client to make http requests with."""
 
-    __slots__: typing.Sequence[str] = ("_session", "_lock")
+    __slots__: typing.Sequence[str] = ("_session",)
 
     def __init__(self) -> None:
         self._session: aiohttp.ClientSession | None = None
-        self._lock = asyncio.Lock()
 
     async def acquire(self) -> None:
         if self._session is None:
@@ -113,6 +113,14 @@ class HTTPNet(traits.NetRunner):
 
         data: JsonObject | None = None
         backoff = yuyo.Backoff(max_retries=6)
+
+        user_agent: typing.Final[
+            str
+        ] = f"Tsujigiri DiscorsBot Hikari/{about.__version__}"
+
+        kwargs["headers"] = headers = dict()
+        headers["User-Agent"] = user_agent
+
         while 1:
             async for _ in backoff:
                 try:
@@ -201,7 +209,7 @@ class HTTPNet(traits.NetRunner):
         if 500 <= status < 500:
             raise InternalError(*real_data)
 
-    # TODO implement all requests we need here.
+    # TODO: maybe implement all requests we need here instead of making them in components?
 
 
 @attr.define(weakref_slot=False, repr=False)

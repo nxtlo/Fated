@@ -1,5 +1,5 @@
 git+https://github.com/hikari-py/hikari@master
 git+https://github.com/FasterSpeeding/Tanjun@master
-hikari-yuyo==0.0.3a7
+git+https://github.com/FasterSpeeding/Yuyo@master
 asyncpg==0.24.0
 aiobungie==0.2.5b7

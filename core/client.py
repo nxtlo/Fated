@@ -33,13 +33,12 @@ import asyncpg
 import click
 import hikari
 import tanjun
-from aiobungie.internal import time
 from hikari import traits as hikari_traits
 from hikari.internal import aio
 
 from core.psql import pool as pool_
 from core.utils import config as config_
-from core.utils import net
+from core.utils import net, traits
 
 
 class Tsujigiri(hikari.GatewayBot):
@@ -87,20 +86,36 @@ def build_bot() -> hikari_traits.GatewayBotAware:
 
 def build_client(bot: hikari_traits.GatewayBotAware) -> tanjun.Client:
     # TODO: Add config as a dependency and aiobungie client here.
-    global_command: bool | hikari.Snowflake = True
     client = (
         tanjun.Client.from_gateway_bot(
-            bot, mention_prefix=True, set_global_commands=global_command
+            bot,
+            mention_prefix=True,
+            set_global_commands=True,
         )
-        .add_type_dependency(asyncpg.pool.Pool, pool_.PgxPool())  # db pool
-        .add_type_dependency(net.HTTPNet, net.HTTPNet)  # http client session.
+
+        # Dependencies.
+        .add_type_dependency(
+            asyncpg.pool.Pool, pool_.PgxPool()
+        )
+        .add_type_dependency(net.HTTPNet, typing.cast(traits.NetRunner, net.HTTPNet))
+
+        # Injected call backs.
+        .set_callback_override(net.HTTPNet, traits.NetRunner)
+        .set_callback_override(pool_.PgxPool, asyncpg.pool.Pool)
+
+        # Components.
         .load_modules("core.components.meta")
         .load_modules("core.components.mod")
         .load_modules("core.components.api")
+
+        # Prefix stuff.
         .set_prefix_getter(get_prefix)
         .add_prefix("?")
     )
+
+    # Client metadata
     client.metadata["uptime"] = datetime.datetime.utcnow()
+
     return client
 
 

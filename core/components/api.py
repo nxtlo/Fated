@@ -41,8 +41,9 @@ from hikari.undefined import UNDEFINED, UndefinedOr
 from tanjun import abc as tabc
 
 from core.utils import consts, format
-from core.utils import net as net_
+from core.utils import net as net_, traits
 from core.utils.config import Config
+
 
 component = tanjun.Component(name="api")
 config = Config()
@@ -53,27 +54,27 @@ API: dict[str, str] = {
 }
 """A dict that holds api endpoints."""
 
-# TODO: Make all two commands in one command.
 
 GENRES: dict[str, int] = {
     "Action": 1,
     "Advanture": 2,
     "Drama": 8,
     "Daemons": 6,
-    "Ecchi": 9,
+    "Ecchi": 9, # :eyes:
     "Magic": 16,
     "Sci Fi": 24,
     "Shounen": 27,
-    "Harem": 35,
+    "Harem": 35, # :eyes:
     "Seinen": 42,
 }
 """Anime only genres."""
 
 
 class Jian:
+    """Wrapped around jian api."""
     __slots__: typing.Sequence[str] = ("_net",)
 
-    def __init__(self, client: net_.HTTPNet) -> None:
+    def __init__(self, client: traits.NetRunner) -> None:
         self._net = client
 
     async def get_anime(
@@ -214,7 +215,7 @@ class Jian:
 @tanjun.with_bool_slash_option("random", "Returns a random anime", default=True)
 @tanjun.with_str_slash_option(
     "genre",
-    "The anime genre",
+    "The anime genre. If left None you will get a random one.",
     default=choice(list(GENRES.keys())),
     choices=(name for name in GENRES.keys()),
 )
@@ -224,7 +225,7 @@ async def get_anime(
     name: str,
     random: bool | None,
     genre: str,
-    net: net_.HTTPNet = tanjun.injected(type=net_.HTTPNet),
+    net: traits.NetRunner = net_.HTTPNet(),
 ) -> None:
     await ctx.defer()
     jian = Jian(net)
@@ -234,13 +235,11 @@ async def get_anime(
 
 @component.with_slash_command
 @tanjun.with_str_slash_option("name", "The manga name")
-@tanjun.with_str_slash_option("genre", "The manga's genre", default=None)
 @tanjun.as_slash_command("manga", "Returns basic information about a manga.")
 async def get_manga(
     ctx: tabc.SlashContext,
     name: str,
-    genre: str | None,
-    net: net_.HTTPNet = tanjun.injected(type=net_.HTTPNet),
+    net: traits.NetRunner = net_.HTTPNet(),
 ) -> None:
     await ctx.defer()
     jian = Jian(net)
@@ -254,7 +253,7 @@ async def get_manga(
 async def define(
     ctx: tanjun.abc.SlashContext,
     name: str,
-    net: net_.HTTPNet = tanjun.injected(type=net_.HTTPNet),
+    net: traits.NetRunner = net_.HTTPNet(),
 ) -> None:
     async with net as cli:
         await ctx.defer()
@@ -312,21 +311,19 @@ async def define(
 async def run_net(
     ctx: tabc.MessageContext,
     url: str,
-    net: net_.HTTPNet = tanjun.injected(type=net_.HTTPNet),
+    net: traits.NetRunner = net_.HTTPNet(),
 ) -> None:
     """Make a GET http request to an api or else.
 
-    !!! note
-        The api must be application/json type.
+    Note: The api must be application/json type.
 
-    ### TODO: make this command with options for POST and GET methods maybe?
+    TODO: make this command with options for POST and GET methods maybe?
 
-    Parameters
-    ----------
-    url : str
-        The api url to call.
-    net : HTTPNet
-        The http client we're making the request with.
+    Parameters:
+        url : str
+            The api url to call.
+        net : HTTPNet
+            The http client we're making the request with.
     """
     async with net as cli:
         try:

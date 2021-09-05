@@ -37,7 +37,6 @@ import colorlog
 
 from core.utils import config, traits
 
-SelfT = typing.TypeVar("SelfT", bound="PgxPool")
 
 LOG: typing.Final[logging.Logger] = colorlog.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
