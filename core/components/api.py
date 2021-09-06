@@ -41,9 +41,9 @@ from hikari.undefined import UNDEFINED, UndefinedOr
 from tanjun import abc as tabc
 
 from core.utils import consts, format
-from core.utils import net as net_, traits
+from core.utils import net as net_
+from core.utils import traits
 from core.utils.config import Config
-
 
 component = tanjun.Component(name="api")
 config = Config()
@@ -60,11 +60,11 @@ GENRES: dict[str, int] = {
     "Advanture": 2,
     "Drama": 8,
     "Daemons": 6,
-    "Ecchi": 9, # :eyes:
+    "Ecchi": 9,  # :eyes:
     "Magic": 16,
     "Sci Fi": 24,
     "Shounen": 27,
-    "Harem": 35, # :eyes:
+    "Harem": 35,  # :eyes:
     "Seinen": 42,
 }
 """Anime only genres."""
@@ -72,6 +72,7 @@ GENRES: dict[str, int] = {
 
 class Jian:
     """Wrapped around jian api."""
+
     __slots__: typing.Sequence[str] = ("_net",)
 
     def __init__(self, client: traits.NetRunner) -> None:

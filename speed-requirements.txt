@@ -1,0 +1,6 @@
+cchardet
+uvloop; os_name != "nt"
+Brotli
+aiodns
+ciso8601
+ed25519

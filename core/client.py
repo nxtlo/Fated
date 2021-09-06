@@ -29,7 +29,6 @@ import os
 import traceback
 import typing
 
-import asyncpg
 import click
 import hikari
 import tanjun
@@ -63,7 +62,7 @@ class Tsujigiri(hikari.GatewayBot):
 
 async def get_prefix(
     ctx: tanjun.abc.MessageContext,
-    pool: pool_.PgxPool = tanjun.injected(type=asyncpg.pool.Pool),
+    pool: pool_.PgxPool = tanjun.injected(type=pool_.PgxPool),
 ) -> str | typing.Sequence[str]:
     query: str = "SELECT prefix FROM guilds WHERE id = $1"
     if (prefix := await pool.fetchval(query, ctx.guild_id)) is not None:
@@ -92,24 +91,17 @@ def build_client(bot: hikari_traits.GatewayBotAware) -> tanjun.Client:
             mention_prefix=True,
             set_global_commands=True,
         )
-
         # Dependencies.
-        .add_type_dependency(
-            asyncpg.pool.Pool, pool_.PgxPool()
-        )
-        .add_type_dependency(net.HTTPNet, typing.cast(traits.NetRunner, net.HTTPNet))
-
+        .set_type_dependency(pool_.PoolT, pool_.PgxPool())
+        .set_type_dependency(net.HTTPNet, typing.cast(traits.NetRunner, net.HTTPNet))
         # Injected call backs.
+        .set_callback_override(pool_.PoolT, pool_.PgxPool())
         .set_callback_override(net.HTTPNet, traits.NetRunner)
-        .set_callback_override(pool_.PgxPool, asyncpg.pool.Pool)
-
         # Components.
         .load_modules("core.components.meta")
         .load_modules("core.components.mod")
         .load_modules("core.components.api")
-
         # Prefix stuff.
-        .set_prefix_getter(get_prefix)
         .add_prefix("?")
     )
 

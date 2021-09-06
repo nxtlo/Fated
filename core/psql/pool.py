@@ -23,7 +23,7 @@
 
 from __future__ import annotations
 
-__all__: typing.Sequence[str] = ("PgxPool",)
+__all__: typing.Sequence[str] = ("PgxPool", "PoolT")
 
 import asyncio
 import logging
@@ -32,21 +32,23 @@ import pathlib
 import typing
 
 import asyncpg
-import attr
+import attr  # type: ignore[import]
 import colorlog
 
 from core.utils import config, traits
-
 
 LOG: typing.Final[logging.Logger] = colorlog.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
 
-@attr.define(weakref_slot=False, slots=True, init=True, kw_only=True)
+# For some reason decorating classes with attrs or dataclasses
+# breaks the injection callbacks. Not sure why but removing it now.
+
+# @attr.define(weakref_slot=False, slots=True, init=True, kw_only=True)
 class PgxPool(traits.PoolRunner):
     """An asyncpg pool."""
 
-    _pool: asyncpg.Pool = attr.field(default=asyncpg.Pool, repr=False)
+    _pool: typing.ClassVar[asyncpg.Pool | None] = None
     """The pool itself."""
 
     def __call__(self) -> typing.Coroutine[None, None, asyncpg.pool.Pool | None]:
@@ -54,7 +56,7 @@ class PgxPool(traits.PoolRunner):
         return self.create_pool()
 
     @property
-    def pool(self) -> asyncpg.Pool:
+    def pool(self) -> asyncpg.Pool | None:
         """Access to `self._pool`."""
         return self._pool
 
@@ -62,7 +64,7 @@ class PgxPool(traits.PoolRunner):
     async def create_pool(cls, *, build: bool = False) -> asyncpg.pool.Pool | None:
         config_ = config.Config()
         """Returns an asyncpg new pool and creates the tables."""
-        cls._pool = await asyncpg.create_pool(  # type: ignore
+        cls._pool = await asyncpg.create_pool(
             database=config_.DB_NAME,
             user=config_.DB_USER,
             password=config_.DB_PASSWORD,
@@ -133,3 +135,9 @@ class PgxPool(traits.PoolRunner):
             raise LookupError(f"Tables file not found in {p!r}")
         with p.open() as table:
             return table.read()
+
+
+PoolT = typing.NewType("PoolT", PgxPool)
+"""A new type hint for the Pool class it self.
+This only used as a type hint for injecting and type dependencies.
+"""

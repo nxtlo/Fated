@@ -49,7 +49,7 @@ component = tanjun.Component(name="mod")
 async def run_sql(
     ctx: abc.MessageContext,
     query: str,
-    pool: pool_.PgxPool = tanjun.injected(type=asyncpg.pool.Pool),
+    pool: pool_.PoolT = tanjun.injected(type=pool_.PoolT),
 ) -> None:
     """Run sql code to the database pool.
 

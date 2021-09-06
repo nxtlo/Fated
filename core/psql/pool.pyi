@@ -24,6 +24,9 @@
 from typing import Any as __Any
 from typing import ClassVar as __ClassVar
 from typing import Coroutine as __Coroutine
+from typing import Generic as __Generic
+from typing import NewType
+from typing import Protocol as __Protocol
 from typing import Union as __Union
 
 import asyncpg as __asyncpg
@@ -59,3 +62,5 @@ class PgxPool(__traits.PoolRunner):
     async def close(self) -> None: ...
     @staticmethod
     def tables() -> str: ...
+
+PoolT = NewType("PoolT", PgxPool)

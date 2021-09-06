@@ -35,6 +35,7 @@ from hikari.internal.fast_protocol import FastProtocolChecking
 
 if typing.TYPE_CHECKING:
     import types
+
     from . import consts
 
 
@@ -48,7 +49,7 @@ class PoolRunner(FastProtocolChecking, typing.Protocol):
         """An overloaded call method to acquire a pool connection."""
 
     @property
-    def pool(self) -> asyncpg.Pool:
+    def pool(self) -> asyncpg.Pool | None:
         """Access to `self._pool`."""
 
     @classmethod
@@ -186,7 +187,11 @@ class NetRunner(FastProtocolChecking, typing.Protocol):
         """Closes the http session."""
 
     async def request(
-        self, method: str, url: str | yarl.URL, getter: typing.Any | None = None, **kwargs: typing.Any
+        self,
+        method: str,
+        url: str | yarl.URL,
+        getter: typing.Any | None = None,
+        **kwargs: typing.Any,
     ) -> consts.JsonObject:
         """Perform an http request
 

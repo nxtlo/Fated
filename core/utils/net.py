@@ -204,23 +204,43 @@ class HTTPNet(traits.NetRunner):
             raise RateLimited(
                 *real_data, message=message, retry_after=float(retry_after)
             )
+        if response.status == http.UNAUTHORIZED:
+            raise Unauthorized(*real_data)
 
         status = http(response.status)
         if 500 <= status < 500:
             raise InternalError(*real_data)
+        else:
+            raise Error(*real_data)
 
     # TODO: maybe implement all requests we need here instead of making them in components?
 
 
 @attr.define(weakref_slot=False, repr=False)
-class NotFound(RuntimeError):
+class Error(RuntimeError):
+    """Main error class."""
+
     url: str | URL = attr.field()
     headers: multidict.CIMultiDictProxy[str] = attr.field()
     data: JsonObject = attr.field()
 
 
 @attr.define(weakref_slot=False, repr=False)
-class RateLimited(RuntimeError):
+class Unauthorized(Error):
+    url: str | URL = attr.field()
+    headers: multidict.CIMultiDictProxy[str] = attr.field()
+    data: JsonObject = attr.field()
+
+
+@attr.define(weakref_slot=False, repr=False)
+class NotFound(Error):
+    url: str | URL = attr.field()
+    headers: multidict.CIMultiDictProxy[str] = attr.field()
+    data: JsonObject = attr.field()
+
+
+@attr.define(weakref_slot=False, repr=False)
+class RateLimited(Error):
     url: str | URL = attr.field()
     headers: multidict.CIMultiDictProxy[str] = attr.field()
     data: JsonObject = attr.field()
@@ -229,14 +249,14 @@ class RateLimited(RuntimeError):
 
 
 @attr.define(weakref_slot=False, repr=False)
-class BadRequest(RuntimeError):
+class BadRequest(Error):
     url: str | URL = attr.field()
     headers: multidict.CIMultiDictProxy[str] = attr.field()
     data: JsonObject = attr.field()
 
 
 @attr.define(weakref_slot=False, repr=False)
-class Forbidden(RuntimeError):
+class Forbidden(Error):
     url: str | URL = attr.field()
     headers: multidict.CIMultiDictProxy[str] = attr.field()
     data: JsonObject = attr.field()

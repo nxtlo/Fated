@@ -28,29 +28,37 @@ from __future__ import annotations
 __all__: list[str] = ["component"]
 
 import sys
+from time import perf_counter
+
 import asyncpg
 import hikari
 import tanjun
-
 from aiobungie.internal import time
 from tanjun import abc
 
-from time import perf_counter
-from core.psql.pool import PgxPool
+from core.psql.pool import PoolT
 from core.utils import format
 
 component = tanjun.Component(name="meta")
 
 
-@component.with_slash_command
-@tanjun.as_slash_command("ping", "The bot's latency")
-async def ping(ctx: abc.SlashContext, /) -> None:
+@component.with_message_command
+@tanjun.as_message_command("ping")
+async def ping(
+    ctx: abc.MessageContext, pool: PoolT = tanjun.injected(type=PoolT)
+) -> None:
     """Pong."""
     start_time = perf_counter()
     await ctx.rest.fetch_my_user()
+    await pool.fetch("SELECT id FROM guilds;")
     time_taken = (perf_counter() - start_time) * 1_000
-    heartbeat_latency = ctx.shards.heartbeat_latency * 1_000 if ctx.shards else float("NAN")
-    await ctx.edit_last_response(f"PONG\n - REST: {time_taken:.0f}ms\n - Gateway: {heartbeat_latency:.0f}ms")
+    heartbeat_latency = (
+        ctx.shards.heartbeat_latency * 1_000 if ctx.shards else float("NAN")
+    )
+    await ctx.respond(
+        f"PONG\n - REST and Pool: {time_taken:.0f}ms\n - Gateway: {heartbeat_latency:.0f}ms"
+    )
+
 
 @component.with_slash_command
 @tanjun.with_guild_check
@@ -65,7 +73,7 @@ async def ping(ctx: abc.SlashContext, /) -> None:
 async def set_prefix(
     ctx: tanjun.abc.SlashContext,
     prefix: str | None,
-    pool: PgxPool = tanjun.injected(type=asyncpg.pool.Pool),
+    pool: PoolT = tanjun.injected(type=PoolT),
 ) -> None:
 
     if prefix is None:
@@ -128,7 +136,7 @@ async def uptime(ctx: tanjun.abc.SlashContext) -> None:
 @component.with_slash_command
 @tanjun.as_slash_command("about", "Information about the bot itself.")
 async def about_command(
-    ctx: abc.SlashContext, pool: PgxPool = tanjun.injected(type=asyncpg.pool.Pool)
+    ctx: abc.SlashContext, pool: PoolT = tanjun.injected(type=PoolT)
 ) -> None:
     """Info about the bot itself."""
 
