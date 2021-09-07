@@ -67,7 +67,7 @@ async def get_prefix(
     query: str = "SELECT prefix FROM guilds WHERE id = $1"
     if (prefix := await pool.fetchval(query, ctx.guild_id)) is not None:
         return str(prefix)
-    return ()
+    return (".",)
 
 
 def build_bot() -> hikari_traits.GatewayBotAware:
