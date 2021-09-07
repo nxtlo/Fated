@@ -61,13 +61,15 @@ class Fated(hikari.GatewayBot):
 
 
 async def get_prefix(
-    ctx: tanjun.abc.MessageContext,
-    pool: pool_.PoolT = tanjun.injected(type=pool_.PoolT),
+    ctx: tanjun.abc.MessageContext = tanjun.injected(type=tanjun.abc.MessageContext), pool: pool_.PoolT = tanjun.injected(callback=pool_.PoolT),
 ) -> str | typing.Sequence[str]:
-    query: str = "SELECT prefix FROM guilds WHERE id = $1"
-    if (prefix := await pool.fetchval(query, ctx.guild_id)) is not None:
+
+    guild: hikari.Snowflake = ctx.guild_id or (await ctx.fetch_guild()).id
+    sql: typing.Final[str] = "SELECT prefix FROM guilds WHERE id = $1"
+
+    if (prefix := await pool.fetchval(sql, guild)) is not None:
         return str(prefix)
-    return (".",)
+    return ('!',)
 
 
 def build_bot() -> hikari_traits.GatewayBotAware:

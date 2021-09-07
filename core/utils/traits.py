@@ -229,5 +229,5 @@ class NetRunner(FastProtocolChecking, typing.Protocol):
         """Closes the session when making the requests with `async with`."""
 
     @staticmethod
-    async def error_handle(response: aiohttp.ClientResponse, /) -> None:
+    async def error_handle(response: aiohttp.ClientResponse, /) -> typing.NoReturn:
         """Handling the request errors."""

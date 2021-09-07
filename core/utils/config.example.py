@@ -58,8 +58,6 @@ class Config:
     DB_PORT: typing.Final[int] = attr.field(default=5432)
     """Your database's port. Defaults to 5432."""
 
-    RAPID_TOKEN: typing.Final[str | None] = attr.field(default=None)
-    """Rapid api token for urban def command."""
 
     CACHE: hikari.CacheComponents = attr.field(
         default=(

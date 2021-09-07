@@ -29,6 +29,7 @@ __all__: list[str] = ["component"]
 
 import json
 import typing
+import re
 from random import choice
 
 import hikari
@@ -50,7 +51,7 @@ config = Config()
 
 API: dict[str, str] = {
     "anime": "https://api.jikan.moe/v3",
-    "urban": "https://mashape-community-urban-dictionary.p.rapidapi.com/define",
+    "urban": "https://api.urbandictionary.com/v0/define",
 }
 """A dict that holds api endpoints."""
 
@@ -69,9 +70,10 @@ GENRES: dict[str, int] = {
 }
 """Anime only genres."""
 
+PATTERN: str = r"'(\[(.+?)\])'"
 
-class Jian:
-    """Wrapped around jian api."""
+class Wrapper:
+    """Wrapped around different apis."""
 
     __slots__: typing.Sequence[str] = ("_net",)
 
@@ -86,6 +88,7 @@ class Jian:
         random: bool | None = None,
         genre: str,
     ) -> hikari.Embed | None:
+        """Returns an anime from jian api."""
         async with self._net as cli:
 
             if random is True and name is None:
@@ -159,9 +162,8 @@ class Jian:
                         embed.add_field(k, str(v), inline=True)
                 return embed
 
-    async def get_manga(
-        self, ctx: tanjun.abc.SlashContext, name: str, /
-    ) -> hikari.Embed | None:
+    async def get_manga(self, ctx: tanjun.abc.SlashContext, name: str, /) -> hikari.Embed | None:
+        """Returns a manga from jian api."""
         async with self._net as cli:
             if (
                 raw_manga := await cli.request(
@@ -209,6 +211,55 @@ class Jian:
                     for k, v in meta_data:
                         embed.add_field(k, str(v), inline=True)
                     return embed
+                
+    async def get_definition(self, ctx: tanjun.abc.SlashContext, name: str) -> hikari.Embed | None:
+        """Gets a definition from urbandefition."""
+        async with self._net as cli:
+
+            resp = await cli.request(
+                "GET", API["urban"], params={"term": name.lower()}, getter='list'
+            ) or []
+            
+            if not resp:
+                await ctx.respond(f"Couldn't find definition about `{name}`")
+                return None
+
+            defn = choice(resp)  # type: ignore
+            embed = hikari.Embed(
+                colour=consts.COLOR["invis"],
+                title=f'Definition for {name}'
+            )
+            
+            def replace(s: str) -> str:
+                return s.replace(']', '').replace('[', '')
+
+            try:
+                example: str = defn["example"]
+                embed.add_field("Example", replace(example))
+            except (KeyError, ValueError):
+                pass
+            
+            # This cannot be None.
+            definition: str = defn["definition"]
+            embed.description = replace(definition) 
+
+            try:
+                up_voted: int = defn["thumbs_up"]
+                down_votes: int = defn["thumbs_down"]
+                embed.set_footer(text=f"\U0001f44d {up_voted} - \U0001f44e {down_votes}")
+            except KeyError:
+                pass
+
+            try:
+                date: str = defn["written_on"]
+                embed.timestamp = fast_datetime(date) # type: ignore
+            except KeyError:
+                pass
+            
+            url: str = defn["permalink"]
+            author: str = defn["author"]
+            embed.set_author(name=author, url=url)
+        return embed
 
 
 @component.with_slash_command
@@ -229,7 +280,7 @@ async def get_anime(
     net: traits.NetRunner = net_.HTTPNet(),
 ) -> None:
     await ctx.defer()
-    jian = Jian(net)
+    jian = Wrapper(net)
     anime = await jian.get_anime(ctx, name, random=random, genre=genre)
     await ctx.respond(embed=anime)  # type: ignore
 
@@ -243,7 +294,7 @@ async def get_manga(
     net: traits.NetRunner = net_.HTTPNet(),
 ) -> None:
     await ctx.defer()
-    jian = Jian(net)
+    jian = Wrapper(net)
     manga = await jian.get_manga(ctx, name)
     await ctx.respond(embed=manga)  # type: ignore
 
@@ -256,52 +307,9 @@ async def define(
     name: str,
     net: traits.NetRunner = net_.HTTPNet(),
 ) -> None:
-    async with net as cli:
-        await ctx.defer()
-
-        headers: dict[str, str] = {
-            "x-rapidapi-key": config.RAPID_TOKEN,
-            "x-rapidapi-host": "mashape-community-urban-dictionary.p.rapidapi.com",
-        }
-
-        try:
-            resp = await cli.request(
-                "GET", API["urban"], headers=headers, params={"term": name.lower()}
-            )
-        except Exception as exc:
-            raise RuntimeError("Couldn't make the definition request") from exc
-
-        try:
-            defn = choice(resp["list"])  # type: ignore
-
-        except IndexError:
-            await ctx.respond(f"Couldn't find definition about `{name}`")
-            return
-
-        except hikari.NotFoundError:
-            pass
-
-        else:
-            example: str = defn["example"]
-            definition: str = defn["definition"]
-            up_voted: int = defn["thumbs_up"]
-            down_votes: int = defn["thumbs_down"]
-            date: str = defn["written_on"]
-            url: str = defn["permalink"]
-            author: str = defn["author"]
-
-        embed = (
-            hikari.Embed(
-                title=f"Definition for {name}",
-                description=(definition.replace("]", "").replace("[", "")),
-                colour=consts.COLOR["invis"],
-                timestamp=fast_datetime(date),  # type: ignore[None]
-            )
-            .set_author(name=author, url=url)
-            .add_field("Example", example.replace("]", "").replace("[", ""))
-            .set_footer(text=f"\U0001f44d {up_voted} - \U0001f44e {down_votes}")
-        )
-        await ctx.respond(embed=embed)
+    urban = Wrapper(net)
+    definition = await urban.get_definition(ctx, name)
+    await ctx.respond(embed=definition) # type: ignore
 
 
 @component.with_message_command

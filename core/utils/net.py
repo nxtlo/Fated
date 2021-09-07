@@ -153,7 +153,7 @@ class HTTPNet(traits.NetRunner):
                                 )
                             return data
 
-                    await self.error_handle(response)
+                        await self.error_handle(response)
 
                 except RateLimited as exc:
                     _LOG.warn(
@@ -177,41 +177,8 @@ class HTTPNet(traits.NetRunner):
         return None
 
     @staticmethod
-    async def error_handle(response: aiohttp.ClientResponse, /) -> None:
-        json_data = await response.json()
-        real_data: list[typing.Any] = [
-            str(response.real_url),
-            response.headers,
-            json_data,
-        ]
-
-        try:
-            real_data.append(response.headers["error"])
-            real_data.append(response.headers["type"])
-        except KeyError:
-            pass
-
-        # too lazy to define them somewhere else.
-        if response.status == http.NOT_FOUND:
-            raise NotFound(*real_data)
-        if response.status == http.BAD_REQUEST:
-            raise BadRequest(*real_data)
-        if response.status == http.FORBIDDEN:
-            raise Forbidden(*real_data)
-        if response.status == http.TOO_MANY_REQUESTS:
-            retry_after = response.headers["Retry-After"]
-            message = response.headers["message"]
-            raise RateLimited(
-                *real_data, message=message, retry_after=float(retry_after)
-            )
-        if response.status == http.UNAUTHORIZED:
-            raise Unauthorized(*real_data)
-
-        status = http(response.status)
-        if 500 <= status < 500:
-            raise InternalError(*real_data)
-        else:
-            raise Error(*real_data)
+    async def error_handle(response: aiohttp.ClientResponse, /) -> typing.NoReturn:
+        raise await acquire_errors(response)
 
     # TODO: maybe implement all requests we need here instead of making them in components?
 
@@ -261,9 +228,44 @@ class Forbidden(Error):
     headers: multidict.CIMultiDictProxy[str] = attr.field()
     data: JsonObject = attr.field()
 
-
 @attr.define(weakref_slot=False, repr=False)
-class InternalError(RuntimeError):
+class InternalError(Error):
     url: str | URL = attr.field()
     headers: multidict.CIMultiDictProxy[str] = attr.field()
     data: JsonObject = attr.field()
+
+async def acquire_errors(response: aiohttp.ClientResponse, /) -> Error:
+        json_data = await response.json()
+        real_data: list[typing.Any] = [
+            str(response.real_url),
+            response.headers,
+            json_data,
+        ]
+
+        try:
+            real_data.append(response.headers["error"])
+            real_data.append(response.headers["type"])
+        except KeyError:
+            pass
+
+        # too lazy to define them somewhere else.
+        if response.status == http.NOT_FOUND:
+            return NotFound(*real_data)
+        if response.status == http.BAD_REQUEST:
+            return BadRequest(*real_data)
+        if response.status == http.FORBIDDEN:
+            return Forbidden(*real_data)
+        if response.status == http.TOO_MANY_REQUESTS:
+            retry_after = response.headers["Retry-After"]
+            message = response.headers["message"]
+            return RateLimited(
+                *real_data, message=message, retry_after=float(retry_after)
+            )
+        if response.status == http.UNAUTHORIZED:
+            return Unauthorized(*real_data)
+
+        status = http(response.status)
+        if 500 <= status < 500:
+            return InternalError(*real_data)
+        else:
+            return Error(*real_data)
