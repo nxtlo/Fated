@@ -40,7 +40,7 @@ from core.utils import config as config_
 from core.utils import net, traits
 
 
-class Tsujigiri(hikari.GatewayBot):
+class Fated(hikari.GatewayBot):
     """The bot."""
 
     def __init__(self, token: str, **kws: typing.Any) -> None:
@@ -62,7 +62,7 @@ class Tsujigiri(hikari.GatewayBot):
 
 async def get_prefix(
     ctx: tanjun.abc.MessageContext,
-    pool: pool_.PgxPool = tanjun.injected(type=pool_.PgxPool),
+    pool: pool_.PoolT = tanjun.injected(type=pool_.PoolT),
 ) -> str | typing.Sequence[str]:
     query: str = "SELECT prefix FROM guilds WHERE id = $1"
     if (prefix := await pool.fetchval(query, ctx.guild_id)) is not None:
@@ -77,7 +77,7 @@ def build_bot() -> hikari_traits.GatewayBotAware:
     config = config_.Config()
 
     intents = hikari.Intents.ALL_UNPRIVILEGED | hikari.Intents.GUILD_MEMBERS
-    bot = Tsujigiri(config.BOT_TOKEN, intents=intents)
+    bot = Fated(config.BOT_TOKEN, intents=intents)
     bot.sub()
     build_client(bot)
     return bot
@@ -102,6 +102,7 @@ def build_client(bot: hikari_traits.GatewayBotAware) -> tanjun.Client:
         .load_modules("core.components.mod")
         .load_modules("core.components.api")
         # Prefix stuff.
+        .set_prefix_getter(get_prefix)
         .add_prefix("?")
     )
 
