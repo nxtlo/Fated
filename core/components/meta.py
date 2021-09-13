@@ -36,6 +36,7 @@ import tanjun
 from aiobungie.internal import time
 from tanjun import abc
 
+from core.binds import rst
 from core.psql.pool import PoolT
 from core.utils import format
 
@@ -192,6 +193,15 @@ async def avatar_view(ctx: abc.SlashContext, /, member: hikari.Member) -> None:
 @tanjun.as_message_command("say")
 async def say_command(ctx: abc.MessageContext, query: str) -> None:
     await ctx.respond(query)
+
+
+@component.with_message_command
+@tanjun.with_argument("b", converters=(int,))
+@tanjun.with_argument("n", converters=(int,))
+@tanjun.with_parser
+@tanjun.as_message_command("sum")
+async def sum_cmd(ctx: abc.MessageContext, n: int, b: int) -> None:
+    await ctx.respond(rst.sum(n, b))
 
 
 @tanjun.as_loader

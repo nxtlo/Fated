@@ -1,4 +1,15 @@
+# config
 config.py
+
+# Venv
 .venv/
+
+# cache
 __pycache__/
 .mypy_cache/
+
+# Rust
+Cargo.lock
+target/
+rst.so
+rst.pyd
