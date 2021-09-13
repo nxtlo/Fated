@@ -27,10 +27,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from os import stat
 import types
 import typing
 from http import HTTPStatus as http
+from os import stat
 
 import aiohttp
 import attr
@@ -251,6 +251,9 @@ async def acquire_errors(response: aiohttp.ClientResponse, /) -> Error:
     except KeyError:
         pass
 
+    # Black doesn'n know what match is.
+    
+    # fmt: off
     match response.status:
         case http.NOT_FOUND:
             return NotFound(*real_data)
@@ -273,3 +276,4 @@ async def acquire_errors(response: aiohttp.ClientResponse, /) -> Error:
             return InternalError(*real_data)
         case _:
             return Error(*real_data)
+    # fmt: on

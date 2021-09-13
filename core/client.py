@@ -22,8 +22,8 @@
 # SOFTWARE.
 
 from __future__ import annotations
-import asyncio
 
+import asyncio
 import datetime
 import logging
 import os
@@ -62,7 +62,7 @@ class Fated(hikari.GatewayBot):
 
 
 async def get_prefix(
-    ctx: tanjun.abc.MessageContext = tanjun.injected(type=tanjun.abc.MessageContext), 
+    ctx: tanjun.abc.MessageContext = tanjun.injected(type=tanjun.abc.MessageContext),
     pool: pool_.PoolT = tanjun.injected(type=pool_.PoolT),
 ) -> str | typing.Sequence[str]:
 

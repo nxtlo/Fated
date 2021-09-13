@@ -42,7 +42,7 @@ logging.basicConfig(level=logging.INFO)
 
 class PgxPool(traits.PoolRunner):
     """An asyncpg pool."""
-    
+
     __slots__: tuple[str, ...] = ("_pool", "_lock")
 
     def __init__(self) -> None:

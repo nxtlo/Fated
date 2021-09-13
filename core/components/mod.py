@@ -85,6 +85,7 @@ async def run_sql(
 
     await ctx.respond(format.with_block(result))
 
+
 @component.with_command
 @tanjun.with_guild_check
 @tanjun.with_own_permission_check(

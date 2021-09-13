@@ -44,9 +44,7 @@ component = tanjun.Component(name="meta")
 
 @component.with_message_command
 @tanjun.as_message_command("ping")
-async def ping(
-    ctx: abc.MessageContext
-) -> None:
+async def ping(ctx: abc.MessageContext) -> None:
     """Pong."""
     start_time = perf_counter()
     await ctx.rest.fetch_my_user()
@@ -126,7 +124,7 @@ async def color_fn(ctx: tanjun.abc.MessageContext, color: int) -> None:
 @component.with_message_command
 @tanjun.as_message_command("uptime")
 async def uptime(ctx: tanjun.abc.SlashContext) -> None:
-    """Chack the uptime for the bot."""
+    """Check the uptime for the bot."""
     await ctx.respond(
         f"Benn up for: *{time.human_timedelta(ctx.client.metadata['uptime'], suffix=False)}*"
     )
