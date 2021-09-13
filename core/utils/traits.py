@@ -45,9 +45,6 @@ class PoolRunner(FastProtocolChecking, typing.Protocol):
 
     __slots__: typing.Sequence[str] = ()
 
-    def __call__(self) -> typing.Coroutine[None, None, asyncpg.pool.Pool | None]:
-        """An overloaded call method to acquire a pool connection."""
-
     @property
     def pool(self) -> asyncpg.Pool | None:
         """Access to `self._pool`."""

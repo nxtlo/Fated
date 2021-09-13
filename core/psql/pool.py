@@ -32,28 +32,26 @@ import pathlib
 import typing
 
 import asyncpg
-import attr  # type: ignore[import]
 import colorlog
 
 from core.utils import config, traits
 
-LOG: typing.Final[logging.Logger] = colorlog.getLogger(__name__)
+_LOG: typing.Final[logging.Logger] = colorlog.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
 
-# For some reason decorating classes with attrs or dataclasses
-# breaks the injection callbacks. Not sure why but removing it now.
-
-# @attr.define(weakref_slot=False, slots=True, init=True, kw_only=True)
 class PgxPool(traits.PoolRunner):
     """An asyncpg pool."""
+    
+    __slots__: tuple[str, ...] = ("_pool", "_lock")
 
-    _pool: typing.ClassVar[asyncpg.Pool | None] = None
-    """The pool itself."""
+    def __init__(self) -> None:
+        self._pool: asyncpg.Pool | None = None
+        self._lock: asyncio.Lock = asyncio.Lock()
 
-    def __call__(self) -> typing.Coroutine[None, None, asyncpg.pool.Pool | None]:
+    async def __call__(self) -> asyncpg.Pool | None:
         asyncio.get_running_loop()
-        return self.create_pool()
+        return await self.create_pool()
 
     @property
     def pool(self) -> asyncpg.Pool | None:
@@ -75,10 +73,10 @@ class PgxPool(traits.PoolRunner):
             tables = cls.tables()
             async with cls._pool.acquire() as conn:
                 try:
-                    LOG.info(tables)
+                    _LOG.info(tables)
                     await conn.execute(tables)
                     os.system("clear" if os.name != "nt" else "cls")
-                    LOG.info("Tables build success.")
+                    _LOG.info("Tables build success.")
                 except asyncpg.exceptions.PostgresError as exc:
                     raise RuntimeError("Failed to build the database tables.") from exc
                 finally:
@@ -101,7 +99,7 @@ class PgxPool(traits.PoolRunner):
         *args: typing.Any,
         timeout: float | None = None,
     ) -> list[asyncpg.Record]:
-        return await self._pool.fetch(sql, *args, timeout)
+        return await self.pool.fetch(sql, *args, timeout)
 
     async def fetchrow(
         self,
@@ -110,7 +108,7 @@ class PgxPool(traits.PoolRunner):
         *args: typing.Any,
         timeout: float | None = None,
     ) -> list[asyncpg.Record]:
-        return await self._pool.fetchrow(sql, *args, timeout)
+        return await self.pool.fetchrow(sql, *args, timeout)
 
     async def fetchval(
         self,
@@ -120,11 +118,11 @@ class PgxPool(traits.PoolRunner):
         column: int | None = None,
         timeout: float | None = None,
     ) -> typing.Any:
-        return await self._pool.fetchval(sql, *args, column, timeout)
+        return await self.pool.fetchval(sql, *args, column, timeout)
 
     async def close(self) -> None:
         try:
-            await self._pool.close()
+            await self.pool.close()
         except asyncpg.exceptions.InterfaceError as e:
             raise e
 

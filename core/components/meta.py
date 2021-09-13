@@ -45,18 +45,17 @@ component = tanjun.Component(name="meta")
 @component.with_message_command
 @tanjun.as_message_command("ping")
 async def ping(
-    ctx: abc.MessageContext, pool: PoolT = tanjun.injected(type=PoolT)
+    ctx: abc.MessageContext
 ) -> None:
     """Pong."""
     start_time = perf_counter()
     await ctx.rest.fetch_my_user()
-    await pool.fetch("SELECT id FROM guilds;")
     time_taken = (perf_counter() - start_time) * 1_000
     heartbeat_latency = (
         ctx.shards.heartbeat_latency * 1_000 if ctx.shards else float("NAN")
     )
     await ctx.respond(
-        f"PONG\n - REST and Pool: {time_taken:.0f}ms\n - Gateway: {heartbeat_latency:.0f}ms"
+        f"PONG\n - REST: {time_taken:.0f}ms\n - Gateway: {heartbeat_latency:.0f}ms"
     )
 
 
@@ -133,6 +132,7 @@ async def uptime(ctx: tanjun.abc.SlashContext) -> None:
     )
 
 
+# idk if this even works.
 @component.with_slash_command
 @tanjun.as_slash_command("about", "Information about the bot itself.")
 async def about_command(

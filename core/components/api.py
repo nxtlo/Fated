@@ -29,11 +29,11 @@ __all__: list[str] = ["component"]
 
 import json
 import typing
-import re
 from random import choice
 
 import hikari
 import tanjun
+
 from aiobungie.internal import time
 from hikari.internal.time import (
     fast_iso8601_datetime_string_to_datetime as fast_datetime,
@@ -72,6 +72,7 @@ GENRES: dict[str, int] = {
 
 PATTERN: str = r"'(\[(.+?)\])'"
 
+
 class Wrapper:
     """Wrapped around different apis."""
 
@@ -87,8 +88,10 @@ class Wrapper:
         *,
         random: bool | None = None,
         genre: str,
-    ) -> hikari.Embed | None:
+    ) -> hikari.Embed | hikari.UndefinedType:
         """Returns an anime from jian api."""
+        embed = hikari.Embed(colour=consts.COLOR["invis"])
+
         async with self._net as cli:
 
             if random is True and name is None:
@@ -124,14 +127,11 @@ class Wrapper:
                             anime = raw_anime[0]
                         except (KeyError, TypeError):
                             await ctx.mark_not_found()
-                            return
+                            return hikari.UNDEFINED
 
-                    embed = hikari.Embed(
-                        title=anime.get("title", UNDEFINED),
-                        description=anime.get("synopsis", UNDEFINED),
-                        url=anime.get("url", str(UNDEFINED)),
-                        colour=consts.COLOR["invis"],
-                    )
+                    embed.title = anime.get("title", UNDEFINED)
+                    embed.description = anime.get("synopsis", UNDEFINED)
+                    embed.set_author(url=anime.get("url", str(UNDEFINED)))
 
                     try:
                         embed.set_footer(text=", ".join(genres))
@@ -160,10 +160,14 @@ class Wrapper:
                     )
                     for k, v in meta_data:
                         embed.add_field(k, str(v), inline=True)
-                return embed
+            return embed
 
-    async def get_manga(self, ctx: tanjun.abc.SlashContext, name: str, /) -> hikari.Embed | None:
+    async def get_manga(
+        self, ctx: tanjun.abc.SlashContext, name: str, /
+    ) -> hikari.Embed | hikari.UndefinedType:
         """Returns a manga from jian api."""
+        embed = hikari.Embed(colour=consts.COLOR["invis"])
+
         async with self._net as cli:
             if (
                 raw_manga := await cli.request(
@@ -174,88 +178,91 @@ class Wrapper:
             ) is not None:
                 if isinstance(raw_manga, list):
                     try:
-                        anime = raw_manga[0]
+                        manga = raw_manga[0]
                     except KeyError:
                         await ctx.respond("Anime was not found.")
-                        return
+                        return hikari.UNDEFINED
 
-                    embed = hikari.Embed(
-                        title=anime.get("title", UNDEFINED),
-                        description=anime.get("synopsis", UNDEFINED),
-                        url=anime.get("url", str(UNDEFINED)),
-                        colour=consts.COLOR["invis"],
-                    )
+                    embed.title = manga.get("title", UNDEFINED)
+                    embed.description = manga.get("synopsis", UNDEFINED)
+                    embed.set_author(url=manga.get("url", str(UNDEFINED)))
 
-                    embed.set_image(anime.get("image_url", None))
+                    embed.set_image(manga.get("image_url", None))
                     start_date: UndefinedOr[str] = UNDEFINED
                     end_date: UndefinedOr[str] = UNDEFINED
 
-                    if (raw_start_date := anime.get("start_date")) is not None:
+                    if (raw_start_date := manga.get("start_date")) is not None:
                         start_date = time.human_timedelta(
                             time.clean_date(raw_start_date)
                         )
 
-                    if (raw_end_date := anime.get("end_date")) is not None:
+                    if (raw_end_date := manga.get("end_date")) is not None:
                         end_date = time.human_timedelta(time.clean_date(raw_end_date))
 
                     meta_data = (
-                        ("Chapters", anime.get("chapters", UNDEFINED)),
-                        ("Volumes", anime.get("volumes", UNDEFINED)),
-                        ("Type", anime.get("type", UNDEFINED)),
-                        ("Score", anime.get("score", UNDEFINED)),
+                        ("Chapters", manga.get("chapters", UNDEFINED)),
+                        ("Volumes", manga.get("volumes", UNDEFINED)),
+                        ("Type", manga.get("type", UNDEFINED)),
+                        ("Score", manga.get("score", UNDEFINED)),
                         ("Published at", start_date),
                         ("Ended at", end_date),
-                        ("Community members", anime.get("members", UNDEFINED)),
-                        ("Being published", anime.get("publishing", UNDEFINED)),
+                        ("Community members", manga.get("members", UNDEFINED)),
+                        ("Being published", manga.get("publishing", UNDEFINED)),
                     )
                     for k, v in meta_data:
                         embed.add_field(k, str(v), inline=True)
-                    return embed
-                
-    async def get_definition(self, ctx: tanjun.abc.SlashContext, name: str) -> hikari.Embed | None:
+            return embed
+
+    async def get_definition(
+        self, ctx: tanjun.abc.SlashContext, name: str
+    ) -> hikari.Embed | hikari.UndefinedType:
         """Gets a definition from urbandefition."""
         async with self._net as cli:
 
-            resp = await cli.request(
-                "GET", API["urban"], params={"term": name.lower()}, getter='list'
-            ) or []
-            
+            resp = (
+                await cli.request(
+                    "GET", API["urban"], params={"term": name.lower()}, getter="list"
+                )
+                or []
+            )
+
             if not resp:
                 await ctx.respond(f"Couldn't find definition about `{name}`")
-                return None
+                return hikari.UNDEFINED
 
             defn = choice(resp)  # type: ignore
             embed = hikari.Embed(
-                colour=consts.COLOR["invis"],
-                title=f'Definition for {name}'
+                colour=consts.COLOR["invis"], title=f"Definition for {name}"
             )
-            
+
             def replace(s: str) -> str:
-                return s.replace(']', '').replace('[', '')
+                return s.replace("]", "").replace("[", "")
 
             try:
                 example: str = defn["example"]
                 embed.add_field("Example", replace(example))
             except (KeyError, ValueError):
                 pass
-            
+
             # This cannot be None.
             definition: str = defn["definition"]
-            embed.description = replace(definition) 
+            embed.description = replace(definition)
 
             try:
                 up_voted: int = defn["thumbs_up"]
                 down_votes: int = defn["thumbs_down"]
-                embed.set_footer(text=f"\U0001f44d {up_voted} - \U0001f44e {down_votes}")
+                embed.set_footer(
+                    text=f"\U0001f44d {up_voted} - \U0001f44e {down_votes}"
+                )
             except KeyError:
                 pass
 
             try:
                 date: str = defn["written_on"]
-                embed.timestamp = fast_datetime(date) # type: ignore
+                embed.timestamp = fast_datetime(date)  # type: ignore
             except KeyError:
                 pass
-            
+
             url: str = defn["permalink"]
             author: str = defn["author"]
             embed.set_author(name=author, url=url)
@@ -282,7 +289,7 @@ async def get_anime(
     await ctx.defer()
     jian = Wrapper(net)
     anime = await jian.get_anime(ctx, name, random=random, genre=genre)
-    await ctx.respond(embed=anime)  # type: ignore
+    await ctx.respond(embed=anime)
 
 
 @component.with_slash_command
@@ -296,7 +303,7 @@ async def get_manga(
     await ctx.defer()
     jian = Wrapper(net)
     manga = await jian.get_manga(ctx, name)
-    await ctx.respond(embed=manga)  # type: ignore
+    await ctx.respond(embed=manga)
 
 
 @component.with_slash_command
@@ -309,7 +316,7 @@ async def define(
 ) -> None:
     urban = Wrapper(net)
     definition = await urban.get_definition(ctx, name)
-    await ctx.respond(embed=definition) # type: ignore
+    await ctx.respond(embed=definition)
 
 
 @component.with_message_command

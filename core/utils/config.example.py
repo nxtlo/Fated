@@ -58,7 +58,6 @@ class Config:
     DB_PORT: typing.Final[int] = attr.field(default=5432)
     """Your database's port. Defaults to 5432."""
 
-
     CACHE: hikari.CacheComponents = attr.field(
         default=(
             hikari.CacheComponents.GUILD_CHANNELS

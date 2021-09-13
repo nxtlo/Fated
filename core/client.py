@@ -22,6 +22,7 @@
 # SOFTWARE.
 
 from __future__ import annotations
+import asyncio
 
 import datetime
 import logging
@@ -61,7 +62,8 @@ class Fated(hikari.GatewayBot):
 
 
 async def get_prefix(
-    ctx: tanjun.abc.MessageContext = tanjun.injected(type=tanjun.abc.MessageContext), pool: pool_.PoolT = tanjun.injected(callback=pool_.PoolT),
+    ctx: tanjun.abc.MessageContext = tanjun.injected(type=tanjun.abc.MessageContext), 
+    pool: pool_.PoolT = tanjun.injected(type=pool_.PoolT),
 ) -> str | typing.Sequence[str]:
 
     guild: hikari.Snowflake = ctx.guild_id or (await ctx.fetch_guild()).id
@@ -69,7 +71,7 @@ async def get_prefix(
 
     if (prefix := await pool.fetchval(sql, guild)) is not None:
         return str(prefix)
-    return ('!',)
+    return ("?",)
 
 
 def build_bot() -> hikari_traits.GatewayBotAware:
@@ -94,10 +96,9 @@ def build_client(bot: hikari_traits.GatewayBotAware) -> tanjun.Client:
             set_global_commands=True,
         )
         # Dependencies.
-        .set_type_dependency(pool_.PoolT, pool_.PgxPool())
+        .set_type_dependency(pool_.PoolT, tanjun.cache_callback(pool_.PgxPool()))
         .set_type_dependency(net.HTTPNet, typing.cast(traits.NetRunner, net.HTTPNet))
-        # Injected call backs.
-        .set_callback_override(pool_.PoolT, pool_.PgxPool())
+        # Global injected call backs.
         .set_callback_override(net.HTTPNet, traits.NetRunner)
         # Components.
         .load_modules("core.components.meta")
