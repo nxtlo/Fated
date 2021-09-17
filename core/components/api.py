@@ -36,10 +36,8 @@ from tanjun import abc as tabc
 from core.utils import consts, format
 from core.utils import net as net_
 from core.utils import traits
-from core.utils.config import Config
 
 component = tanjun.Component(name="api")
-config = Config()
 
 
 @component.with_slash_command

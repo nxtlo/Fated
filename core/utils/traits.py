@@ -175,7 +175,7 @@ class NetRunner(FastProtocolChecking, typing.Protocol):
 
     # This is required here for injecting it
     # to the client.
-    def __call__(self) -> None:
+    def __call__(self) -> typing.NoReturn:
         raise NotImplementedError
 
     async def acquire(self) -> None:
