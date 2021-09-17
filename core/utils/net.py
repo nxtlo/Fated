@@ -137,7 +137,6 @@ class HTTPNet(traits.NetRunner):
                     async with self._session.request( # type: ignore
                         method, URL(url) if type(url) is URL else url, **kwargs
                     ) as response:
-                        response.raise_for_status()
 
                         if http.MULTIPLE_CHOICES > response.status >= http.OK:
                             _LOG.debug(
