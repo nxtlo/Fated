@@ -127,7 +127,7 @@ class HTTPNet(traits.NetRunner):
             str
         ] = f"Tsujigiri DiscorsBot Hikari/{about.__version__}"
 
-        kwargs["headers"] = headers = dict()
+        kwargs["headers"] = headers = {}
         headers["User-Agent"] = user_agent
 
         while 1:
