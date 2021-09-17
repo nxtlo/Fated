@@ -32,13 +32,17 @@ import typing
 import click
 import hikari
 import tanjun
-from hikari import traits as hikari_traits
 from hikari.internal import aio
 from setuptools import setup
 
+from .utils import traits
 from core.psql import pool as pool_
 from core.utils import config as config_
-from core.utils import net, traits
+from core.utils import net
+
+if typing.TYPE_CHECKING:
+    from hikari import traits as hikari_traits
+
 
 
 class Fated(hikari.GatewayBot):
@@ -127,6 +131,7 @@ def main(ctx: click.Context) -> None:
 def build_ext() -> None:
     try:
         import setuptools_rust as setrust
+
         hasit = True
     except ImportError:
         hasit = False

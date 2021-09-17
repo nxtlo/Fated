@@ -20,17 +20,70 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
+"""Consts and stuff that we don't modify."""
 
 from __future__ import annotations
 
-__all__: list[str] = ["COLOR"]
+__all__: list[str] = ["COLOR", "JsonObject", "API", "GENRES", "iter", "randomize"]
 
 import random
 import typing
 
+ChoiceT = typing.TypeVar("ChoiceT", covariant=True)
+SequenceOf = str | typing.Sequence[ChoiceT] | None
+
+# TODO: Make this a hikari.Colour ?
 COLOR: typing.Final[dict[str, int]] = {
     "invis": 0x36393F,
     "random": random.randint(0, 0xFFFFFF),
 }
+"""Colors."""
+
+API: dict[str, str] = {
+    "anime": "https://api.jikan.moe/v3",
+    "urban": "https://api.urbandictionary.com/v0/define",
+}
+"""A dict that holds api endpoints."""
+
+GENRES: dict[str, int] = {
+    "Action": 1,
+    "Advanture": 2,
+    "Drama": 8,
+    "Daemons": 6,
+    "Ecchi": 9,  # :eyes:
+    "Magic": 16,
+    "Sci Fi": 24,
+    "Shounen": 27,
+    "Harem": 35,  # :eyes:
+    "Seinen": 42,
+}
+"""Anime only genres."""
 
 JsonObject = dict[str, typing.Any] | list[dict[str, typing.Any]] | None
+"""A Json like object."""
+
+
+def iter(map: typing.Iterable[typing.Any] | None = None) -> typing.Iterable[str]:
+    if map is None:
+        map = GENRES
+        return (genre for genre in map.keys())
+    else:
+        return (thing for thing in map)  # type:ignore
+
+
+def randomize(seq: SequenceOf[typing.Any] | None = None) -> typing.Any:
+    """Takes a sequence and randomize it.
+
+    Parameters
+    ----------
+    seq : `SequenceOf[typing.Any]` | `None`
+        A sequence of any elements.
+
+    Returns
+    -------
+    `typing.Any`
+        Any random element from the given sequence.
+    """
+    if seq is None:
+        return random.choice(list(GENRES.keys()))
+    return random.choice(list(seq))

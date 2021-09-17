@@ -27,15 +27,14 @@ from __future__ import annotations
 
 __all__: list[str] = ["component"]
 
+import datetime
 import sys
+import time as py_time
 from time import perf_counter
 
 import asyncpg
 import hikari
 import tanjun
-import datetime
-import time as py_time
-
 from aiobungie.internal import time
 from tanjun import abc
 
@@ -206,16 +205,18 @@ async def say_command(ctx: abc.MessageContext, query: str) -> None:
 async def rust_sum(ctx: abc.MessageContext, n: int, b: int) -> None:
     await ctx.respond(rst.sum(n, b))
 
+
 @component.with_message_command
 @tanjun.as_message_command("duration")
 async def rust_duration(ctx: abc.MessageContext) -> None:
     now = datetime.datetime.utcnow().microsecond
     await ctx.respond(rst.from_duration(now, 0))
 
+
 @component.with_message_command
 @tanjun.as_message_command("iso")
 async def rust_iso(ctx: abc.MessageContext) -> None:
-    now = int(py_time.time()) # now timestamp
+    now = int(py_time.time())  # now timestamp
     await ctx.respond(rst.to_iso(now))
 
 
