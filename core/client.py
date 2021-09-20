@@ -35,14 +35,14 @@ import tanjun
 from hikari.internal import aio
 from setuptools import setup
 
-from .utils import traits
 from core.psql import pool as pool_
 from core.utils import config as config_
 from core.utils import net
 
+from .utils import traits
+
 if typing.TYPE_CHECKING:
     from hikari import traits as hikari_traits
-
 
 
 class Fated(hikari.GatewayBot):
@@ -97,7 +97,7 @@ def build_client(bot: hikari_traits.GatewayBotAware) -> tanjun.Client:
         tanjun.Client.from_gateway_bot(
             bot,
             mention_prefix=True,
-            set_global_commands=True,
+            set_global_commands=hikari.Snowflake(815920916043137076),
         )
         # Dependencies.
         .set_type_dependency(pool_.PoolT, tanjun.cache_callback(pool_.PgxPool()))

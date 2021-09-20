@@ -25,9 +25,13 @@
 
 from __future__ import annotations
 
+import json
+
 __all__: tuple[str, ...] = (
     "HTTPNet",
-    "Wrapper"
+    "Wrapper",
+    "Error",
+    "NotFound"
 )
 
 import asyncio
@@ -44,6 +48,7 @@ import multidict
 import tanjun
 from aiobungie.internal import time
 from hikari import _about as about
+from hikari.internal import data_binding
 from hikari.internal.time import (
     fast_iso8601_datetime_string_to_datetime as fast_datetime,
 )
@@ -55,6 +60,7 @@ from . import consts, interfaces, traits
 _LOG: typing.Final[logging.Logger] = logging.getLogger(__name__)
 logging.basicConfig(level=logging.DEBUG)
 
+DATA_TYPE = dict[str, typing.Any | int | str | hikari.UndefinedType | multidict.CIMultiDictProxy[str]]
 
 class _Rely:
 
@@ -107,7 +113,7 @@ class HTTPNet(traits.NetRunner):
         url: str | URL,
         getter: typing.Any | None = None,
         **kwargs: typing.Any,
-    ) -> consts.JsonObject | None:
+    ) -> data_binding.JSONObject | data_binding.JSONArray | None:
         async with rely:
             return await self._request(method, url, getter, **kwargs)
 
@@ -118,9 +124,9 @@ class HTTPNet(traits.NetRunner):
         url: str | URL,
         getter: typing.Any | None = None,
         **kwargs: typing.Any,
-    ) -> consts.JsonObject | None:
+    ) -> data_binding.JSONObject | data_binding.JSONArray | None:
 
-        data: consts.JsonObject | None = None
+        data: data_binding.JSONObject | None = None
         backoff_ = backoff.Backoff(max_retries=6)
 
         user_agent: typing.Final[
@@ -148,17 +154,13 @@ class HTTPNet(traits.NetRunner):
                                 return None
 
                             if getter:
-                                if isinstance(data, dict):
-                                    try:
-                                        return data[getter]
-                                    except KeyError:
-                                        raise LookupError(
-                                            response.real_url, response.headers, data
-                                        )
+                                try:
+                                    return data[getter]
+                                except KeyError:
+                                    raise LookupError(
+                                        response.real_url, response.headers, data
+                                    )
 
-                                raise TypeError(
-                                    f"Data must be a dict not {type(data).__name__}"
-                                )
                             return data
 
                         await self.error_handle(response)
@@ -387,96 +389,99 @@ class Wrapper(interfaces.APIWrapper):
             embed.set_author(name=author, url=url)
         return embed
 
+    async def get_git_user(self, name: str, /) -> interfaces.GithubUser | None:
+        async with self._net as cli:
+            if(raw_user := await cli.request("GET", URL(consts.API['git']['user']) / name)) is not None:
+                user: dict[str, typing.Any] = raw_user # type: ignore
+                user_obj = interfaces.GithubUser(
+                    api=self,
+                    name=user.get("login", hikari.UNDEFINED),
+                    id=user["id"],
+                    url=user['html_url'],
+                    repos_url=user['repos_url'],
+                    public_repors=user.get("public_repos", 0),
+                    avatar_url=user.get("avatar_url", None),
+                    email=user.get("email", None),
+                    type=user['type'],
+                    bio=user.get("bio", hikari.UNDEFINED),
+                    created_at=fast_datetime(user['created_at']), # type: ignore
+                    location=user.get("location", None),
+                    followers=user.get("followers", hikari.UNDEFINED),
+                    following=user.get("following", hikari.UNDEFINED)
+                )
+                return user_obj
+            return None
+        
+    async def get_git_repo(self, url: str) -> interfaces.GithubRepo:
+        ...
+
 @attr.define(weakref_slot=False, repr=False, auto_exc=True)
 class Error(RuntimeError):
     """Main error class."""
-
-    url: str | URL = attr.field()
-    headers: multidict.CIMultiDictProxy[str] = attr.field()
-    data: consts.JsonObject = attr.field()
+    data: DATA_TYPE = attr.field()
 
 
 @attr.define(weakref_slot=False, repr=False, auto_exc=True)
 class Unauthorized(Error):
-    url: str | URL = attr.field()
-    headers: multidict.CIMultiDictProxy[str] = attr.field()
-    data: consts.JsonObject = attr.field()
-
+    data: DATA_TYPE = attr.field()
 
 @attr.define(weakref_slot=False, repr=False, auto_exc=True)
 class NotFound(Error):
-    url: str | URL = attr.field()
-    headers: multidict.CIMultiDictProxy[str] = attr.field()
-    data: consts.JsonObject = attr.field()
-
+    data: DATA_TYPE = attr.field()
 
 @attr.define(weakref_slot=False, repr=False, auto_exc=True)
 class RateLimited(Error):
-    url: str | URL = attr.field()
-    headers: multidict.CIMultiDictProxy[str] = attr.field()
-    data: consts.JsonObject = attr.field()
+    data: DATA_TYPE = attr.field()
     retry_after: float = attr.field()
     message: str = attr.field()
 
-
 @attr.define(weakref_slot=False, repr=False, auto_exc=True)
 class BadRequest(Error):
-    url: str | URL = attr.field()
-    headers: multidict.CIMultiDictProxy[str] = attr.field()
-    data: consts.JsonObject = attr.field()
+    data: DATA_TYPE = attr.field()
 
 
 @attr.define(weakref_slot=False, repr=False, auto_exc=True)
 class Forbidden(Error):
-    url: str | URL = attr.field()
-    headers: multidict.CIMultiDictProxy[str] = attr.field()
-    data: consts.JsonObject = attr.field()
-
+    data: DATA_TYPE = attr.field()
 
 @attr.define(weakref_slot=False, repr=False, auto_exc=True)
 class InternalError(Error):
-    url: str | URL = attr.field()
-    headers: multidict.CIMultiDictProxy[str] = attr.field()
-    data: consts.JsonObject = attr.field()
-
+    data: DATA_TYPE = attr.field()
 
 async def acquire_errors(response: aiohttp.ClientResponse, /) -> Error:
     json_data = await response.json()
-    real_data: list[typing.Any] = [
-        str(response.real_url),
-        response.headers,
-        json_data,
-    ]
-
-    try:
-        real_data.append(response.headers["error"])
-        real_data.append(response.headers["type"])
-    except KeyError:
-        pass
+    real_data = {
+        "data": json_data,
+        "status": response.status,
+        "message": json_data.get("message", hikari.UNDEFINED),
+        "error": json_data.get("error", hikari.UNDEFINED),
+        "headers": response.headers,
+        "url": str(response.real_url)
+    }
 
     # Black doesn'n know what match is.
-    
+
     # fmt: off
     match response.status:
         case http.NOT_FOUND:
-            return NotFound(*real_data)
+            return NotFound(real_data)
         case http.BAD_REQUEST:
-            return BadRequest(*real_data)
+            return BadRequest(real_data)
         case http.FORBIDDEN:
-            return Forbidden(*real_data)
+            return Forbidden(real_data)
         case http.TOO_MANY_REQUESTS:
             retry_after = response.headers["Retry-After"]
             message = response.headers["message"]
-            return RateLimited(*real_data, message=message, retry_after=float(retry_after))
+            return RateLimited(real_data, message=message, retry_after=float(retry_after))
         case http.UNAUTHORIZED:
-            return Unauthorized(*real_data)
+            return Unauthorized(real_data)
         case _:
             pass
 
     status = http(response.status)
     match status:
         case (500, 502, 504):
-            return InternalError(*real_data)
+            return InternalError(real_data)
         case _:
-            return Error(*real_data)
+            return Error(real_data)
     # fmt: on

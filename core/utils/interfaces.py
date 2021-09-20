@@ -27,6 +27,7 @@ from __future__ import annotations
 __all__: tuple[str, ...] = ("APIWrapper",)
 
 import abc
+import datetime
 import typing
 
 import attr
@@ -120,6 +121,36 @@ class APIWrapper(abc.ABC):
             An undefined type if the definition was not found.
         """
 
+    @abc.abstractmethod
+    async def get_git_user(self, name: str) -> GithubUser | None:
+        """Fetch a Github user.
+
+        Parameters
+        -----------
+        name : `str`
+            The user name.
+
+        Returns
+        --------
+        `GithubUser`
+            A github user object.
+        """
+
+    @abc.abstractmethod
+    async def get_git_repo(self, url: str) -> GithubRepo:
+        """Fetch a Github repo.
+
+        Parameters
+        -----------
+        url : `str`
+            The API repo url.
+
+        Returns
+        --------
+        `GithubRepo`
+            A github repo object
+        """
+
 
 # TODO: impl this for github component.
 
@@ -131,32 +162,67 @@ class GithubRepo:
     owner: hikari.UndefinedOr[GithubUser] = attr.field(repr=True)
     """The repo's owner."""
 
+    id: int = attr.field()
 
-@attr.define(hash=False, weakref_slot=False, kw_only=True)
+    name: str = attr.field()
+
+    description: str = attr.field()
+
+    is_forked: bool = attr.field()
+
+    url: str = attr.field()
+
+    is_archived: bool = attr.field()
+
+    forks: int = attr.field()
+
+    open_issues: int = attr.field()
+
+    # We only need the License name
+    license: str = attr.field()
+
+    issues: int = attr.field()
+
+    size: int = attr.field()
+
+    created_at: datetime.datetime = attr.field()
+
+    language: str = attr.field()
+
+
+@attr.define(hash=False, weakref_slot=False, kw_only=True, repr=False)
 class GithubUser:
     """Represents a user on github."""
 
-    api: APIWrapper = attr.field(repr=False, eq=False)
-    """Our api wrapper that will run and fetch the requests."""
+    # We only care about the fields we need.
+
+    api: APIWrapper = attr.field()
 
     name: hikari.UndefinedOr[str] = attr.field(repr=True)
-    """The github user's name."""
 
     id: int = attr.field(repr=True, hash=True)
-    """The user's id."""
 
-    avatar_url: hikari.UndefinedOr[str] = attr.field(repr=False)
-    """The user's avatar url"""
+    avatar_url: typing.Optional[str] = attr.field()
 
-    url: hikari.UndefinedOr[str] = attr.field(repr=False)
-    """The user's github profile url."""
+    url: str = attr.field()
 
-    type: str = attr.field(repr=True)
-    """The user's type."""
+    type: str = attr.field()
 
-    node_id: str = attr.field(repr=False)
-    """The user's node id."""
+    email: typing.Optional[str] = attr.field()
+
+    location: typing.Optional[str] = attr.field()
+
+    public_repors: int = attr.field()
+
+    bio: hikari.UndefinedOr[str] = attr.field()
+
+    followers: int = attr.field()
+
+    following: int = attr.field()
+
+    created_at: datetime.datetime = attr.field()
+
+    repos_url: str = attr.field()
 
     async def fetch_repos(self) -> typing.Sequence[GithubRepo]:
-        # TODO: impl this.
         ...

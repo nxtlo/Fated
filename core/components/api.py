@@ -39,24 +39,23 @@ from core.utils import traits
 
 component = tanjun.Component(name="api")
 
-
 @component.with_slash_command
-#@tanjun.with_greedy_argument("name", converters=(str,), default=None)
-#@tanjun.with_option("random", "--random", converters=(bool,), default=True)
-#@tanjun.with_option(
+# @tanjun.with_greedy_argument("name", converters=(str,), default=None)
+# @tanjun.with_option("random", "--random", converters=(bool,), default=True)
+# @tanjun.with_option(
 #    "genre",
 #    "--genre",
 #    default=consts.randomize(),
-#)
-#@tanjun.with_parser
+# )
+# @tanjun.with_parser
 @tanjun.with_str_slash_option("name", "The anime's name.", default=None)
 @tanjun.with_bool_slash_option("random", "Get a random anime.", default=True)
 @tanjun.with_str_slash_option(
-    "genre", 
-    "The anime genre. This can be used with the random option.", 
+    "genre",
+    "The anime genre. This can be used with the random option.",
     choices=consts.iter(),
-    default=consts.randomize()
-    )
+    default=consts.randomize(),
+)
 @tanjun.as_slash_command("anime", "Returns basic information about an anime.")
 async def get_anime(
     ctx: tabc.SlashContext,
@@ -132,6 +131,41 @@ async def run_net(
         except hikari.BadRequestError as err:
             await ctx.respond(f"```hs\n{err}\n```")
 
+@component.with_slash_command
+@tanjun.with_str_slash_option(
+    "option", "Command options", choices=("repo", "user")
+)
+@tanjun.with_str_slash_option("name", "The name of repo or user.")
+@tanjun.as_slash_command("git", "Commands related to github.", sort_options=True)
+async def git_user(ctx: tanjun.abc.SlashContext, option: str, name: str, net: traits.NetRunner = net_.HTTPNet()) -> None:
+    git = net_.Wrapper(net) 
+    # fmt: off
+    try:
+        user = await git.get_git_user(name)
+    except net_.NotFound:
+        await ctx.respond(f"User {name} was not found.")
+        return
+    embed = hikari.Embed(title=user.id, description=user.bio, timestamp=user.created_at)
+
+    match option:
+        case "user":
+            if user.avatar_url is not None:
+                embed.set_thumbnail(user.avatar_url)
+            embed.set_author(name=str(user.name), url=user.url)
+            (
+                embed
+                .add_field("Followers", str(user.followers), inline=True)
+                .add_field("Following", str(user.following), inline=True)
+                .add_field("Public repos", str(user.public_repors), inline=True)
+                .add_field("Email", str(user.email if user.email else "N/A"), inline=True)
+                .add_field("Location", str(user.location if user.location else "N/A"), inline=True)
+                .add_field("User type", user.type, inline=True)
+            )
+        case _:
+            await ctx.respond("Repo currently not implemented.")
+            return
+    await ctx.respond(embed=embed)
+    # fmt: on
 
 @tanjun.as_loader
 def load_api(client: tanjun.Client) -> None:

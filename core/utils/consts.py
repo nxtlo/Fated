@@ -24,7 +24,7 @@
 
 from __future__ import annotations
 
-__all__: list[str] = ["COLOR", "JsonObject", "API", "GENRES", "iter", "randomize"]
+__all__: list[str] = ["COLOR", "API", "GENRES", "iter", "randomize"]
 
 import random
 import typing
@@ -39,9 +39,13 @@ COLOR: typing.Final[dict[str, int]] = {
 }
 """Colors."""
 
-API: dict[str, str] = {
+API: dict[str, typing.Any] = {
     "anime": "https://api.jikan.moe/v3",
     "urban": "https://api.urbandictionary.com/v0/define",
+    "git": {
+        "user": "https://api.github.com/users",
+        "repr": "https://api.github.com/users/nxtlo",
+    },
 }
 """A dict that holds api endpoints."""
 
@@ -59,7 +63,7 @@ GENRES: dict[str, int] = {
 }
 """Anime only genres."""
 
-JsonObject = dict[str, typing.Any] | list[dict[str, typing.Any]] | None
+JsonIsh = dict[str, typing.Any] | list[typing.Any] | None
 """A Json like object."""
 
 

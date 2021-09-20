@@ -25,6 +25,7 @@
 from __future__ import annotations
 
 import aiohttp
+from hikari.internal import data_binding
 
 __all__: list[str] = ["PoolRunner", "NetRunner"]
 
@@ -36,8 +37,6 @@ from hikari.internal.fast_protocol import FastProtocolChecking
 
 if typing.TYPE_CHECKING:
     import types
-
-    from . import consts
 
 
 @typing.runtime_checkable
@@ -190,7 +189,7 @@ class NetRunner(FastProtocolChecking, typing.Protocol):
         url: str | yarl.URL,
         getter: typing.Any | None = None,
         **kwargs: typing.Any,
-    ) -> consts.JsonObject:
+    ) -> data_binding.JSONArray | data_binding.JSONObject | None:
         """Perform an http request
 
         Parameters
