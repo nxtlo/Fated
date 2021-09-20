@@ -24,7 +24,7 @@
 
 from __future__ import annotations
 
-__all__: tuple[str, ...] = ("APIWrapper",)
+__all__: tuple[str, ...] = ("APIWrapper", "GithubRepo", "GithubUser")
 
 import abc
 import datetime
