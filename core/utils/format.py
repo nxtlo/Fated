@@ -43,7 +43,7 @@ def parse_code(*, code: str, lang: str = "sql") -> str:
     This removes the ```sql``` code blocks and returns the original code.
     """
     if code.startswith(f"```{lang}") and code.endswith("```"):
-        return code.replace(f"```", "").replace(lang, "")
+        return code.replace("```", "").replace(lang, "")
     return code
 
 

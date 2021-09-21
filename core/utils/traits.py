@@ -24,19 +24,78 @@
 
 from __future__ import annotations
 
+__all__: tuple[str, ...] = ("PoolRunner", "NetRunner", "HashRunner")
+
 import aiohttp
 from hikari.internal import data_binding
-
-__all__: list[str] = ["PoolRunner", "NetRunner"]
-
 import typing
 
 import asyncpg
 import yarl
 from hikari.internal.fast_protocol import FastProtocolChecking
 
+from .interfaces import HashView
+
 if typing.TYPE_CHECKING:
     import types
+
+# Hash types.
+HashT = typing.TypeVar("HashT")
+"""A type hint for the hash name."""
+
+FieldT = typing.TypeVar("FieldT")
+"""A type hint for the hash field."""
+
+ValueT = typing.TypeVar("ValueT")
+"""A type hint for the hash value."""
+
+@typing.runtime_checkable
+class HashRunner(
+    typing.Generic[HashT, FieldT, ValueT], FastProtocolChecking, typing.Protocol
+):
+    """A Basic generic Implementation of redis hash protocol.
+
+    Example
+    -------
+    ```py
+    async def func() -> None:
+        cache: Hash[str, hikari.SnowFlake, hikari.Member]
+        rest_member = await rest.fetch_members()
+        for member in rest_members:
+            cache.set("members", member.id, member)
+        get_member = await cache.get("members", member.id) -> hikari.Member(...)
+    """
+
+    __slots__: typing.Sequence[str] = ()
+
+    async def set(self, hash: HashT, field: FieldT, value: ValueT) -> None:
+        """Creates a new hash with field name and a value."""
+
+    async def setx(self, hash: HashT, field: FieldT) -> None:
+        """A method that's similar to `Hash.set`
+        but will not replace the value if one is already exists.
+        """
+
+    async def remove(self, hash: HashT) -> bool | None:
+        """Removes a hash."""
+
+    async def len(self, hash: HashT) -> int:
+        """Returns the length of the hash."""
+
+    async def all(self, hash: HashT) -> HashView | None:
+        """Returns all values from a hash."""
+
+    async def delete(self, hash: HashT, field: FieldT) -> None:
+        """Deletes a field from the provided hash."""
+
+    async def exists(self, hash: HashT, field: FieldT) -> bool:
+        """Returns True if the field exists in the hash."""
+
+    async def get(self, hash: HashT, field: FieldT) -> ValueT:
+        """Returns the value associated with field in the hash stored at key."""
+
+    def clone(self) -> HashRunner[HashT, FieldT, ValueT]:
+        """Returns a deep clone of this hash."""
 
 
 @typing.runtime_checkable

@@ -63,6 +63,7 @@ GENRES: dict[str, int] = {
 }
 """Anime only genres."""
 
+
 def iter(map: typing.Iterable[typing.Any] | None = None) -> typing.Iterable[str]:
     if map is None:
         map = GENRES

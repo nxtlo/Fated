@@ -24,7 +24,7 @@
 
 from __future__ import annotations
 
-__all__: tuple[str, ...] = ("APIWrapper", "GithubRepo", "GithubUser")
+__all__: tuple[str, ...] = ("APIWrapper", "GithubRepo", "GithubUser", "HashView")
 
 import abc
 import datetime
@@ -33,6 +33,12 @@ import typing
 import attr
 import hikari
 import tanjun
+
+
+@attr.define(weakref_slot=False, hash=False, repr=True)
+class HashView:
+    key: typing.Any = attr.field()
+    value: typing.Any = attr.field()
 
 
 class APIWrapper(abc.ABC):

@@ -22,11 +22,8 @@
 # SOFTWARE.
 
 from typing import Any as __Any
-from typing import ClassVar as __ClassVar
 from typing import Coroutine as __Coroutine
-from typing import Generic as __Generic
 from typing import NewType
-from typing import Protocol as __Protocol
 from typing import Union as __Union
 
 import asyncpg as __asyncpg
@@ -34,24 +31,31 @@ import asyncpg as __asyncpg
 from core.utils import traits as __traits
 
 class PgxPool(__traits.PoolRunner):
+
     def __call__(
         self,
     ) -> __Coroutine[None, None, __Union[__asyncpg.pool.Pool, None]]: ...
+
     @property
     def pool(self) -> __asyncpg.pool.Pool: ...
+
     @classmethod
     async def create_pool(
         cls, *, build: bool = ...
     ) -> __Union[__asyncpg.pool.Pool, None]: ...
+
     async def execute(
         self, sql: str, *args: __Any, timeout: __Union[float, None] = ...
     ) -> None: ...
+
     async def fetch(
         self, sql: str, *args: __Any, timeout: __Union[float, None] = ...
     ) -> list[__asyncpg.Record]: ...
+
     async def fetchrow(
         self, sql: str, *args: __Any, timeout: __Union[float, None] = ...
     ) -> list[__asyncpg.Record]: ...
+
     async def fetchval(
         self,
         sql: str,
@@ -62,5 +66,6 @@ class PgxPool(__traits.PoolRunner):
     async def close(self) -> None: ...
     @staticmethod
     def tables() -> str: ...
+
 
 PoolT = NewType("PoolT", PgxPool)

@@ -25,7 +25,6 @@
 
 from __future__ import annotations
 
-import json
 
 __all__: tuple[str, ...] = (
     "HTTPNet",
@@ -84,6 +83,7 @@ class _Rely:
     async def acquire(self) -> None:
         await self._lock.acquire()
 
+
 rely = _Rely()
 
 class HTTPNet(traits.NetRunner):
@@ -139,8 +139,7 @@ class HTTPNet(traits.NetRunner):
         while 1:
             async for _ in backoff_:
                 try:
-                    await self.acquire()
-                    async with self._session.request( # type: ignore
+                    async with self._session.request(  # type: ignore
                         method, URL(url) if type(url) is URL else url, **kwargs
                     ) as response:
 
@@ -175,6 +174,7 @@ class HTTPNet(traits.NetRunner):
                     raise
 
     async def __aenter__(self):
+        await self.acquire()
         return self
 
     async def __aexit__(
@@ -192,7 +192,7 @@ class HTTPNet(traits.NetRunner):
 
 class Wrapper(interfaces.APIWrapper):
     """Wrapped around different apis.
-    
+
     Attributes
     ----------
     client : `tairs.NetRunner`
@@ -343,15 +343,14 @@ class Wrapper(interfaces.APIWrapper):
             resp = (
                 await cli.request(
                     "GET", consts.API["urban"], params={"term": name.lower()}, getter="list"
-                )
-                or []
+                ) or []
             )
 
             if not resp:
                 await ctx.respond(f"Couldn't find definition about `{name}`")
                 return hikari.UNDEFINED
 
-            defn = choice(resp)  # type: ignore
+            defn = random_.choice(resp)  # type: ignore
             embed = hikari.Embed(
                 colour=consts.COLOR["invis"], title=f"Definition for {name}"
             )
@@ -392,7 +391,7 @@ class Wrapper(interfaces.APIWrapper):
     async def get_git_user(self, name: str, /) -> interfaces.GithubUser | None:
         async with self._net as cli:
             if(raw_user := await cli.request("GET", URL(consts.API['git']['user']) / name)) is not None:
-                user: dict[str, typing.Any] = raw_user # type: ignore
+                user: dict[str, typing.Any] = raw_user  # type: ignore
                 user_obj = interfaces.GithubUser(
                     api=self,
                     name=user.get("login", hikari.UNDEFINED),
@@ -404,14 +403,14 @@ class Wrapper(interfaces.APIWrapper):
                     email=user.get("email", None),
                     type=user['type'],
                     bio=user.get("bio", hikari.UNDEFINED),
-                    created_at=fast_datetime(user['created_at']), # type: ignore
+                    created_at=fast_datetime(user['created_at']),  # type: ignore
                     location=user.get("location", None),
                     followers=user.get("followers", hikari.UNDEFINED),
                     following=user.get("following", hikari.UNDEFINED)
                 )
                 return user_obj
             return None
-        
+
     async def get_git_repo(self, url: str) -> interfaces.GithubRepo:
         ...
 
@@ -480,7 +479,7 @@ async def acquire_errors(response: aiohttp.ClientResponse, /) -> Error:
 
     status = http(response.status)
     match status:
-        case (500, 502, 504):
+        case (500, 502, 504):  # noqa: E211
             return InternalError(real_data)
         case _:
             return Error(real_data)

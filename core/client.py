@@ -37,9 +37,9 @@ from setuptools import setup
 
 from core.psql import pool as pool_
 from core.utils import config as config_
+from core.utils import cache  # noqa: F401
 from core.utils import net
-
-from .utils import traits
+from core.utils import traits
 
 if typing.TYPE_CHECKING:
     from hikari import traits as hikari_traits
@@ -168,7 +168,7 @@ def init() -> None:
     try:
         loop.run_until_complete(pool_.PgxPool.create_pool(build=True))
     except Exception:
-        click.echo(f"Couldn't build the daatabse tables.", err=True)
+        click.echo("Couldn't build the daatabse tables.", err=True)
         traceback.print_exc()
 
 

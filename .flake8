@@ -1,0 +1,17 @@
+[flake8]
+count = true
+
+ignore = 
+    E402, # Module import level.
+    w503, # Line breaks before operators.
+    W504, # Line breaks.
+    E302, # Blank Lines are too close.
+    E704, # Multiple statements in one line.
+
+per-file-ignores =
+    aiobungie/psql/pool.pyi: F401,F403,F405
+
+max-complexity = 20
+max-function-length = 120
+max-line-length = 120
+docstring-convention = numpy
