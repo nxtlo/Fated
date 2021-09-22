@@ -23,7 +23,10 @@ HashT = typing.TypeVar("HashT")
 FieldT = typing.TypeVar("FieldT")
 ValueT = typing.TypeVar("ValueT")
 
-class Hash(traits.HashRunner, typing.Generic[traits.HashT, traits.FieldT, traits.ValueT]):
+
+class Hash(
+    traits.HashRunner, typing.Generic[traits.HashT, traits.FieldT, traits.ValueT]
+):
     # For some reason its not showing the inherited class docs.
 
     """A Basic generic Implementation of redis hash.
@@ -42,8 +45,8 @@ class Hash(traits.HashRunner, typing.Generic[traits.HashT, traits.FieldT, traits
 
     def __init__(
         self,
-        host: str,
-        port: int,
+        host: str = "localhost",
+        port: int = 6379,
         password: str | None = None,
         /,
         *,
@@ -65,6 +68,11 @@ class Hash(traits.HashRunner, typing.Generic[traits.HashT, traits.FieldT, traits
             **kwargs,
         )
 
+    async def __call__(
+        self, *_: typing.Any, **__: typing.Any
+    ) -> Hash[HashT, FieldT, ValueT]:
+        return self
+
     async def __execute_command(
         self,
         command: str,
@@ -75,7 +83,6 @@ class Hash(traits.HashRunner, typing.Generic[traits.HashT, traits.FieldT, traits
         value: ValueT | str = "",
     ) -> typing.Any:
         fmt = "{} {} {} {}".format(command, hash, field, value)
-        print(fmt)
         return await self._injector.execute_command(fmt)
 
     async def set(self, hash: HashT, field: FieldT, value: ValueT) -> None:
@@ -96,11 +103,12 @@ class Hash(traits.HashRunner, typing.Generic[traits.HashT, traits.FieldT, traits
     async def len(self, hash: HashT) -> int:
         return await self.__execute_command("HLEN", hash)
 
-    async def all(self, hash: HashT) -> HashView | None:
+    async def all(self, hash: HashT) -> typing.MutableSequence[HashView[ValueT]] | None:
         coro: dict[typing.Any, typing.Any] = await self.__execute_command("HVALS", hash)
-        for k, v in enumerate(coro):
-            return HashView(key=k, value=v)
-        return None
+        pending = []
+        for v in coro:
+            pending.append(HashView(key=hash, value=v))
+        return pending or None
 
     async def delete(self, hash: HashT, field: FieldT) -> None:
         return await self.__execute_command("HDEL", hash, field=field)
@@ -123,6 +131,9 @@ class Memory(typing.MutableMapping[MKeyT, MValueT]):
 
     def __init__(self) -> None:
         self._map: dict[MKeyT, MValueT] = {}
+
+    def __call__(self, *_: typing.Any, **__: typing.Any) -> Memory[MKeyT, MValueT]:
+        return self
 
     @property
     def map(self) -> dict[MKeyT, MValueT]:

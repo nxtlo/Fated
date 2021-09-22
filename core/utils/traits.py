@@ -26,12 +26,12 @@ from __future__ import annotations
 
 __all__: tuple[str, ...] = ("PoolRunner", "NetRunner", "HashRunner")
 
-import aiohttp
-from hikari.internal import data_binding
 import typing
 
+import aiohttp
 import asyncpg
 import yarl
+from hikari.internal import data_binding
 from hikari.internal.fast_protocol import FastProtocolChecking
 
 from .interfaces import HashView
@@ -48,6 +48,7 @@ FieldT = typing.TypeVar("FieldT")
 
 ValueT = typing.TypeVar("ValueT")
 """A type hint for the hash value."""
+
 
 @typing.runtime_checkable
 class HashRunner(
@@ -82,7 +83,7 @@ class HashRunner(
     async def len(self, hash: HashT) -> int:
         """Returns the length of the hash."""
 
-    async def all(self, hash: HashT) -> HashView | None:
+    async def all(self, hash: HashT) -> typing.MutableSequence[HashView[ValueT]] | None:
         """Returns all values from a hash."""
 
     async def delete(self, hash: HashT, field: FieldT) -> None:

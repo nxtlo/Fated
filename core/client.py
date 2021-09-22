@@ -36,10 +36,9 @@ from hikari.internal import aio
 from setuptools import setup
 
 from core.psql import pool as pool_
-from core.utils import config as config_
 from core.utils import cache  # noqa: F401
-from core.utils import net
-from core.utils import traits
+from core.utils import config as config_
+from core.utils import net, traits
 
 if typing.TYPE_CHECKING:
     from hikari import traits as hikari_traits
@@ -99,11 +98,20 @@ def build_client(bot: hikari_traits.GatewayBotAware) -> tanjun.Client:
             mention_prefix=True,
             set_global_commands=hikari.Snowflake(815920916043137076),
         )
-        # Dependencies.
+        # pg pool
         .set_type_dependency(pool_.PoolT, tanjun.cache_callback(pool_.PgxPool()))
+        # client session.
         .set_type_dependency(net.HTTPNet, typing.cast(traits.NetRunner, net.HTTPNet))
+        # Cache. This is kinda overkill but we need the memory cache for api requests
+        # And the redis hash for stuff that are not worth running sql queries for.
+        .set_type_dependency(
+            traits.HashRunner, cache.Hash[object, object, object](max_connections=20)
+        )
+        .set_type_dependency(cache.Memory, cache.Memory[object, object]())
         # Global injected call backs.
         .set_callback_override(net.HTTPNet, traits.NetRunner)
+        .set_callback_override(cache.Hash, traits.HashRunner)
+        .set_callback_override(cache.Memory, cache.Memory)
         # Components.
         .load_modules("core.components.meta")
         .load_modules("core.components.mod")

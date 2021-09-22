@@ -34,11 +34,13 @@ import attr
 import hikari
 import tanjun
 
+_T = typing.TypeVar("_T")
+
 
 @attr.define(weakref_slot=False, hash=False, repr=True)
-class HashView:
-    key: typing.Any = attr.field()
-    value: typing.Any = attr.field()
+class HashView(typing.Generic[_T]):
+    key: _T = attr.field()
+    value: _T = attr.field()
 
 
 class APIWrapper(abc.ABC):
