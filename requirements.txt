@@ -2,5 +2,5 @@ git+https://github.com/hikari-py/hikari@master
 git+https://github.com/FasterSpeeding/Tanjun@master
 git+https://github.com/FasterSpeeding/Yuyo@master
 asyncpg==0.24.0
-aiobungie==0.2.5b7
+aiobungie==0.2.5b8
 aioredis==2.0.0
