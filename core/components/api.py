@@ -40,14 +40,6 @@ from core.utils import traits
 component = tanjun.Component(name="api")
 
 @component.with_slash_command
-# @tanjun.with_greedy_argument("name", converters=(str,), default=None)
-# @tanjun.with_option("random", "--random", converters=(bool,), default=True)
-# @tanjun.with_option(
-#    "genre",
-#    "--genre",
-#    default=consts.randomize(),
-# )
-# @tanjun.with_parser
 @tanjun.with_str_slash_option("name", "The anime's name.", default=None)
 @tanjun.with_bool_slash_option("random", "Get a random anime.", default=True)
 @tanjun.with_str_slash_option(
@@ -137,7 +129,12 @@ async def run_net(
 )
 @tanjun.with_str_slash_option("name", "The name of repo or user.")
 @tanjun.as_slash_command("git", "Commands related to github.", sort_options=True)
-async def git_user(ctx: tanjun.abc.SlashContext, option: str, name: str, net: traits.NetRunner = net_.HTTPNet()) -> None:
+async def git_user(
+    ctx: tanjun.abc.SlashContext, 
+    option: str, 
+    name: str, 
+    net: traits.NetRunner = net_.HTTPNet()
+) -> None:
     git = net_.Wrapper(net) 
     # fmt: off
     try:

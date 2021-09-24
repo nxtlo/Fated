@@ -25,6 +25,9 @@ from __future__ import annotations
 
 import os
 import asyncio
+import subprocess as sp
+import logging
+import threading
 
 from core.client import main
 
@@ -36,5 +39,18 @@ if os.name != "nt":
     else:
         asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 
+def _run_redis() -> sp.Popen[bytes]:
+    with sp.Popen(["redis-server"], shell=False, stderr=sp.PIPE, stdout=sp.PIPE) as proc:
+        ok, err = proc.communicate()
+        if ok:
+            logging.info("Redis server started: %s", ok)
+        elif err:
+            raise RuntimeError("Couldn't start redis server", err)
+    return proc
+
+
 if __name__ == "__main__":
+    t = threading.Thread(target=_run_redis)
+    t.start()
     main()
+    t.join()

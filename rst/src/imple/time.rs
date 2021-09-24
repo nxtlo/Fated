@@ -1,6 +1,6 @@
-use std::time;
-use humantime;
 use chrono;
+use humantime;
+use std::time;
 
 pub fn duration_to_humatime(dur: time::Duration) -> String {
     humantime::format_duration(dur).to_string().clone()

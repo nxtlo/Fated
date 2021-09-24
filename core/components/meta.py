@@ -28,19 +28,17 @@ from __future__ import annotations
 __all__: list[str] = ["component"]
 
 import datetime
-import sys
+import humanize as hz
 import time as py_time
 from time import perf_counter
 
-import asyncpg
 import hikari
 import tanjun
-from aiobungie.internal import time
 from tanjun import abc
 
 from core.binds import rst
 from core.psql.pool import PoolT
-from core.utils import format
+from core.utils import cache, traits
 
 component = tanjun.Component(name="meta")
 
@@ -73,7 +71,7 @@ async def ping(ctx: abc.MessageContext) -> None:
 async def set_prefix(
     ctx: tanjun.abc.SlashContext,
     prefix: str | None,
-    pool: PoolT = tanjun.injected(type=PoolT),
+    hash: traits.HashRunner[str, hikari.Snowflake, str] = cache.Hash(),
 ) -> None:
 
     if prefix is None:
@@ -86,19 +84,12 @@ async def set_prefix(
 
     await ctx.defer()
     try:
-        await pool.execute(
-            "INSERT INTO guilds(id, prefix) VALUES($1, $2)", ctx.guild_id, prefix
-        )
-    except asyncpg.exceptions.UniqueViolationError:
-        await pool.execute(
-            "UPDATE guilds SET prefix = $1 WHERE id = $2", prefix, ctx.guild_id
-        )
-        await ctx.respond(f"Prefix updated to {prefix}")
+        guild_id = ctx.guild_id or (await ctx.fetch_guild()).id
+        await hash.set("prefixes", guild_id, prefix)
+
+    except Exception as err:
+        await ctx.respond(f"Couldn't change bot prefix: {err}")
         return
-    except asyncpg.exceptions.PostgresError:
-        await ctx.respond(
-            f"Failed to set the prefix {format.with_block(sys.exc_info()[1])}"
-        )
 
     await ctx.edit_initial_response(f"Prefix set to {prefix}")
 
@@ -123,15 +114,12 @@ async def color_fn(ctx: tanjun.abc.MessageContext, color: int) -> None:
     embed.title = f"0x{color}"
     await ctx.respond(embed=embed)
 
-
 @component.with_message_command
 @tanjun.as_message_command("uptime")
-async def uptime(ctx: tanjun.abc.SlashContext) -> None:
-    """Check the uptime for the bot."""
+async def uptime(ctx: tanjun.abc.MessageContext) -> None:
     await ctx.respond(
-        f"Benn up for: *{time.human_timedelta(ctx.client.metadata['uptime'], suffix=False)}*"
+        f"Been up for {hz.naturaldelta(ctx.client.metadata['uptime'] - datetime.datetime.now())}"
     )
-
 
 # idk if this even works.
 @component.with_slash_command

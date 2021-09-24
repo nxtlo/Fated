@@ -21,8 +21,6 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-"""Commands here are for the owner and mods not for actual moderation."""
-
 from __future__ import annotations
 
 __all__: list[str] = ["component"]

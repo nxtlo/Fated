@@ -23,11 +23,11 @@
 
 from __future__ import annotations
 
-import datetime
 import logging
 import os
 import traceback
 import typing
+import datetime
 
 import click
 import hikari
@@ -40,8 +40,7 @@ from core.utils import cache  # noqa: F401
 from core.utils import config as config_
 from core.utils import net, traits
 
-if typing.TYPE_CHECKING:
-    from hikari import traits as hikari_traits
+from hikari import traits as hikari_traits
 
 
 class Fated(hikari.GatewayBot):
@@ -66,15 +65,13 @@ class Fated(hikari.GatewayBot):
 
 async def get_prefix(
     ctx: tanjun.abc.MessageContext = tanjun.injected(type=tanjun.abc.MessageContext),
-    pool: pool_.PoolT = tanjun.injected(type=pool_.PoolT),
+    hash: traits.HashRunner[str, hikari.Snowflake, str] = cache.Hash(),
 ) -> str | typing.Sequence[str]:
 
     guild: hikari.Snowflake = ctx.guild_id or (await ctx.fetch_guild()).id
-    sql: typing.Final[str] = "SELECT prefix FROM guilds WHERE id = $1"
-
-    if (prefix := await pool.fetchval(sql, guild)) is not None:
-        return str(prefix)
-    return ("?",)
+    if (prefix := await hash.get("prefixes", guild)) is not None:
+        return prefix
+    return ()
 
 
 def build_bot() -> hikari_traits.GatewayBotAware:
@@ -108,6 +105,9 @@ def build_client(bot: hikari_traits.GatewayBotAware) -> tanjun.Client:
             traits.HashRunner, cache.Hash[object, object, object](max_connections=20)
         )
         .set_type_dependency(cache.Memory, cache.Memory[object, object]())
+        # The bot.
+        .set_type_dependency(hikari_traits.GatewayBotAware, lambda: bot)
+        # Lavasnek for audio.
         # Global injected call backs.
         .set_callback_override(net.HTTPNet, traits.NetRunner)
         .set_callback_override(cache.Hash, traits.HashRunner)
@@ -121,9 +121,7 @@ def build_client(bot: hikari_traits.GatewayBotAware) -> tanjun.Client:
         .add_prefix("?")
     )
 
-    # Client metadata
-    client.metadata["uptime"] = datetime.datetime.utcnow()
-
+    client.metadata['uptime'] = datetime.datetime.now()
     return client
 
 

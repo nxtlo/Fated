@@ -11,5 +11,5 @@ __pycache__/
 # Rust
 Cargo.lock
 target/
-rst.so
-rst.pyd
+*.so
+*.pyd
