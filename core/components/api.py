@@ -98,11 +98,13 @@ async def define(
 @component.with_message_command
 @tanjun.with_owner_check(halt_execution=True)
 @tanjun.with_greedy_argument("url", converters=str)
+@tanjun.with_option("getter", "--get", "-g", default=None)
 @tanjun.with_parser
 @tanjun.as_message_command("net")
 async def run_net(
     ctx: tabc.MessageContext,
     url: str,
+    getter: str | None,
     net: traits.NetRunner = net_.HTTPNet(),
 ) -> None:
     """Make a GET http request to an api or else.
@@ -116,11 +118,13 @@ async def run_net(
             The api url to call.
         net : HTTPNet
             The http client we're making the request with.
+        --get | -g:
+            An optional key to get.
     """
     async with net as cli:
         try:
-            result = await cli.request("GET", url)
-            formatted = format.with_block(json.dumps(result), lang="json")
+            result = await cli.request("GET", url, getter=getter)
+            formatted = format.with_block(json.dumps(result, sort_keys=True), lang="json")
 
         except Exception as exc:
             await ctx.respond(f"```hs\n{exc}\n```")

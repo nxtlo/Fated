@@ -62,10 +62,12 @@ async def run_sql(
     """
 
     query = format.parse_code(code=query)
+    print(query)
     result: None | list[asyncpg.Record] = None
 
     try:
         result = await pool.fetch(query)
+        print(result)
 
         # SQL Code error
     except asyncpg.exceptions.PostgresSyntaxError:

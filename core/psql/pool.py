@@ -44,12 +44,12 @@ class PgxPool(traits.PoolRunner):
     """An asyncpg pool."""
 
     __slots__: tuple[str, ...] = ("_pool", "_lock")
+    _pool: asyncpg.Pool | None
 
     def __init__(self) -> None:
-        self._pool: asyncpg.Pool | None = None
         self._lock: asyncio.Lock = asyncio.Lock()
 
-    async def __call__(self) -> asyncpg.Pool | None:
+    async def __call__(self) -> PgxPool:
         asyncio.get_running_loop()
         return await self.create_pool()
 
@@ -59,10 +59,10 @@ class PgxPool(traits.PoolRunner):
         return self._pool
 
     @classmethod
-    async def create_pool(cls, *, build: bool = False) -> asyncpg.pool.Pool | None:
+    async def create_pool(cls, *, build: bool = False) -> PgxPool:
         config_ = config.Config()
         """Returns an asyncpg new pool and creates the tables."""
-        cls._pool = await asyncpg.create_pool(
+        cls._pool = pool = await asyncpg.create_pool(
             database=config_.DB_NAME,
             user=config_.DB_USER,
             password=config_.DB_PASSWORD,
@@ -71,7 +71,7 @@ class PgxPool(traits.PoolRunner):
         )
         if build is True:
             tables = cls.tables()
-            async with cls._pool.acquire() as conn:
+            async with pool.acquire() as conn:
                 try:
                     _LOG.info(tables)
                     await conn.execute(tables)
@@ -80,8 +80,8 @@ class PgxPool(traits.PoolRunner):
                 except asyncpg.exceptions.PostgresError as exc:
                     raise RuntimeError("Failed to build the database tables.") from exc
                 finally:
-                    await cls._pool.release(conn)
-        return cls._pool
+                    await pool.release(conn)
+        return cls()
 
     # Methods under are just typed asyncpg.Pool methods.
     # Also since the pool already acquires the connection for us
@@ -99,7 +99,7 @@ class PgxPool(traits.PoolRunner):
         *args: typing.Any,
         timeout: float | None = None,
     ) -> list[asyncpg.Record]:
-        return await self.pool.fetch(sql, *args, timeout)
+        return await self.pool.fetch(sql, *args, timeout=timeout)
 
     async def fetchrow(
         self,
@@ -108,7 +108,7 @@ class PgxPool(traits.PoolRunner):
         *args: typing.Any,
         timeout: float | None = None,
     ) -> list[asyncpg.Record]:
-        return await self.pool.fetchrow(sql, *args, timeout)
+        return await self.pool.fetchrow(sql, *args, timeout=timeout)
 
     async def fetchval(
         self,
@@ -118,7 +118,7 @@ class PgxPool(traits.PoolRunner):
         column: int | None = None,
         timeout: float | None = None,
     ) -> typing.Any:
-        return await self.pool.fetchval(sql, *args, column, timeout)
+        return await self.pool.fetchval(sql, *args, column, timeout=timeout)
 
     async def close(self) -> None:
         try:

@@ -110,7 +110,7 @@ class PoolRunner(FastProtocolChecking, typing.Protocol):
         """Access to `self._pool`."""
 
     @classmethod
-    async def create_pool(cls, *, build: bool = False) -> asyncpg.pool.Pool | None:
+    async def create_pool(cls, *, build: bool = False) -> PoolRunner:
         """Created a new pool.
 
         Parameters
@@ -121,8 +121,8 @@ class PoolRunner(FastProtocolChecking, typing.Protocol):
 
         Returns
         --------
-        `asyncpg.pool.Pool` | `None`
-            An asyncpg connection pool or None.
+        `PoolRunner`
+            The class itself.
         """
 
     async def execute(
