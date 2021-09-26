@@ -44,7 +44,7 @@ API: dict[str, typing.Any] = {
     "urban": "https://api.urbandictionary.com/v0/define",
     "git": {
         "user": "https://api.github.com/users",
-        "repr": "https://api.github.com/users/nxtlo",
+        "repo": "https://api.github.com/search/repositories?q={}&page=0&per_page=11&sort=stars&order=desc",
     },
 }
 """A dict that holds api endpoints."""

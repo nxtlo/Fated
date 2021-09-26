@@ -145,13 +145,13 @@ class APIWrapper(abc.ABC):
         """
 
     @abc.abstractmethod
-    async def get_git_repo(self, url: str) -> GithubRepo:
+    async def get_git_repo(self, name: str) -> typing.Sequence[GithubRepo] | None:
         """Fetch a Github repo.
 
         Parameters
         -----------
-        url : `str`
-            The API repo url.
+        name : `str`
+            The repo name.
 
         Returns
         --------
@@ -167,14 +167,14 @@ class APIWrapper(abc.ABC):
 class GithubRepo:
     """Represents a repo on github."""
 
-    owner: hikari.UndefinedOr[GithubUser] = attr.field(repr=True)
+    owner: GithubUser | None = attr.field(repr=True)
     """The repo's owner."""
 
     id: int = attr.field()
 
     name: str = attr.field()
 
-    description: str = attr.field()
+    description: str | None = attr.field()
 
     is_forked: bool = attr.field()
 
@@ -187,15 +187,19 @@ class GithubRepo:
     open_issues: int = attr.field()
 
     # We only need the License name
-    license: str = attr.field()
-
-    issues: int = attr.field()
+    license: str | None = attr.field()
 
     size: int = attr.field()
 
     created_at: datetime.datetime = attr.field()
 
-    language: str = attr.field()
+    last_push: str = attr.field()
+
+    page: str | None = attr.field()
+
+    stars: int = attr.field()
+
+    language: str | hikari.UndefinedType = attr.field()
 
 
 @attr.define(hash=False, weakref_slot=False, kw_only=True, repr=False)
@@ -218,17 +222,17 @@ class GithubUser:
 
     email: typing.Optional[str] = attr.field()
 
-    location: typing.Optional[str] = attr.field()
+    location: typing.Optional[str] | None = attr.field()
 
-    public_repors: int = attr.field()
+    public_repors: int | hikari.UndefinedType = attr.field()
 
-    bio: hikari.UndefinedOr[str] = attr.field()
+    bio: hikari.UndefinedOr[str] | None = attr.field()
 
-    followers: int = attr.field()
+    followers: int | hikari.UndefinedType = attr.field()
 
-    following: int = attr.field()
+    following: int | hikari.UndefinedType = attr.field()
 
-    created_at: datetime.datetime = attr.field()
+    created_at: datetime.datetime | None = attr.field()
 
     repos_url: str = attr.field()
 

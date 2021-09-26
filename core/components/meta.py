@@ -28,15 +28,13 @@ from __future__ import annotations
 __all__: list[str] = ["component"]
 
 import datetime
-import humanize as hz
-import time as py_time
-from time import perf_counter
+import time
 
 import hikari
+import humanize as hz
 import tanjun
 from tanjun import abc
 
-from core.binds import rst
 from core.psql.pool import PoolT
 from core.utils import cache, traits
 
@@ -47,9 +45,9 @@ component = tanjun.Component(name="meta")
 @tanjun.as_message_command("ping")
 async def ping(ctx: abc.MessageContext) -> None:
     """Pong."""
-    start_time = perf_counter()
+    start_time = time.perf_counter()
     await ctx.rest.fetch_my_user()
-    time_taken = (perf_counter() - start_time) * 1_000
+    time_taken = (time.perf_counter() - start_time) * 1_000
     heartbeat_latency = (
         ctx.shards.heartbeat_latency * 1_000 if ctx.shards else float("NAN")
     )
@@ -114,12 +112,14 @@ async def color_fn(ctx: tanjun.abc.MessageContext, color: int) -> None:
     embed.title = f"0x{color}"
     await ctx.respond(embed=embed)
 
+
 @component.with_message_command
 @tanjun.as_message_command("uptime")
 async def uptime(ctx: tanjun.abc.MessageContext) -> None:
     await ctx.respond(
         f"Been up for {hz.naturaldelta(ctx.client.metadata['uptime'] - datetime.datetime.now())}"
     )
+
 
 # idk if this even works.
 @component.with_slash_command
@@ -183,29 +183,6 @@ async def avatar_view(ctx: abc.SlashContext, /, member: hikari.Member) -> None:
 @tanjun.as_message_command("say")
 async def say_command(ctx: abc.MessageContext, query: str) -> None:
     await ctx.respond(query)
-
-
-@component.with_message_command
-@tanjun.with_argument("b", converters=(int,))
-@tanjun.with_argument("n", converters=(int,))
-@tanjun.with_parser
-@tanjun.as_message_command("sum")
-async def rust_sum(ctx: abc.MessageContext, n: int, b: int) -> None:
-    await ctx.respond(rst.sum(n, b))
-
-
-@component.with_message_command
-@tanjun.as_message_command("duration")
-async def rust_duration(ctx: abc.MessageContext) -> None:
-    now = datetime.datetime.utcnow().microsecond
-    await ctx.respond(rst.from_duration(now, 0))
-
-
-@component.with_message_command
-@tanjun.as_message_command("iso")
-async def rust_iso(ctx: abc.MessageContext) -> None:
-    now = int(py_time.time())  # now timestamp
-    await ctx.respond(rst.to_iso(now))
 
 
 @tanjun.as_loader

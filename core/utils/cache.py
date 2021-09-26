@@ -25,7 +25,7 @@ ValueT = typing.TypeVar("ValueT")
 
 
 class Hash(
-    traits.HashRunner, typing.Generic[traits.HashT, traits.FieldT, traits.ValueT]
+    traits.HashRunner, typing.Generic[HashT, FieldT, ValueT]
 ):
     # For some reason its not showing the inherited class docs.
 
@@ -146,7 +146,7 @@ class Memory(typing.MutableMapping[MKeyT, MValueT]):
         return self.map.copy()
 
     def __repr__(self) -> str:
-        return f"<Cache items {len(self)}"
+        return f"<Cache items {len(self)} | Keys: {self.keys()} - Values {self.values()}"
 
     def __getitem__(self, k: MKeyT) -> MValueT:
         return self.map[k]

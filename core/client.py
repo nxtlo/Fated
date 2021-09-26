@@ -23,31 +23,29 @@
 
 from __future__ import annotations
 
+import datetime
 import logging
 import os
 import traceback
 import typing
-import datetime
 
 import click
 import hikari
 import tanjun
+from hikari import traits as hikari_traits
 from hikari.internal import aio
-from setuptools import setup
 
 from core.psql import pool as pool_
 from core.utils import cache  # noqa: F401
 from core.utils import config as config_
 from core.utils import net, traits
 
-from hikari import traits as hikari_traits
-
 
 class Fated(hikari.GatewayBot):
     """The bot."""
 
     def __init__(self, token: str, **kws: typing.Any) -> None:
-        super().__init__(token, **kws)
+        super().__init__(token=token, **kws)
 
     def sub(self) -> None:
         self.event_manager.subscribe(
@@ -81,7 +79,7 @@ def build_bot() -> hikari_traits.GatewayBotAware:
     config = config_.Config()
 
     intents = hikari.Intents.ALL_UNPRIVILEGED | hikari.Intents.GUILD_MEMBERS
-    bot = Fated(config.BOT_TOKEN, intents=intents)
+    bot = Fated(token=config.BOT_TOKEN, intents=intents)
     bot.sub()
     build_client(bot)
     return bot
@@ -107,7 +105,6 @@ def build_client(bot: hikari_traits.GatewayBotAware) -> tanjun.Client:
         .set_type_dependency(cache.Memory, cache.Memory[object, object]())
         # The bot.
         .set_type_dependency(hikari_traits.GatewayBotAware, lambda: bot)
-        # Lavasnek for audio.
         # Global injected call backs.
         .set_callback_override(net.HTTPNet, traits.NetRunner)
         .set_callback_override(cache.Hash, traits.HashRunner)
@@ -121,7 +118,7 @@ def build_client(bot: hikari_traits.GatewayBotAware) -> tanjun.Client:
         .add_prefix("?")
     )
 
-    client.metadata['uptime'] = datetime.datetime.now()
+    client.metadata["uptime"] = datetime.datetime.now()
     return client
 
 
@@ -130,37 +127,6 @@ def build_client(bot: hikari_traits.GatewayBotAware) -> tanjun.Client:
 def main(ctx: click.Context) -> None:
     if ctx.invoked_subcommand is None:
         build_bot().run()
-
-
-# This is only for exp.
-@main.command(name="build", short_help="Build the rust extension.")
-def build_ext() -> None:
-    try:
-        import setuptools_rust as setrust
-
-        hasit = True
-    except ImportError:
-        hasit = False
-        logging.warn("Setuptools rust not installed.")
-        os.system("pip install setuptools_rust")
-
-    if hasit is True:
-        setup(
-            name="rst",
-            rust_extensions=[
-                setrust.RustExtension(
-                    "core.binds", binding=setrust.Binding.PyO3, path="rst/Cargo.toml"
-                )
-            ],
-            packages=["rst"],
-            zip_safe=False,
-        )
-        if os.path.exists("build"):
-            os.system(
-                f"mv build/lib/core/*.* core/binds/{'rst.so' if os.name != 'nt' else 'rst.pyd'} && rm -rf build"
-            )
-    else:
-        raise RuntimeError("Coundl't build the rust extension.")
 
 
 @main.group(short_help="Handles the db configs.", options_metavar="[options]")

@@ -25,6 +25,8 @@
 
 from __future__ import annotations
 
+import datetime
+
 __all__: tuple[str, ...] = (
     "HTTPNet",
     "Wrapper",
@@ -42,6 +44,7 @@ from http import HTTPStatus as http
 import aiohttp
 import attr
 import hikari
+import humanize
 import multidict
 import tanjun
 from aiobungie.internal import time
@@ -265,12 +268,16 @@ class Wrapper(interfaces.APIWrapper):
                     start_date: hikari.UndefinedOr[str] = hikari.UNDEFINED
                     end_date: hikari.UndefinedOr[str] = hikari.UNDEFINED
                     if (raw_start_date := anime.get(start)) is not None:
-                        start_date = time.human_timedelta(
-                            time.clean_date(raw_start_date)
+                        start_date = humanize.precisedelta(
+                            time.clean_date(raw_start_date),
+                            minimum_unit='minutes'
                         )
 
                     if (raw_end_date := anime.get("end_date")) is not None:
-                        end_date = time.human_timedelta(time.clean_date(raw_end_date))
+                        end_date = humanize.precisedelta(
+                            time.clean_date(raw_end_date),
+                            minimum_unit='minutes'
+                        )
 
                     meta_data = (
                         ("Episodes", anime.get("episodes", hikari.UNDEFINED)),
@@ -313,12 +320,10 @@ class Wrapper(interfaces.APIWrapper):
                     end_date: hikari.UndefinedOr[str] = hikari.UNDEFINED
 
                     if (raw_start_date := manga.get("start_date")) is not None:
-                        start_date = time.human_timedelta(
-                            time.clean_date(raw_start_date)
-                        )
+                        start_date = humanize.naturalday(raw_start_date)
 
                     if (raw_end_date := manga.get("end_date")) is not None:
-                        end_date = time.human_timedelta(time.clean_date(raw_end_date))
+                        end_date = humanize.naturalday(raw_end_date)
 
                     meta_data = (
                         ("Chapters", manga.get("chapters", hikari.UNDEFINED)),
@@ -387,31 +392,77 @@ class Wrapper(interfaces.APIWrapper):
             embed.set_author(name=author, url=url)
         return embed
 
+    def _set_repo_owner_attrs(self, payload: dict[str, typing.Any]) -> interfaces.GithubUser:
+        user: dict[str, typing.Any] = payload
+        created_at: datetime.datetime | None = None
+        if(raw_created := user.get('created_at')):
+            created_at = fast_datetime(raw_created)  # type: ignore
+        user_obj = interfaces.GithubUser(
+            api=self,
+            name=user.get("login", hikari.UNDEFINED),
+            id=user["id"],
+            url=user['html_url'],
+            repos_url=user['repos_url'],
+            public_repors=user.get("public_repos", hikari.UNDEFINED),
+            avatar_url=user.get("avatar_url", None),
+            email=user.get("email", None),
+            type=user['type'],
+            bio=user.get("bio", hikari.UNDEFINED),
+            created_at=created_at,
+            location=user.get("location", None),
+            followers=user.get("followers", hikari.UNDEFINED),
+            following=user.get("following", hikari.UNDEFINED)
+        )
+        return user_obj
+
+    def _set_repo_attrs(
+        self,
+        payload: dict[str, list[dict[str, typing.Any]]]
+    ) -> typing.Sequence[interfaces.GithubRepo]:
+        repos: typing.Sequence[interfaces.GithubRepo] = []
+
+        for repo in payload['items']:
+            if(repo_license := repo.get("license")) is not None:
+                license_name = repo_license['name']
+            repo_obj = interfaces.GithubRepo(
+                id=repo['id'],
+                name=repo['full_name'],
+                description=repo.get("description", None),
+                url=repo['html_url'],
+                is_forked=repo['fork'],
+                created_at=time.clean_date(repo['created_at']).astimezone(),
+                last_push=humanize.precisedelta(
+                    time.clean_date(
+                        repo['pushed_at']),
+                    minimum_unit='minutes'
+                ),
+                page=repo.get("homepage", None),
+                size=repo['size'],
+                license=license_name,
+                is_archived=repo['archived'],
+                forks=repo['forks_count'],
+                open_issues=repo['open_issues_count'],
+                stars=repo['stargazers_count'],
+                language=repo.get("language", hikari.UNDEFINED),
+                owner=self._set_repo_owner_attrs(repo.get("owner", None))
+            )
+            repos.append(repo_obj)
+        return repos
+
     async def get_git_user(self, name: str, /) -> interfaces.GithubUser | None:
         async with self._net as cli:
             if(raw_user := await cli.request("GET", URL(consts.API['git']['user']) / name)) is not None:
-                user: dict[str, typing.Any] = raw_user  # type: ignore
-                user_obj = interfaces.GithubUser(
-                    api=self,
-                    name=user.get("login", hikari.UNDEFINED),
-                    id=user["id"],
-                    url=user['html_url'],
-                    repos_url=user['repos_url'],
-                    public_repors=user.get("public_repos", 0),
-                    avatar_url=user.get("avatar_url", None),
-                    email=user.get("email", None),
-                    type=user['type'],
-                    bio=user.get("bio", hikari.UNDEFINED),
-                    created_at=fast_datetime(user['created_at']),  # type: ignore
-                    location=user.get("location", None),
-                    followers=user.get("followers", hikari.UNDEFINED),
-                    following=user.get("following", hikari.UNDEFINED)
-                )
-                return user_obj
+                return self._set_repo_owner_attrs(raw_user)  # type: ignore
             return None
 
-    async def get_git_repo(self, url: str) -> interfaces.GithubRepo:
-        ...
+    async def get_git_repo(self, name: str) -> typing.Sequence[interfaces.GithubRepo] | None:
+        async with self._net as cli:
+            if(raw_repo := await cli.request(
+                "GET",
+                consts.API['git']['repo'].format(name)
+            )) is not None:
+                return self._set_repo_attrs(raw_repo)  # type: ignore
+            return None
 
 @attr.define(weakref_slot=False, repr=False, auto_exc=True)
 class Error(RuntimeError):
