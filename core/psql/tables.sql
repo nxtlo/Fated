@@ -30,7 +30,9 @@ CREATE TABLE IF NOT EXISTS destiny (
     memtype SMALLINT
 );
 
-CREATE TABLE IF NOT EXISTS guilds (
+/* We don't need this since we're using redis for the prefixes. */
+
+/*CREATE TABLE IF NOT EXISTS guilds (
     id BIGINT PRIMARY KEY,
     prefix VARCHAR(5)
-);
+); */

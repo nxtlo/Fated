@@ -30,12 +30,17 @@ import logging
 import threading
 
 from core.client import main
+_log = logging.getLogger("run")
 
 if os.name != "nt":
     try:
         import uvloop
     except ImportError:
-        pass
+        i = input("uvloop is not installed, Do you want to install it?: ")
+        if i in {"yes", "YES", "y", "Y"}:
+            os.system(f"python -m pip install uvloop {'-U' if os.name != 'nt' else '--user'}")
+        else:
+            pass
     else:
         asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 
@@ -43,7 +48,7 @@ def _run_redis() -> sp.Popen[bytes]:
     with sp.Popen(["redis-server"], shell=False, stderr=sp.PIPE, stdout=sp.PIPE) as proc:
         ok, err = proc.communicate()
         if ok:
-            logging.info("Redis server started: %s", ok)
+            _log.info("Redis server started: %s", ok)
         elif err:
             raise RuntimeError("Couldn't start redis server", err)
     return proc

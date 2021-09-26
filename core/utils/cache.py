@@ -41,13 +41,14 @@ class Hash(
             cache.set("members", member.id, member)
         get_member = await cache.get("members", member.id) -> hikari.Member(...)
     """
-    __slots__: typing.Sequence[str] = ("_injector",)
+    __slots__: typing.Sequence[str] = ("_injector", "_password")
+    from .config import Config as __Config
 
     def __init__(
         self,
-        host: str = "localhost",
-        port: int = 6379,
-        password: str | None = None,
+        host: str = __Config().REDIS_HOST,
+        port: int = __Config().REDIS_PORT,
+        password: str | None =__Config().REDIS_PASSWORD,
         /,
         *,
         db: str | int = 0,

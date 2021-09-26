@@ -67,3 +67,12 @@ class Config:
         )
     )
     """The bot's cache settings."""
+
+    REDIS_HOST: typing.Final[str] = attr.field(default="127.0.0.1")
+    """The redis server host."""
+
+    REDIS_PORT: typing.Final[int] = attr.field(default=6379)
+    """The redis server port."""
+    
+    REDIS_PASSWORD: typing.Final[str | None] = attr.field(default=None)
+    """The redis server password, This can be left None."""

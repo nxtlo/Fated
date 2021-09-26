@@ -35,11 +35,12 @@ import humanize as hz
 import tanjun
 from tanjun import abc
 
-from core.psql.pool import PoolT
 from core.utils import cache, traits
 
 component = tanjun.Component(name="meta")
-
+prefix_group = component.with_slash_command(
+    tanjun.SlashCommandGroup("prefix", "Handle the bot prefix configs.")
+)
 
 @component.with_message_command
 @tanjun.as_message_command("ping")
@@ -55,17 +56,16 @@ async def ping(ctx: abc.MessageContext) -> None:
         f"PONG\n - REST: {time_taken:.0f}ms\n - Gateway: {heartbeat_latency:.0f}ms"
     )
 
-
-@component.with_slash_command
+@prefix_group.with_command
 @tanjun.with_guild_check
 @tanjun.with_author_permission_check(
     hikari.Permissions.MANAGE_GUILD,
     error_message="You need to be a guild manager to execute this command",
 )
 @tanjun.with_str_slash_option(
-    "prefix", "The prefix you want to set.", converters=str, default=None
+    "prefix", "The prefix.", converters=(str,), default=None
 )
-@tanjun.as_slash_command("prefix", "Change the bot prefix to a custom one.")
+@tanjun.as_slash_command("set", "Change the bot prefix to a custom one.")
 async def set_prefix(
     ctx: tanjun.abc.SlashContext,
     prefix: str | None,
@@ -74,11 +74,11 @@ async def set_prefix(
 
     if prefix is None:
         await ctx.respond("You must provide a prefix.")
-        return
+        return None
 
     if len(prefix) > 5:
-        await ctx.respond("Prefix length cannot be more than 5")
-        return
+        await ctx.respond("Prefix length cannot be more than 5 letters.")
+        return None
 
     await ctx.defer()
     try:
@@ -87,10 +87,40 @@ async def set_prefix(
 
     except Exception as err:
         await ctx.respond(f"Couldn't change bot prefix: {err}")
-        return
+        return None
 
     await ctx.edit_initial_response(f"Prefix set to {prefix}")
 
+@prefix_group.with_command
+@tanjun.with_guild_check
+@tanjun.with_author_permission_check(
+    hikari.Permissions.MANAGE_GUILD,
+    error_message="You need to be a guild manager to execute this command",
+)
+@tanjun.as_slash_command("clear", "Clear the bot prefix to a custom one.")
+async def clear_prefix(
+    ctx: tanjun.abc.SlashContext,
+    hash: traits.HashRunner[str, hikari.Snowflake, str] = cache.Hash(),
+) -> None:
+
+    if ctx.cache:
+        guild = ctx.get_guild()
+    else:
+        guild = await (ctx.fetch_guild())
+
+    await ctx.defer()
+    try:
+        if(found_prefix := await hash.get("prefixes", guild.id)) is not None:
+            await hash.delete("prefixes", guild.id)
+        else:
+            assert ctx.has_been_deferred
+            return None
+
+    except Exception as err:
+        await ctx.respond(f"Couldn't clear the prefix: {err}")
+        return
+
+    await ctx.edit_initial_response(f"Cleared `{found_prefix}` prefix. You can still use the main prefix which's `?`")
 
 @component.with_message_command
 @tanjun.as_message_command("invite")
@@ -120,12 +150,12 @@ async def uptime(ctx: tanjun.abc.MessageContext) -> None:
         f"Been up for {hz.naturaldelta(ctx.client.metadata['uptime'] - datetime.datetime.now())}"
     )
 
-
 # idk if this even works.
 @component.with_slash_command
 @tanjun.as_slash_command("about", "Information about the bot itself.")
 async def about_command(
-    ctx: abc.SlashContext, pool: PoolT = tanjun.injected(type=PoolT)
+    ctx: abc.SlashContext, 
+    hash: traits.HashRunner[str, hikari.Snowflake, str] = cache.Hash()
 ) -> None:
     """Info about the bot itself."""
 
@@ -146,8 +176,8 @@ async def about_command(
 
     await ctx.defer()
     if (
-        guild_prefix := await pool.fetchval(
-            "SELECT prefix FROM guilds WHERE id = $1", ctx.guild_id
+        guild_prefix := await hash.get(
+            "prefixes", ctx.guild_id or (await ctx.fetch_guild()).id
         ),
     ) is not None:
         embed.add_field("Guild prefix", guild_prefix)

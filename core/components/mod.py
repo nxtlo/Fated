@@ -34,8 +34,7 @@ import tanjun
 from tanjun import abc
 
 from core.psql import pool as pool_
-from core.utils import cache as cache_
-from core.utils import format, traits
+from core.utils import format
 
 component = tanjun.Component(name="mod")
 
@@ -187,38 +186,6 @@ async def ban(
     if reason:
         to_respond.append(f" For {reason}.")
     await ctx.respond("".join(to_respond))
-
-
-@component.with_message_command
-@tanjun.with_greedy_argument("member", converters=tanjun.to_member)
-@tanjun.with_parser
-@tanjun.as_message_command("redis")
-async def test_cache_redis_hash(
-    ctx: tanjun.abc.MessageContext,
-    member: hikari.Member,
-    cache: traits.HashRunner[str, hikari.Snowflake, hikari.Snowflake] = cache_.Hash(),
-) -> None:
-    # That's diff not how we wanna use redis though, only for testing.
-    await cache.set("members", member.id, member.id)
-    cached_member = await cache.get("members", member.id)
-    hikari_cache = ctx.get_guild().get_member(cached_member)
-    await ctx.respond(f'{hikari_cache.display_name}, {await cache.all("members")}')
-
-
-@component.with_message_command
-@tanjun.with_greedy_argument("member", converters=tanjun.to_member)
-@tanjun.with_parser
-@tanjun.as_message_command("mem")
-async def test_cache_memory(
-    ctx: tanjun.abc.MessageContext,
-    member: hikari.Member,
-    cache: cache_.Memory[hikari.Snowflake, hikari.Member] = cache_.Memory(),
-) -> None:
-    cache[member.id] = member
-    await ctx.respond(cache[member.id])
-    await ctx.respond(await cache[member.id].edit(nick="Edited nick"))
-    await ctx.respond(cache.values())
-
 
 @tanjun.as_loader
 def load_mod(client: tanjun.Client) -> None:
