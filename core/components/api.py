@@ -244,16 +244,17 @@ async def git_repo(
                     e.interaction.user == ctx.author
                 ):
                     try:
-                        if event.interaction.custom_id == "next":  # type: ignore Hikary bug?
-                            nxt = next(future)[1]
-                            await ctx.edit_last_response(embed=_make_embed(nxt))
+                        match event.interaction.custom_id: # type: ignore
+                            case "next":
+                                nxt = next(future)[1]
+                                await ctx.edit_last_response(embed=_make_embed(nxt))
 
-                        elif event.interaction.custom_id == "prev":  # type: ignore
-                            prev = next(future)[0]
-                            await ctx.edit_initial_response(embed=_make_embed(prev))
+                            case "prev":
+                                prev = next(future)[0]
+                                await ctx.edit_initial_response(embed=_make_embed(prev))
 
-                        elif event.interaction.custom_id == "exit":  # type: ignore
-                            await ctx.delete_initial_response()
+                            case _:
+                                await ctx.delete_last_response()
 
                     except StopIteration:
                         await ctx.respond("Reached maximum reuslts.")
