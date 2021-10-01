@@ -73,6 +73,6 @@ class Config:
 
     REDIS_PORT: typing.Final[int] = attr.field(default=6379)
     """The redis server port."""
-    
+
     REDIS_PASSWORD: typing.Final[str | None] = attr.field(default=None)
     """The redis server password, This can be left None."""

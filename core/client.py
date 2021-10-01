@@ -29,6 +29,7 @@ import os
 import traceback
 import typing
 
+import aiobungie
 import click
 import hikari
 import tanjun
@@ -95,16 +96,16 @@ def build_client(bot: hikari_traits.GatewayBotAware) -> tanjun.Client:
         )
         # pg pool
         .set_type_dependency(pool_.PoolT, tanjun.cache_callback(pool_.PgxPool()))
-
         # own aiohttp client session.
         .set_type_dependency(net.HTTPNet, typing.cast(traits.NetRunner, net.HTTPNet))
-
         # Cache. This is kinda overkill but we need the memory cache for api requests
         # And the redis hash for stuff that are not worth running sql queries for.
         .set_type_dependency(
-            traits.HashRunner, cache.Hash[object, object, object](max_connections=20))
+            traits.HashRunner, cache.Hash[object, object, object](max_connections=20)
+        )
         .set_type_dependency(cache.Memory, cache.Memory[object, object])
-
+        # aiobungie client
+        .set_type_dependency(aiobungie.Client, aiobungie.Client(config.BUNGIE_TOKEN))
         # Since there's no ctx.bot, ctx.client.bot. We also need to
         # Inject our bot.
         .set_type_dependency(hikari_traits.GatewayBotAware, lambda: bot)
@@ -112,11 +113,11 @@ def build_client(bot: hikari_traits.GatewayBotAware) -> tanjun.Client:
         .set_callback_override(net.HTTPNet, traits.NetRunner)
         .set_callback_override(cache.Hash, traits.HashRunner)
         .set_callback_override(cache.Memory, cache.Memory)
-
         # Components.
         .load_modules("core.components.meta")
         .load_modules("core.components.mod")
         .load_modules("core.components.api")
+        .load_modules("core.components.destiny")
         # Prefix stuff.
         .set_prefix_getter(get_prefix)
         .add_prefix("?")

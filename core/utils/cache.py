@@ -24,9 +24,7 @@ FieldT = typing.TypeVar("FieldT")
 ValueT = typing.TypeVar("ValueT")
 
 
-class Hash(
-    traits.HashRunner, typing.Generic[HashT, FieldT, ValueT]
-):
+class Hash(traits.HashRunner, typing.Generic[HashT, FieldT, ValueT]):
     # For some reason its not showing the inherited class docs.
 
     """A Basic generic Implementation of redis hash.
@@ -48,7 +46,7 @@ class Hash(
         self,
         host: str = __Config().REDIS_HOST,
         port: int = __Config().REDIS_PORT,
-        password: str | None =__Config().REDIS_PASSWORD,
+        password: str | None = __Config().REDIS_PASSWORD,
         /,
         *,
         db: str | int = 0,
@@ -147,7 +145,9 @@ class Memory(typing.MutableMapping[MKeyT, MValueT]):
         return self.map.copy()
 
     def __repr__(self) -> str:
-        return f"<Cache items {len(self)} | Keys: {self.keys()} - Values {self.values()}"
+        return (
+            f"<Cache items {len(self)} | Keys: {self.keys()} - Values {self.values()}"
+        )
 
     def __getitem__(self, k: MKeyT) -> MValueT:
         return self.map[k]

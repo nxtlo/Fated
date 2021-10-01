@@ -204,7 +204,7 @@ class Wrapper(interfaces.APIWrapper):
 
     __slots__: typing.Sequence[str] = ("_net",)
 
-    def __init__(self, client: traits.NetRunner) -> None:
+    def __init__(self, client: HTTPNet) -> None:
         self._net = client
 
     async def get_anime(
@@ -311,19 +311,18 @@ class Wrapper(interfaces.APIWrapper):
                         await ctx.respond("Anime was not found.")
                         return hikari.UNDEFINED
 
-                    embed.title = manga.get("title", hikari.UNDEFINED)
                     embed.description = manga.get("synopsis", hikari.UNDEFINED)
-                    embed.set_author(url=manga.get("url", str(hikari.UNDEFINED)))
+                    embed.set_author(url=manga.get("url", str(hikari.UNDEFINED)), name=manga.get("title", hikari.UNDEFINED))
 
                     embed.set_image(manga.get("image_url", None))
                     start_date: hikari.UndefinedOr[str] = hikari.UNDEFINED
                     end_date: hikari.UndefinedOr[str] = hikari.UNDEFINED
 
                     if (raw_start_date := manga.get("start_date")) is not None:
-                        start_date = humanize.naturalday(raw_start_date)
+                        start_date = humanize.precisedelta(time.clean_date(raw_start_date), minimum_unit='minutes')
 
                     if (raw_end_date := manga.get("end_date")) is not None:
-                        end_date = humanize.naturalday(raw_end_date)
+                        end_date = humanize.precisedelta(time.clean_date(raw_end_date), minimum_unit='minutes')
 
                     meta_data = (
                         ("Chapters", manga.get("chapters", hikari.UNDEFINED)),

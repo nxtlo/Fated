@@ -27,17 +27,17 @@ from __future__ import annotations
 
 __all__: list[str] = ["component"]
 
-import json
 import itertools
+import json
 import typing
+
 import hikari
 import tanjun
 from tanjun import abc as tabc
 
 from core import client
-from core.utils import consts, format
+from core.utils import consts, format, interfaces
 from core.utils import net as net_
-from core.utils import traits, interfaces
 
 component = tanjun.Component(name="api")
 git_group = component.with_slash_command(
@@ -60,7 +60,7 @@ async def get_anime(
     name: str,
     random: bool | None,
     genre: str,
-    net: traits.NetRunner = net_.HTTPNet(),
+    net: net_.HTTPNet = net_.HTTPNet(),
 ) -> None:
     await ctx.defer()
     jian = net_.Wrapper(net)
@@ -74,7 +74,7 @@ async def get_anime(
 async def get_manga(
     ctx: tabc.SlashContext,
     name: str,
-    net: traits.NetRunner = net_.HTTPNet(),
+    net: net_.HTTPNet = net_.HTTPNet(),
 ) -> None:
     await ctx.defer()
     jian = net_.Wrapper(net)
@@ -88,7 +88,7 @@ async def get_manga(
 async def define(
     ctx: tanjun.abc.SlashContext,
     name: str,
-    net: traits.NetRunner = net_.HTTPNet(),
+    net: net_.HTTPNet = net_.HTTPNet(),
 ) -> None:
     urban = net_.Wrapper(net)
     definition = await urban.get_definition(ctx, name)
@@ -105,7 +105,7 @@ async def run_net(
     ctx: tabc.MessageContext,
     url: str,
     getter: str | None,
-    net: traits.NetRunner = net_.HTTPNet(),
+    net: net_.HTTPNet = net_.HTTPNet(),
 ) -> None:
     """Make a GET http request to an api or else.
 
@@ -137,7 +137,7 @@ async def run_net(
 @tanjun.with_str_slash_option("name", "The name gitub user.")
 @tanjun.as_slash_command("user", "Get information about a github user.")
 async def git_user(
-    ctx: tanjun.abc.SlashContext, name: str, net: traits.NetRunner = net_.HTTPNet()
+    ctx: tanjun.abc.SlashContext, name: str, net: net_.HTTPNet = net_.HTTPNet()
 ) -> None:
 
     git = net_.Wrapper(net)
@@ -201,11 +201,10 @@ def _make_embed(repo: interfaces.GithubRepo) -> hikari.Embed:
 async def git_repo(
     ctx: tanjun.abc.SlashContext,
     name: str,
-    net: traits.NetRunner = net_.HTTPNet(),
+    net: net_.HTTPNet = net_.HTTPNet(),
     bot: hikari.GatewayBot = tanjun.injected(type=client.Fated),
 ) -> None:
     git = net_.Wrapper(net)
-    await ctx.defer()
 
     try:
         repos = await git.get_git_repo(name)
@@ -221,23 +220,22 @@ async def git_repo(
             return zip(a, b)
 
         future = pairs(iter(repos))
-        await ctx.respond(
-            component=(
-                ctx.rest.build_action_row()
-                .add_button(hikari.ButtonStyle.SECONDARY, "prev")
-                .set_label("Previous")
-                .add_to_container()
-                .add_button(hikari.ButtonStyle.DANGER, "exit")
-                .set_label("Exit")
-                .add_to_container()
-                .add_button(hikari.ButtonStyle.PRIMARY, "next")
-                .set_label("Next")
-                .add_to_container()
-            ),
-            embed=_make_embed(next(future)[0])
-        )
-
         try:
+            await ctx.create_initial_response(
+                component=(
+                    ctx.rest.build_action_row()
+                    .add_button(hikari.ButtonStyle.SECONDARY, "prev")
+                    .set_label("Previous")
+                    .add_to_container()
+                    .add_button(hikari.ButtonStyle.DANGER, "exit")
+                    .set_label("Exit")
+                    .add_to_container()
+                    .add_button(hikari.ButtonStyle.PRIMARY, "next")
+                    .set_label("Next")
+                    .add_to_container()
+                ),
+                embed=_make_embed(next(future)[0])
+            )
             async with bot.stream(hikari.InteractionCreateEvent, 30) as stem:
                 async for event in stem.filter(
                     lambda e: type(e.interaction) is hikari.ComponentInteraction and
@@ -247,14 +245,14 @@ async def git_repo(
                         match event.interaction.custom_id: # type: ignore
                             case "next":
                                 nxt = next(future)[1]
-                                await ctx.edit_last_response(embed=_make_embed(nxt))
+                                await ctx.edit_initial_response(embed=_make_embed(nxt))
 
                             case "prev":
                                 prev = next(future)[0]
                                 await ctx.edit_initial_response(embed=_make_embed(prev))
 
                             case _:
-                                await ctx.delete_last_response()
+                                await ctx.delete_initial_response()
 
                     except StopIteration:
                         await ctx.respond("Reached maximum reuslts.")

@@ -189,6 +189,7 @@ async def ban(
         to_respond.append(f" For {reason}.")
     await ctx.respond("".join(to_respond))
 
+
 @tanjun.as_loader
 def load_mod(client: tanjun.Client) -> None:
     client.add_component(component.copy())

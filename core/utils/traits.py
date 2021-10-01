@@ -36,9 +36,6 @@ from hikari.internal.fast_protocol import FastProtocolChecking
 
 from .interfaces import HashView
 
-if typing.TYPE_CHECKING:
-    import types
-
 # Hash types.
 HashT = typing.TypeVar("HashT")
 """A type hint for the hash name."""
@@ -273,17 +270,6 @@ class NetRunner(FastProtocolChecking, typing.Protocol):
         kwargs : `typing.Any`
             Other keyword arguments you can pass to the request.
         """
-
-    async def __aenter__(self) -> NetRunner:
-        """`async with` for context management."""
-
-    async def __aexit__(
-        self,
-        _: BaseException | None,
-        __: BaseException | None,
-        ___: types.TracebackType | None,
-    ) -> None:
-        """Closes the session when making the requests with `async with`."""
 
     @staticmethod
     async def error_handle(response: aiohttp.ClientResponse, /) -> typing.NoReturn:

@@ -42,6 +42,7 @@ prefix_group = component.with_slash_command(
     tanjun.SlashCommandGroup("prefix", "Handle the bot prefix configs.")
 )
 
+
 @component.with_message_command
 @tanjun.as_message_command("ping")
 async def ping(ctx: abc.MessageContext) -> None:
@@ -56,15 +57,14 @@ async def ping(ctx: abc.MessageContext) -> None:
         f"PONG\n - REST: {time_taken:.0f}ms\n - Gateway: {heartbeat_latency:.0f}ms"
     )
 
+
 @prefix_group.with_command
 @tanjun.with_guild_check
 @tanjun.with_author_permission_check(
     hikari.Permissions.MANAGE_GUILD,
     error_message="You need to be a guild manager to execute this command",
 )
-@tanjun.with_str_slash_option(
-    "prefix", "The prefix.", converters=(str,), default=None
-)
+@tanjun.with_str_slash_option("prefix", "The prefix.", converters=(str,), default=None)
 @tanjun.as_slash_command("set", "Change the bot prefix to a custom one.")
 async def set_prefix(
     ctx: tanjun.abc.SlashContext,
@@ -91,6 +91,7 @@ async def set_prefix(
 
     await ctx.edit_initial_response(f"Prefix set to {prefix}")
 
+
 @prefix_group.with_command
 @tanjun.with_guild_check
 @tanjun.with_author_permission_check(
@@ -110,7 +111,7 @@ async def clear_prefix(
 
     await ctx.defer()
     try:
-        if(found_prefix := await hash.get("prefixes", guild.id)) is not None:
+        if (found_prefix := await hash.get("prefixes", guild.id)) is not None:
             await hash.delete("prefixes", guild.id)
         else:
             assert ctx.has_been_deferred
@@ -120,7 +121,10 @@ async def clear_prefix(
         await ctx.respond(f"Couldn't clear the prefix: {err}")
         return
 
-    await ctx.edit_initial_response(f"Cleared `{found_prefix}` prefix. You can still use the main prefix which's `?`")
+    await ctx.edit_initial_response(
+        f"Cleared `{found_prefix}` prefix. You can still use the main prefix which's `?`"
+    )
+
 
 @component.with_message_command
 @tanjun.as_message_command("invite")
@@ -150,12 +154,13 @@ async def uptime(ctx: tanjun.abc.MessageContext) -> None:
         f"Been up for {hz.naturaldelta(ctx.client.metadata['uptime'] - datetime.datetime.now())}"
     )
 
+
 # idk if this even works.
 @component.with_slash_command
 @tanjun.as_slash_command("about", "Information about the bot itself.")
 async def about_command(
-    ctx: abc.SlashContext, 
-    hash: traits.HashRunner[str, hikari.Snowflake, str] = cache.Hash()
+    ctx: abc.SlashContext,
+    hash: traits.HashRunner[str, hikari.Snowflake, str] = cache.Hash(),
 ) -> None:
     """Info about the bot itself."""
 
