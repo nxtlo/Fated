@@ -1,5 +1,5 @@
 # Fated
-A flexible and general prupose discord bot built with Hikari and Tanjun.
+A flexible and general purpose discord bot built with Hikari and Tanjun.
 
 ## Running
 - Note that you'll need Python3.10 specifically to be able to host the bot.
