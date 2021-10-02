@@ -87,7 +87,9 @@ def build_bot() -> hikari_traits.GatewayBotAware:
 
 
 def build_client(bot: hikari_traits.GatewayBotAware) -> tanjun.Client:
-    # TODO: Add config as a dependency and aiobungie client here.
+    pg_pool = pool_.PgxPool()
+    client_session = net.HTTPNet()
+    aiobungie_client = aiobungie.Client(config.BUNGIE_TOKEN)
     client = (
         tanjun.Client.from_gateway_bot(
             bot,
@@ -95,9 +97,11 @@ def build_client(bot: hikari_traits.GatewayBotAware) -> tanjun.Client:
             set_global_commands=hikari.Snowflake(815920916043137076),
         )
         # pg pool
-        .set_type_dependency(pool_.PoolT, tanjun.cache_callback(pool_.PgxPool()))
+        .set_type_dependency(pool_.PoolT, pg_pool)
+        .add_client_callback(tanjun.ClientCallbackNames.STARTING, pg_pool.create_pool)
+        .add_client_callback(tanjun.ClientCallbackNames.CLOSING, pg_pool.close)
         # own aiohttp client session.
-        .set_type_dependency(net.HTTPNet, typing.cast(traits.NetRunner, net.HTTPNet))
+        .set_type_dependency(net.HTTPNet, typing.cast(traits.NetRunner, client_session))
         # Cache. This is kinda overkill but we need the memory cache for api requests
         # And the redis hash for stuff that are not worth running sql queries for.
         .set_type_dependency(
@@ -105,10 +109,12 @@ def build_client(bot: hikari_traits.GatewayBotAware) -> tanjun.Client:
         )
         .set_type_dependency(cache.Memory, cache.Memory[object, object])
         # aiobungie client
-        .set_type_dependency(aiobungie.Client, aiobungie.Client(config.BUNGIE_TOKEN))
-        # Since there's no ctx.bot, ctx.client.bot. We also need to
-        # Inject our bot.
-        .set_type_dependency(hikari_traits.GatewayBotAware, lambda: bot)
+        .set_type_dependency(aiobungie.Client, aiobungie_client)
+        .add_client_callback(
+            tanjun.ClientCallbackNames.CLOSING, aiobungie_client.rest.close
+        )
+        # Since there's no ctx.bot, ctx.client.bot. We also need to Inject our bot.
+        .set_type_dependency(hikari_traits.GatewayBotAware, bot)
         # Global injected call backs.
         .set_callback_override(net.HTTPNet, traits.NetRunner)
         .set_callback_override(cache.Hash, traits.HashRunner)

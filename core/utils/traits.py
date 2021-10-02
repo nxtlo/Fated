@@ -47,21 +47,22 @@ ValueT = typing.TypeVar("ValueT")
 """A type hint for the hash value."""
 
 
+# fmt: off
 @typing.runtime_checkable
-class HashRunner(
-    typing.Generic[HashT, FieldT, ValueT], FastProtocolChecking, typing.Protocol
-):
+class HashRunner(typing.Generic[HashT, FieldT, ValueT], FastProtocolChecking, typing.Protocol):
+# fmt: on
     """A Basic generic Implementation of redis hash protocol.
 
     Example
     -------
     ```py
     async def func() -> None:
-        cache: Hash[str, hikari.SnowFlake, hikari.Member]
-        rest_member = await rest.fetch_members()
-        for member in rest_members:
-            cache.set("members", member.id, member)
+        # `str` is the name of the hash, `hikari.Snowflake` is the key, `hikari.Member` is the value.
+        cache: HashRunner[str, hikari.SnowFlake, hikari.Member] = cache.Hash()
+        member = await rest.fetch_member(...)
+        await cache.set("members", member.id, member)
         get_member = await cache.get("members", member.id) -> hikari.Member(...)
+    ```
     """
 
     __slots__: typing.Sequence[str] = ()
@@ -172,7 +173,7 @@ class PoolRunner(FastProtocolChecking, typing.Protocol):
         /,
         *args: typing.Any,
         timeout: float | None = None,
-    ) -> list[asyncpg.Record]:
+    ) -> list[asyncpg.Record] | dict[typing.Any, typing.Any]:
         """A typed asyncpg fetchrow method.
 
         Parameters

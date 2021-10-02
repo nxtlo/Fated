@@ -48,7 +48,7 @@ def _run_redis() -> sp.Popen[bytes]:
     with sp.Popen(["redis-server"], shell=False, stderr=sp.PIPE, stdout=sp.PIPE) as proc:
         ok, err = proc.communicate()
         if ok:
-            _log.info("Redis server started: %s", ok)
+            _log.info("Redis server started.")
         elif err:
             raise RuntimeError("Couldn't start redis server", err)
     return proc

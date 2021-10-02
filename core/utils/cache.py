@@ -27,18 +27,27 @@ ValueT = typing.TypeVar("ValueT")
 class Hash(traits.HashRunner, typing.Generic[HashT, FieldT, ValueT]):
     # For some reason its not showing the inherited class docs.
 
-    """A Basic generic Implementation of redis hash.
+    """A Basic generic Implementation of redis hash protocol.
 
     Example
     -------
     ```py
-    async def func() -> None:
-        cache: Hash[str, hikari.SnowFlake, hikari.Member]
-        rest_member = await rest.fetch_members()
-        for member in rest_members:
-            cache.set("members", member.id, member)
-        get_member = await cache.get("members", member.id) -> hikari.Member(...)
+    # `str` is the name of the hash, `hikari.Snowflake` is the key, `hikari.Member` is the value.
+    cache: HashRunner[str, hikari.SnowFlake, hikari.Member] = cache.Hash()
+    member = await rest.fetch_member(...)
+    await cache.set("members", member.id, member)
+    
+    ```
+
+    Note
+    ----
+    This is meant to be a Key-Value cache for light-weight stuff for fast access,
+    Means you can't cache the whole member object in the hash.
+
+    Use The Memory cache if you want to cache a an object or impl your own marshaller.
+    You can also use Snab's sake cache instead.
     """
+
     __slots__: typing.Sequence[str] = ("_injector", "_password")
     from .config import Config as __Config
 

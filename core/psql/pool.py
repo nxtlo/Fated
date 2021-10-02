@@ -90,7 +90,7 @@ class PgxPool(traits.PoolRunner):
     async def execute(
         self, sql: str, /, *args: typing.Any, timeout: float | None = None
     ) -> None:
-        await self._pool.execute(sql, *args, timeout)
+        return await self._pool.execute(sql, *args, timeout=timeout)
 
     async def fetch(
         self,
@@ -99,7 +99,7 @@ class PgxPool(traits.PoolRunner):
         *args: typing.Any,
         timeout: float | None = None,
     ) -> list[asyncpg.Record]:
-        return await self.pool.fetch(sql, *args, timeout=timeout)
+        return await self._pool.fetch(sql, *args, timeout=timeout)
 
     async def fetchrow(
         self,
@@ -107,22 +107,23 @@ class PgxPool(traits.PoolRunner):
         /,
         *args: typing.Any,
         timeout: float | None = None,
-    ) -> list[asyncpg.Record]:
-        return await self.pool.fetchrow(sql, *args, timeout=timeout)
+    ) -> list[asyncpg.Record] | dict[typing.Any, typing.Any]:
+        return await self._pool.fetchrow(sql, *args, timeout=timeout)
 
     async def fetchval(
         self,
         sql: str,
         /,
         *args: typing.Any,
-        column: int | None = None,
+        column: int | None = 0,
         timeout: float | None = None,
     ) -> typing.Any:
-        return await self.pool.fetchval(sql, *args, column, timeout=timeout)
+        return await self._pool.fetchval(sql, *args, column=column, timeout=timeout)
 
     async def close(self) -> None:
         try:
-            await self.pool.close()
+            _LOG.debug("Pool is closing.")
+            await self._pool.close()
         except asyncpg.exceptions.InterfaceError as e:
             raise e
 
