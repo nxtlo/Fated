@@ -5,3 +5,4 @@ git+https://github.com/nxtlo/aiobungie@master
 asyncpg==0.24.0
 aioredis==2.0.0
 humanize==3.11.0
+spotdl==3.8.0
