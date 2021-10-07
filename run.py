@@ -36,11 +36,7 @@ if os.name != "nt":
     try:
         import uvloop
     except ImportError:
-        i = input("uvloop is not installed, Do you want to install it?: ")
-        if i in {"yes", "YES", "y", "Y"}:
-            os.system(f"python -m pip install uvloop {'-U' if os.name != 'nt' else '--user'}")
-        else:
-            pass
+        pass
     else:
         asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 
