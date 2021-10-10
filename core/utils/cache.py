@@ -36,7 +36,7 @@ class Hash(traits.HashRunner, typing.Generic[HashT, FieldT, ValueT]):
     cache: HashRunner[str, hikari.SnowFlake, hikari.Member] = cache.Hash()
     member = await rest.fetch_member(...)
     await cache.set("members", member.id, member)
-    
+
     ```
 
     Note

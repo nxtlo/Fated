@@ -30,10 +30,9 @@ import typing
 import aiobungie
 import asyncpg
 import hikari
-import tanjun
 import humanize
+import tanjun
 
-from aiobungie import crate
 from core.psql import pool
 
 component: typing.Final[tanjun.abc.Component] = tanjun.Component(name="destiny")
@@ -71,7 +70,7 @@ async def _get_destiny_player(
     client: aiobungie.Client,
     name: str,
     type: aiobungie.MembershipType = aiobungie.MembershipType.ALL
-) -> crate.DestinyUser:
+) -> aiobungie.crate.DestinyUser:
     try:
         player = await client.fetch_player(name, type)
         assert player is not None
@@ -122,7 +121,7 @@ async def desync_command(
             await pool.execute("DELETE FROM destiny WHERE ctx_id = $1", member)
         except Exception as exc:
             raise RuntimeError(f"Couldn't desync member {repr(ctx.author)}") from exc
-        await ctx.respond("Successfuly desynced your membership.")
+        await ctx.respond("Successfully desynced your membership.")
     else:
         await ctx.respond("You're not already synced.")
         return None
@@ -206,7 +205,7 @@ async def get_clan_command(
         if isinstance(query, int):
             clan = await client.fetch_clan_from_id(query)
         else:
-            clan: crate.Clan = await client.fetch_clan(query)
+            clan: aiobungie.crate.Clan = await client.fetch_clan(query)
 
     except aiobungie.ClanNotFound as e:
         await ctx.respond(f"{e}")
@@ -236,7 +235,7 @@ async def get_clan_command(
         .set_footer(", ".join(clan.tags))
     )
 
-    if isinstance(clan.owner, crate.ClanMember):
+    if isinstance(clan.owner, aiobungie.crate.ClanMember):
         owner_name = (
             f'{clan.owner.last_seen_name}#{clan.owner.code if clan.owner.code else ""}'
         )
@@ -255,3 +254,7 @@ async def get_clan_command(
 @tanjun.as_loader
 def load_destiny(client: tanjun.abc.Client):
     client.add_component(component.copy())
+
+@tanjun.as_unloader
+def unload_examples(client: tanjun.Client) -> None:
+    client.remove_component_by_name(component.name)

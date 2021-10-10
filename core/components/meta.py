@@ -24,42 +24,42 @@
 """Commands that you can use for any meta stuff."""
 
 from __future__ import annotations
-import sys
-
-__all__: list[str] = ["component"]
 
 import datetime
-import time
-import subprocess as sp
+import os
 import pathlib
 import shutil
-import os
+import subprocess as sp
+import sys
+import time
 
 import hikari
 import humanize as hz
 import tanjun
 from tanjun import abc
 
-from core.utils import cache
-from core.utils import traits
-from core.utils import format
+from core.utils import cache, format, traits
 
 component = tanjun.Component(name="meta")
 prefix_group = component.with_slash_command(
     tanjun.SlashCommandGroup("prefix", "Handle the bot prefix configs.")
 )
 
+
 def _clean_up(path: pathlib.Path) -> None:
     if path.exists():
         shutil.rmtree(path)
     return None
+
 
 @component.with_message_command
 @tanjun.with_argument("query", converters=(str,))
 @tanjun.with_option("output_format", "--output", "-o", converters=(str,), default="mp3")
 @tanjun.with_parser
 @tanjun.as_message_command("spotify", "sp")
-async def download_song(ctx: tanjun.abc.MessageContext, query: str, output_format: str) -> None:
+async def download_song(
+    ctx: tanjun.abc.MessageContext, query: str, output_format: str
+) -> None:
     """Downloads a song from spotify giving a link or name."""
     if query is not None:
         path = pathlib.Path("__cache__")
@@ -69,18 +69,36 @@ async def download_song(ctx: tanjun.abc.MessageContext, query: str, output_forma
         else:
             os.mkdir("__cache__")
 
-            with sp.Popen(['spotdl', query, '--output', '__cache__', '--output-format', output_format], shell=False, stderr=sp.PIPE, stdin=sp.PIPE) as sh:
+            with sp.Popen(
+                [
+                    "spotdl",
+                    query,
+                    "--output",
+                    "__cache__",
+                    "--output-format",
+                    output_format,
+                ],
+                shell=False,
+                stderr=sp.PIPE,
+                stdin=sp.PIPE,
+            ) as sh:
                 ok = await ctx.respond("Downloading...")
 
                 _, nil = sh.communicate()
                 if nil:
-                    await ctx.respond(f"Couln't download the requested song: {format.with_block(nil.decode('utf-8'), lang='sh')}")
+                    await ctx.respond(
+                        f"Couldn't download the requested song: {format.with_block(nil.decode('utf-8'), lang='sh')}"
+                    )
                     return None
 
         for _ in range(1):
             try:
                 for file in path.iterdir():
-                    if file.is_file() and file.name.endswith(('.wav', '.m4a', '.mp3')) and not file.name == '.spotdl-cache':
+                    if (
+                        file.is_file()
+                        and file.name.endswith((".wav", ".m4a", ".mp3"))
+                        and not file.name == ".spotdl-cache"
+                    ):
                         try:
                             await ctx.respond(attachment=file)
                             await ok.delete()
@@ -90,8 +108,11 @@ async def download_song(ctx: tanjun.abc.MessageContext, query: str, output_forma
                             await ctx.respond(format.with_block(sys.exc_info()[1]))
                             return None
             except FileNotFoundError:
-                await ctx.respond("Encountered an error, Try running the command again.")
+                await ctx.respond(
+                    "Encountered an error, Try running the command again."
+                )
                 break
+
 
 @component.with_message_command
 @tanjun.as_message_command("ping")
@@ -218,6 +239,7 @@ async def about_command(
         bot = ctx.cache.get_me()
         cache = ctx.cache
 
+    from aiobungie import __version__ as aiobungie_version
     from hikari._about import __version__ as hikari_version
     from tanjun import __version__ as tanjun_version
 
@@ -226,7 +248,9 @@ async def about_command(
         description="Information about the bot",
         url="https://github.com/nxtlo/Tsujigiri",
     )
-    embed.set_footer(text=f"Hikari {hikari_version} - Tanjun {tanjun_version}")
+    embed.set_footer(
+        text=f"Hikari {hikari_version} - Tanjun {tanjun_version} - Aiobungie {aiobungie_version}"
+    )
     embed.set_author(name=str(bot.id))
 
     await ctx.defer()
@@ -273,3 +297,8 @@ async def say_command(ctx: abc.MessageContext, query: str) -> None:
 @tanjun.as_loader
 def load_meta(client: tanjun.Client) -> None:
     client.add_component(component.copy())
+
+
+@tanjun.as_unloader
+def unload_examples(client: tanjun.Client) -> None:
+    client.remove_component_by_name(component.name)

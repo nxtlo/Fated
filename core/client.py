@@ -89,12 +89,12 @@ def build_bot() -> hikari_traits.GatewayBotAware:
 def build_client(bot: hikari_traits.GatewayBotAware) -> tanjun.Client:
     pg_pool = pool_.PgxPool()
     client_session = net.HTTPNet()
-    aiobungie_client = aiobungie.Client(config.BUNGIE_TOKEN)
+    aiobungie_client = aiobungie.Client(config.BUNGIE_TOKEN, max_retries=6)
     client = (
         tanjun.Client.from_gateway_bot(
             bot,
             mention_prefix=True,
-            set_global_commands=hikari.Snowflake(815920916043137076),
+            declare_global_commands=hikari.Snowflake(815920916043137076),
         )
         # pg pool
         .set_type_dependency(pool_.PoolT, pg_pool)

@@ -23,9 +23,6 @@
 
 from __future__ import annotations
 
-__all__: list[str] = ["component"]
-
-
 import sys
 
 import asyncpg
@@ -193,3 +190,8 @@ async def ban(
 @tanjun.as_loader
 def load_mod(client: tanjun.Client) -> None:
     client.add_component(component.copy())
+
+
+@tanjun.as_unloader
+def unload_examples(client: tanjun.Client) -> None:
+    client.remove_component_by_name(component.name)

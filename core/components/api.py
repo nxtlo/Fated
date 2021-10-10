@@ -25,8 +25,6 @@
 
 from __future__ import annotations
 
-__all__: list[str] = ["component"]
-
 import itertools
 import json
 import typing
@@ -263,3 +261,7 @@ async def git_repo(
 @tanjun.as_loader
 def load_api(client: tanjun.Client) -> None:
     client.add_component(component.copy())
+
+@tanjun.as_unloader
+def unload_examples(client: tanjun.Client) -> None:
+    client.remove_component_by_name(component.name)
