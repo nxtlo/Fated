@@ -51,7 +51,7 @@ def _run_redis() -> sp.Popen[bytes]:
 
 
 if __name__ == "__main__":
-    t = threading.Thread(target=_run_redis)
+    t = threading.Thread(target=_run_redis, daemon=True, name="redis")
     t.start()
     main()
-    t.join()
+    t.join(10)

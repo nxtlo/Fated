@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import datetime
 import logging
-import os
+import subprocess
 import traceback
 import typing
 
@@ -37,7 +37,7 @@ from hikari import traits as hikari_traits
 from hikari.internal import aio
 
 from core.psql import pool as pool_
-from core.utils import cache  # noqa: F401
+from core.utils import cache
 from core.utils import config as config_
 from core.utils import net, traits
 
@@ -80,7 +80,11 @@ def build_bot() -> hikari_traits.GatewayBotAware:
     config = config_.Config()
 
     intents = hikari.Intents.ALL_UNPRIVILEGED | hikari.Intents.GUILD_MEMBERS
-    bot = Fated(token=config.BOT_TOKEN, intents=intents)
+    bot = Fated(
+        token=config.BOT_TOKEN,
+        intents=intents,
+        cache_settings=hikari.CacheSettings(components=config.CACHE),
+    )
     bot.sub()
     build_client(bot)
     return bot
@@ -157,9 +161,13 @@ def init() -> None:
 
 @main.command(name="format", short_help="Format the bot code.")
 def format_code() -> None:
-    try:
-        os.system("black core")
-        os.system("isort core")
-        os.system("codespell core -w")
-    except Exception:
-        pass
+    command = subprocess.run(
+        "black core; isort core; codespell core -w -L crate;",
+        capture_output=True,
+        shell=True,
+    )
+    ok, err = command.stdout, command.stderr
+    if ok:
+        click.echo("Ok", color=True)
+    else:
+        click.echo(err, err=True, color=True)

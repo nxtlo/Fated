@@ -31,7 +31,6 @@ import typing
 
 import hikari
 import tanjun
-from tanjun import abc as tabc
 
 from core import client
 from core.utils import consts, format, interfaces
@@ -41,7 +40,6 @@ component = tanjun.Component(name="api")
 git_group = component.with_slash_command(
     tanjun.SlashCommandGroup("git", "Commands related to github.")
 )
-
 
 @component.with_slash_command
 @tanjun.with_str_slash_option("name", "The anime's name.", default=None)
@@ -54,7 +52,7 @@ git_group = component.with_slash_command(
 )
 @tanjun.as_slash_command("anime", "Returns basic information about an anime.")
 async def get_anime(
-    ctx: tabc.SlashContext,
+    ctx: tanjun.abc.SlashContext,
     name: str,
     random: bool | None,
     genre: str,
@@ -63,21 +61,24 @@ async def get_anime(
     await ctx.defer()
     jian = net_.Wrapper(net)
     anime = await jian.get_anime(ctx, name, random=random, genre=genre)
-    await ctx.respond(embed=anime)
-
+    if anime:
+        await ctx.respond(embed=anime)
+    return None
 
 @component.with_slash_command
 @tanjun.with_str_slash_option("name", "The manga name")
 @tanjun.as_slash_command("manga", "Returns basic information about a manga.")
 async def get_manga(
-    ctx: tabc.SlashContext,
+    ctx: tanjun.abc.SlashContext,
     name: str,
     net: net_.HTTPNet = net_.HTTPNet(),
 ) -> None:
     await ctx.defer()
     jian = net_.Wrapper(net)
     manga = await jian.get_manga(ctx, name)
-    await ctx.respond(embed=manga)
+    if manga is not None:
+        await ctx.respond(embed=manga)
+    return None
 
 
 @component.with_slash_command
@@ -90,19 +91,23 @@ async def define(
 ) -> None:
     urban = net_.Wrapper(net)
     definition = await urban.get_definition(ctx, name)
-    await ctx.respond(embed=definition)
+    if definition:
+        await ctx.respond(embed=definition)
+    return None
 
 
 @component.with_message_command
 @tanjun.with_owner_check(halt_execution=True)
 @tanjun.with_greedy_argument("url", converters=str)
+@tanjun.with_option("method", "--method", "-m", default=None)
 @tanjun.with_option("getter", "--get", "-g", default=None)
 @tanjun.with_parser
 @tanjun.as_message_command("net")
 async def run_net(
-    ctx: tabc.MessageContext,
+    ctx: tanjun.abc.MessageContext,
     url: str,
     getter: str | None,
+    method: typing.Literal["GET", "POST"] = "GET",
     net: net_.HTTPNet = net_.HTTPNet(),
 ) -> None:
     """Make a GET http request to an api or else.
@@ -118,10 +123,12 @@ async def run_net(
             The http client we're making the request with.
         --get | -g:
             An optional key to get.
+        --method | -m:
+            The request method.
     """
     async with net as cli:
         try:
-            result = await cli.request("GET", url, getter=getter)
+            result = await cli.request(method, url, getter=getter)
             formatted = format.with_block(json.dumps(result, sort_keys=True), lang="json")
 
         except Exception as exc:

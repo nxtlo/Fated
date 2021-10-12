@@ -30,7 +30,7 @@ __all__: typing.Sequence[str] = ("Config",)
 import typing
 
 import attr
-import hikari
+from hikari import config as hikari_config
 
 
 @attr.define(repr=False, weakref_slot=False, slots=True)
@@ -58,12 +58,12 @@ class Config:
     DB_PORT: typing.Final[int] = attr.field(default=5432)
     """Your database's port. Defaults to 5432."""
 
-    CACHE: hikari.CacheComponents = attr.field(
+    CACHE: hikari_config.CacheComponents = attr.field(
         default=(
-            hikari.CacheComponents.GUILD_CHANNELS
-            | hikari.CacheComponents.GUILDS
-            | hikari.CacheComponents.MEMBERS
-            | hikari.CacheComponents.ROLES
+            hikari_config.CacheComponents.GUILD_CHANNELS
+            | hikari_config.CacheComponents.GUILDS
+            | hikari_config.CacheComponents.MEMBERS
+            | hikari_config.CacheComponents.ROLES
         )
     )
     """The bot's cache settings."""

@@ -28,24 +28,25 @@ __all__: tuple[str, ...] = ("PoolRunner", "NetRunner", "HashRunner")
 
 import typing
 
-import aiohttp
-import asyncpg
-import yarl
-from hikari.internal import data_binding
 from hikari.internal.fast_protocol import FastProtocolChecking
-
-from .interfaces import HashView
 
 # Hash types.
 HashT = typing.TypeVar("HashT")
 """A type hint for the hash name."""
-
 FieldT = typing.TypeVar("FieldT")
 """A type hint for the hash field."""
-
 ValueT = typing.TypeVar("ValueT")
 """A type hint for the hash value."""
 
+if typing.TYPE_CHECKING:
+    import aiohttp
+    import asyncpg
+    import yarl
+    from hikari.internal import data_binding
+
+    from .interfaces import HashView
+
+    _GETTER_TYPE = typing.TypeVar("_GETTER_TYPE", covariant=True)
 
 # fmt: off
 @typing.runtime_checkable
@@ -230,11 +231,6 @@ class NetRunner(FastProtocolChecking, typing.Protocol):
 
     __slots__: typing.Sequence[str] = ()
 
-    # This is required here for injecting it
-    # to the client.
-    def __call__(self) -> typing.NoReturn:
-        raise NotImplementedError
-
     async def acquire(self) -> None:
         """Acquires the session if its closed or set to None."""
 
@@ -243,11 +239,11 @@ class NetRunner(FastProtocolChecking, typing.Protocol):
 
     async def request(
         self,
-        method: str,
+        method: typing.Literal["GET", "POST", "PUT", "DELETE", "PATCH"],
         url: str | yarl.URL,
-        getter: typing.Any | None = None,
+        getter: typing.Any | _GETTER_TYPE | None = None,
         **kwargs: typing.Any,
-    ) -> data_binding.JSONArray | data_binding.JSONObject | None:
+    ) -> data_binding.JSONArray | data_binding.JSONObject | _GETTER_TYPE | None:
         """Perform an http request
 
         Parameters

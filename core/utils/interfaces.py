@@ -27,12 +27,15 @@ from __future__ import annotations
 __all__: tuple[str, ...] = ("APIWrapper", "GithubRepo", "GithubUser", "HashView")
 
 import abc
-import datetime
 import typing
 
 import attr
-import hikari
-import tanjun
+
+if typing.TYPE_CHECKING:
+    import datetime
+
+    import hikari
+    import tanjun
 
 _T = typing.TypeVar("_T")
 
@@ -51,17 +54,17 @@ class APIWrapper(abc.ABC):
     @abc.abstractmethod
     async def get_anime(
         self,
-        ctx: tanjun.abc.SlashContext,
+        _: tanjun.abc.SlashContext,
         name: str | None = None,
         *,
         random: bool | None = None,
         genre: str,
-    ) -> hikari.Embed | hikari.UndefinedType:
+    ) -> hikari.Embed | None:
         """Fetch an anime from jikan api.
 
         Parameters
         ----------
-        ctx : `tanjun.abc.SlashContext`
+        _ | ctx : `tanjun.abc.SlashContext`
             The discord slash context.
         name : `str` | `None`
             The anime name. If kept to None, A random anime will be returned.
@@ -78,22 +81,22 @@ class APIWrapper(abc.ABC):
 
         Returns
         -------
-        hikari.Embed
+        `hikari.Embed`
             A hikari embed contains the anime data
             if the the request was succesfulanime was found.
-        hikari.undefined.UndefinedType
-            An undefined type if the anime was not found.
+        `None`
+            The anime was not found.
         """
 
     @abc.abstractmethod
     async def get_manga(
-        self, ctx: tanjun.abc.SlashContext, name: str, /
-    ) -> hikari.Embed | hikari.UndefinedType:
+        self, _: tanjun.abc.SlashContext, name: str, /
+    ) -> hikari.Embed | None:
         """Fetch an manga from jikan api and returns the first one found.
 
         Parameters
         ----------
-        ctx : `tanjun.abc.SlashContext`
+        _ | ctx : `tanjun.abc.SlashContext`
             The discord's slash context.
         name : `str`
             The manga name.
@@ -103,14 +106,14 @@ class APIWrapper(abc.ABC):
         hikari.Embed
             A hikari embed contains the manga data
             if the the request was successful manga was found.
-        hikari.undefined.UndefinedType
-            An undefined type if the manga was not found.
+        `None`
+            The manga was not found.
         """
 
     @abc.abstractmethod
     async def get_definition(
         self, ctx: tanjun.abc.SlashContext, name: str
-    ) -> hikari.Embed | hikari.UndefinedType:
+    ) -> hikari.Embed | None:
         """Get the definition by its name from urban dictionary.
 
         Parameters
@@ -122,11 +125,11 @@ class APIWrapper(abc.ABC):
 
         Returns
         -------
-        hikari.Embed
+        `hikari.Embed`
             A hikari embed contains the definition data
             if the the request was successful definition was found.
-        hikari.undefined.UndefinedType
-            An undefined type if the definition was not found.
+        `None`
+            The definition was not found.
         """
 
     @abc.abstractmethod

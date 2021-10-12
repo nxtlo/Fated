@@ -37,7 +37,6 @@ __all__: tuple[str, ...] = (
 import asyncio
 import logging
 import random as random_
-import types
 import typing
 from http import HTTPStatus as http
 
@@ -46,10 +45,8 @@ import attr
 import hikari
 import humanize
 import multidict
-import tanjun
 from aiobungie.internal import time
 from hikari import _about as about
-from hikari.internal import data_binding
 from hikari.internal.time import (
     fast_iso8601_datetime_string_to_datetime as fast_datetime,
 )
@@ -58,10 +55,16 @@ from yarl import URL
 
 from . import consts, interfaces, traits
 
-_LOG: typing.Final[logging.Logger] = logging.getLogger(__name__)
-logging.basicConfig(level=logging.DEBUG)
+if typing.TYPE_CHECKING:
+    import types
+
+    import tanjun.abc
+    from hikari.internal import data_binding
+    _GETTER_TYPE = typing.TypeVar("_GETTER_TYPE", covariant=True)
 
 DATA_TYPE = dict[str, typing.Any | int | str | hikari.UndefinedType | multidict.CIMultiDictProxy[str]]
+_LOG: typing.Final[logging.Logger] = logging.getLogger(__name__)
+logging.basicConfig(level=logging.DEBUG)
 
 class _Rely:
 
@@ -111,34 +114,34 @@ class HTTPNet(traits.NetRunner):
     @typing.final
     async def request(
         self,
-        method: str,
+        method: typing.Literal["GET", "POST", "PUT", "DELETE", "PATCH"],
         url: str | URL,
-        getter: typing.Any | None = None,
+        getter: _GETTER_TYPE | None = None,
         **kwargs: typing.Any,
-    ) -> data_binding.JSONObject | data_binding.JSONArray | None:
+    ) -> data_binding.JSONObject | data_binding.JSONArray | _GETTER_TYPE | None:
         async with rely:
-            return await self._request(method, url, getter, **kwargs)
+            return await self.__request(method, url, getter, **kwargs)
 
     @typing.final
-    async def _request(
+    async def __request(
         self,
-        method: str,
+        method: typing.Literal["GET", "POST", "PUT", "DELETE", "PATCH"],
         url: str | URL,
-        getter: typing.Any | None = None,
+        getter: _GETTER_TYPE | None = None,
         **kwargs: typing.Any,
-    ) -> data_binding.JSONObject | data_binding.JSONArray | None:
+    ) -> data_binding.JSONObject | data_binding.JSONArray | _GETTER_TYPE | None:
 
-        data: data_binding.JSONObject | None = None
+        data: data_binding.JSONObject | data_binding.JSONArray | _GETTER_TYPE | None = None
         backoff_ = backoff.Backoff(max_retries=6)
 
         user_agent: typing.Final[
             str
-        ] = f"Tsujigiri DiscorsBot Hikari/{about.__version__}"
+        ] = f"Fated DiscorsBot Hikari/{about.__version__}"
 
         kwargs["headers"] = headers = {}
         headers["User-Agent"] = user_agent
 
-        while 1:
+        while True:
             async for _ in backoff_:
                 try:
                     async with self._session.request(  # type: ignore
@@ -154,9 +157,9 @@ class HTTPNet(traits.NetRunner):
                             if data is None:
                                 return None
 
-                            if getter:
+                            if getter is not None:
                                 try:
-                                    return data[getter]
+                                    return data[getter]  # type: ignore
                                 except KeyError:
                                     raise LookupError(
                                         response.real_url, response.headers, data
@@ -190,7 +193,7 @@ class HTTPNet(traits.NetRunner):
 
     @staticmethod
     async def error_handle(response: aiohttp.ClientResponse, /) -> typing.NoReturn:
-        raise await acquire_errors(response)
+        raise await __acquire_errors(response)
 
 class Wrapper(interfaces.APIWrapper):
     """Wrapped around different apis.
@@ -209,12 +212,12 @@ class Wrapper(interfaces.APIWrapper):
 
     async def get_anime(
         self,
-        ctx: tanjun.abc.SlashContext,
+        _: tanjun.abc.SlashContext,
         name: str | None = None,
         *,
         random: bool | None = None,
         genre: str,
-    ) -> hikari.Embed | hikari.UndefinedType:
+    ) -> hikari.Embed | None:
         embed = hikari.Embed(colour=consts.COLOR["invis"])
 
         async with self._net as cli:
@@ -251,8 +254,7 @@ class Wrapper(interfaces.APIWrapper):
                         try:
                             anime = raw_anime[0]
                         except (KeyError, TypeError):
-                            await ctx.mark_not_found()
-                            return hikari.UNDEFINED
+                            return None
 
                     embed.title = anime.get("title", hikari.UNDEFINED)
                     embed.description = anime.get("synopsis", hikari.UNDEFINED)
@@ -292,8 +294,8 @@ class Wrapper(interfaces.APIWrapper):
             return embed
 
     async def get_manga(
-        self, ctx: tanjun.abc.SlashContext, name: str, /
-    ) -> hikari.Embed | hikari.UndefinedType:
+        self, _: tanjun.abc.SlashContext, name: str, /
+    ) -> hikari.Embed | None:
         embed = hikari.Embed(colour=consts.COLOR["invis"])
 
         async with self._net as cli:
@@ -308,8 +310,7 @@ class Wrapper(interfaces.APIWrapper):
                     try:
                         manga = raw_manga[0]
                     except KeyError:
-                        await ctx.respond("Anime was not found.")
-                        return hikari.UNDEFINED
+                        return None
 
                     embed.description = manga.get("synopsis", hikari.UNDEFINED)
                     embed.set_author(url=manga.get("url", str(hikari.UNDEFINED)), name=manga.get("title", hikari.UNDEFINED))
@@ -340,7 +341,7 @@ class Wrapper(interfaces.APIWrapper):
 
     async def get_definition(
         self, ctx: tanjun.abc.SlashContext, name: str
-    ) -> hikari.Embed | hikari.UndefinedType:
+    ) -> hikari.Embed | None:
         async with self._net as cli:
 
             resp = (
@@ -351,7 +352,7 @@ class Wrapper(interfaces.APIWrapper):
 
             if not resp:
                 await ctx.respond(f"Couldn't find definition about `{name}`")
-                return hikari.UNDEFINED
+                return None
 
             defn = random_.choice(resp)  # type: ignore
             embed = hikari.Embed(
@@ -496,7 +497,7 @@ class Forbidden(Error):
 class InternalError(Error):
     data: DATA_TYPE = attr.field()
 
-async def acquire_errors(response: aiohttp.ClientResponse, /) -> Error:
+async def __acquire_errors(response: aiohttp.ClientResponse, /) -> Error:
     json_data = await response.json()
     real_data = {
         "data": json_data,

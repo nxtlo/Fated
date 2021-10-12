@@ -30,9 +30,10 @@ import random
 import typing
 
 ChoiceT = typing.TypeVar("ChoiceT", covariant=True)
-SequenceOf = str | typing.Sequence[ChoiceT] | None
 
-# TODO: Make this a hikari.Colour ?
+if typing.TYPE_CHECKING:
+    SequenceOf = str | typing.Sequence[ChoiceT] | None
+
 COLOR: typing.Final[dict[str, int]] = {
     "invis": 0x36393F,
     "random": random.randint(0, 0xFFFFFF),

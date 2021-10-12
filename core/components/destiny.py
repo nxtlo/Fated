@@ -35,7 +35,7 @@ import tanjun
 
 from core.psql import pool
 
-component: typing.Final[tanjun.abc.Component] = tanjun.Component(name="destiny")
+component = tanjun.Component(name="destiny")
 
 destiny_group: typing.Final[tanjun.abc.SlashCommandGroup] = component.with_slash_command(
     tanjun.SlashCommandGroup("destiny", "Commands related to Destiny 2.")
