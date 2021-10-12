@@ -65,7 +65,7 @@ async def on_message_create(
         return
 
 
-@component.with_listener(hikari.MessageCreateEvent)
+@component.with_listener(hikari.ShardReadyEvent)
 async def on_ready(_: hikari.ShardReadyEvent) -> None:
     logging.info("Bot ready.")
 
