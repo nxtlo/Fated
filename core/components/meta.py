@@ -26,6 +26,7 @@
 from __future__ import annotations
 
 import datetime
+import logging
 import os
 import pathlib
 import shutil
@@ -35,15 +36,38 @@ import time
 
 import hikari
 import humanize as hz
+import psutil
 import tanjun
+from aiobungie.internal import time as time_
 from tanjun import abc
 
+from core.psql import pool
 from core.utils import cache, format, traits
 
 component = tanjun.Component(name="meta")
 prefix_group = component.with_slash_command(
     tanjun.SlashCommandGroup("prefix", "Handle the bot prefix configs.")
 )
+
+
+@component.with_listener(hikari.MessageCreateEvent)
+async def on_message_create(
+    event: hikari.MessageCreateEvent,
+    pool: pool.PoolT = tanjun.injected(type=pool.PoolT),
+) -> None:
+    if event.is_bot or not event.is_human:
+        return
+
+    blocked_users: list[int] = await pool.fetch(
+        "SELECT author_id FROM blocked WHERE author_id = $1", event.author_id
+    )
+    if blocked_users is not None and event.author_id in blocked_users:
+        return
+
+
+@component.with_listener(hikari.MessageCreateEvent)
+async def on_ready(_: hikari.ShardReadyEvent) -> None:
+    logging.info("Bot ready.")
 
 
 def _clean_up(path: pathlib.Path) -> None:
@@ -226,52 +250,60 @@ async def uptime(ctx: tanjun.abc.MessageContext) -> None:
     )
 
 
-# idk if this even works.
 @component.with_slash_command
 @tanjun.as_slash_command("about", "Information about the bot itself.")
 async def about_command(
     ctx: abc.SlashContext,
-    hash: traits.HashRunner[str, hikari.Snowflake, str] = cache.Hash(),
 ) -> None:
     """Info about the bot itself."""
-
-    if ctx.cache:
-        bot = ctx.cache.get_me()
-        cache = ctx.cache
 
     from aiobungie import __version__ as aiobungie_version
     from hikari._about import __version__ as hikari_version
     from tanjun import __version__ as tanjun_version
 
+    procs = psutil.Process()
+    mem_usage = procs.memory_full_info().uss / 1024 ** 2
+    cpu_usage = procs.cpu_percent() / psutil.cpu_count()
+
+    if ctx.cache:
+        bot = ctx.cache.get_me()
+        cache = ctx.cache
+
     embed = hikari.Embed(
         title=bot.username,
         description="Information about the bot",
-        url="https://github.com/nxtlo/Tsujigiri",
+        url="https://github.com/nxtlo/Fated",
     )
-    embed.set_footer(
-        text=f"Hikari {hikari_version} - Tanjun {tanjun_version} - Aiobungie {aiobungie_version}"
-    )
-    embed.set_author(name=str(bot.id))
+    create = f"**Creation date**: {hz.precisedelta(time_.clean_date(str(bot.created_at)[:-6]), minimum_unit='MINUTES')}"
+    uptime_ = f"**Uptime**: {hz.precisedelta(ctx.client.metadata['uptime'] - datetime.datetime.now(), minimum_unit='MINUTES')}"
 
-    await ctx.defer()
-    if (
-        guild_prefix := await hash.get(
-            "prefixes", ctx.guild_id or (await ctx.fetch_guild()).id
-        ),
-    ) is not None:
-        embed.add_field("Guild prefix", guild_prefix)
+    embed.set_author(name=str(bot.id))
 
     embed.add_field(
         "Cache",
-        f"Members: {len(cache.get_members_view())}\n"
-        f"Available guilds: {len(cache.get_available_guilds_view())}\n"
-        f"Channels: {len(cache.get_guild_channels_view())}",
+        f"**Members**: {len(cache.get_members_view())}\n"
+        f"**Available guilds**: {len(cache.get_available_guilds_view())}\n"
+        f"**Channels**: {len(cache.get_guild_channels_view())}",
         inline=False,
     )
-
+    embed.add_field(
+        "Meta",
+        f"{create}\n{uptime_}\n"
+        f"**Memory usage**: {mem_usage:.2f}MIB\n"
+        f"**CPU usage**: {cpu_usage:.2f}%",
+        inline=False,
+    )
     if bot.avatar_url:
         embed.set_thumbnail(bot.avatar_url)
 
+    embed.add_field(
+        "Versions",
+        f"**Hikari**: {hikari_version}\n"
+        f"**Tanjun**: {tanjun_version}\n"
+        f"**Aiobungie**: {aiobungie_version}\n"
+        f"**Python**: {sys.version}",
+        inline=False,
+    )
     await ctx.respond(embed=embed)
 
 

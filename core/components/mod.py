@@ -64,8 +64,6 @@ async def run_sql(
 
     try:
         result = await pool.fetch(query)
-        print(result)
-
         # SQL Code error
     except asyncpg.exceptions.PostgresSyntaxError:
         await ctx.respond(format.with_block(sys.exc_info()[1]))

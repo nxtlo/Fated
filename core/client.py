@@ -24,7 +24,6 @@
 from __future__ import annotations
 
 import datetime
-import logging
 import subprocess
 import traceback
 import typing
@@ -33,7 +32,6 @@ import aiobungie
 import click
 import hikari
 import tanjun
-from hikari import traits as hikari_traits
 from hikari.internal import aio
 
 from core.psql import pool as pool_
@@ -41,25 +39,8 @@ from core.utils import cache
 from core.utils import config as config_
 from core.utils import net, traits
 
-
-class Fated(hikari.GatewayBot):
-    """The bot."""
-
-    def __init__(self, token: str, **kws: typing.Any) -> None:
-        super().__init__(token=token, **kws)
-
-    def sub(self) -> None:
-        self.event_manager.subscribe(
-            hikari.GuildMessageCreateEvent, self.on_message_create
-        )
-        self.event_manager.subscribe(hikari.StartedEvent, self.on_ready)
-
-    async def on_message_create(self, msg: hikari.GuildMessageCreateEvent) -> None:
-        if msg.is_bot or not msg.is_human:
-            return
-
-    async def on_ready(self, _: hikari.StartedEvent) -> None:
-        logging.info("Bot is ready.")
+if typing.TYPE_CHECKING:
+    from hikari import traits as hikari_traits
 
 
 async def get_prefix(
@@ -79,13 +60,12 @@ def build_bot() -> hikari_traits.GatewayBotAware:
     global config
     config = config_.Config()
 
-    intents = hikari.Intents.ALL_UNPRIVILEGED | hikari.Intents.GUILD_MEMBERS
-    bot = Fated(
+    intents = hikari.Intents.ALL_GUILDS | hikari.Intents.ALL_MESSAGES
+    bot = hikari.GatewayBot(
         token=config.BOT_TOKEN,
         intents=intents,
         cache_settings=hikari.CacheSettings(components=config.CACHE),
     )
-    bot.sub()
     build_client(bot)
     return bot
 
@@ -118,7 +98,7 @@ def build_client(bot: hikari_traits.GatewayBotAware) -> tanjun.Client:
             tanjun.ClientCallbackNames.CLOSING, aiobungie_client.rest.close
         )
         # Since there's no ctx.bot, ctx.client.bot. We also need to Inject our bot.
-        .set_type_dependency(hikari_traits.GatewayBotAware, bot)
+        .set_type_dependency(hikari.GatewayBot, bot)
         # Global injected call backs.
         .set_callback_override(net.HTTPNet, traits.NetRunner)
         .set_callback_override(cache.Hash, traits.HashRunner)

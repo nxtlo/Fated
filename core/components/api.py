@@ -32,7 +32,6 @@ import typing
 import hikari
 import tanjun
 
-from core import client
 from core.utils import consts, format, interfaces
 from core.utils import net as net_
 
@@ -207,7 +206,7 @@ async def git_repo(
     ctx: tanjun.abc.SlashContext,
     name: str,
     net: net_.HTTPNet = net_.HTTPNet(),
-    bot: hikari.GatewayBot = tanjun.injected(type=client.Fated),
+    bot: hikari.GatewayBot = tanjun.injected(type=hikari.GatewayBot),
 ) -> None:
     git = net_.Wrapper(net)
 
