@@ -35,8 +35,3 @@ CREATE TABLE IF NOT EXISTS destiny (
     id BIGINT PRIMARY KEY,
     prefix VARCHAR(5)
 ); */
-
-CREATE TABLE IF NOT EXISTS blocked (
-    author_id BIGINT PRIMARY KEY NOT NULL,
-    guild_ID BIGINT
-);

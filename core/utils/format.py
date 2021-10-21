@@ -25,7 +25,12 @@ from __future__ import annotations
 
 __all__: list[str] = ["parse_code", "with_block"]
 
+import sys
 import typing
+
+if typing.TYPE_CHECKING:
+    import builtins
+    import types
 
 
 def parse_code(*, code: str, lang: str = "sql") -> str:
@@ -50,3 +55,19 @@ def parse_code(*, code: str, lang: str = "sql") -> str:
 def with_block(data: typing.Any, *, lang: str = "hs") -> str:
     """Adds code blocks to a any text."""
     return f"```{lang}\n{data}\n```"
+
+
+def error(
+    source: tuple[
+        type[builtins.BaseException], builtins.BaseException, types.TracebackType
+    ]
+    | tuple[None, None, None]
+    | None = None,
+    str: bool = False,
+) -> BaseException | str | None:
+    """Return the last detected exception"""
+    if source is None:
+        if str is True:
+            return with_block(sys.exc_info()[1])
+        return sys.exc_info()[1]
+    return source[1]

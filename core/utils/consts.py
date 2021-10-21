@@ -29,14 +29,16 @@ __all__: list[str] = ["COLOR", "API", "GENRES", "iter", "randomize"]
 import random
 import typing
 
+import hikari
+
 ChoiceT = typing.TypeVar("ChoiceT", covariant=True)
 
 if typing.TYPE_CHECKING:
     SequenceOf = str | typing.Sequence[ChoiceT] | None
 
-COLOR: typing.Final[dict[str, int]] = {
-    "invis": 0x36393F,
-    "random": random.randint(0, 0xFFFFFF),
+COLOR: typing.Final[dict[str, hikari.Colourish]] = {
+    "invis": hikari.Colour(0x36393F),
+    "random": hikari.Colour(random.randint(0, 0xFFFFFF)),
 }
 """Colors."""
 

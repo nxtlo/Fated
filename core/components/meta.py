@@ -38,31 +38,17 @@ import hikari
 import humanize as hz
 import psutil
 import tanjun
+
+from tanjun import _backoff as backoff_
 from aiobungie.internal import time as time_
 from tanjun import abc
 
-from core.psql import pool
 from core.utils import cache, format, traits
 
 component = tanjun.Component(name="meta")
 prefix_group = component.with_slash_command(
     tanjun.SlashCommandGroup("prefix", "Handle the bot prefix configs.")
 )
-
-
-@component.with_listener(hikari.MessageCreateEvent)
-async def on_message_create(
-    event: hikari.MessageCreateEvent,
-    pool: pool.PoolT = tanjun.injected(type=pool.PoolT),
-) -> None:
-    if event.is_bot or not event.is_human:
-        return
-
-    blocked_users: list[int] = await pool.fetch(
-        "SELECT author_id FROM blocked WHERE author_id = $1", event.author_id
-    )
-    if blocked_users is not None and event.author_id in blocked_users:
-        return
 
 
 @component.with_listener(hikari.ShardReadyEvent)
@@ -115,7 +101,8 @@ async def download_song(
                     )
                     return None
 
-        for _ in range(1):
+        backoff = backoff_.Backoff(max_retries=3)
+        async for _ in backoff:
             try:
                 for file in path.iterdir():
                     if (
@@ -127,16 +114,18 @@ async def download_song(
                             await ctx.respond(attachment=file)
                             await ok.delete()
                             _clean_up(path)
-                            sh.kill()
+                            sh.terminate()
+                            return
                         except Exception:
                             await ctx.respond(format.with_block(sys.exc_info()[1]))
-                            return None
+                            return
             except FileNotFoundError:
                 await ctx.respond(
-                    "Encountered an error, Try running the command again."
+                    "Encountered an error, Trying again."
                 )
-                break
-
+                continue
+            except Exception as exc:
+                raise RuntimeError(f"Error while downloading a song in {ctx.guild_id}") from exc
 
 @component.with_message_command
 @tanjun.as_message_command("ping")
@@ -325,6 +314,12 @@ async def avatar_view(ctx: abc.SlashContext, /, member: hikari.Member) -> None:
 async def say_command(ctx: abc.MessageContext, query: str) -> None:
     await ctx.respond(query)
 
+@component.with_listener(hikari.GuildMessageCreateEvent)
+async def on_message_create(
+    event: hikari.GuildMessageCreateEvent,
+) -> None:
+    if event.is_bot or not event.is_human:
+        return
 
 @tanjun.as_loader
 def load_meta(client: tanjun.Client) -> None:

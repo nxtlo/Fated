@@ -47,10 +47,13 @@ async def get_prefix(
     ctx: tanjun.abc.MessageContext = tanjun.injected(type=tanjun.abc.MessageContext),
     hash: traits.HashRunner[str, hikari.Snowflake, str] = cache.Hash(),
 ) -> str | typing.Sequence[str]:
-
-    guild: hikari.Snowflake = ctx.guild_id or (await ctx.fetch_guild()).id
-    if (prefix := await hash.get("prefixes", guild)) is not None:
-        return prefix
+    try:
+        guild: hikari.Snowflake = ctx.guild_id or (await ctx.fetch_guild()).id
+    except AttributeError:
+        pass
+    else:
+        if (prefix := await hash.get("prefixes", guild)) is not None:
+            return prefix
     return ()
 
 

@@ -93,7 +93,7 @@ async def run_sql(
 @tanjun.as_message_command("kick")
 async def kick(
     ctx: tanjun.abc.MessageContext,
-    member: hikari.Member,
+    member: hikari.InteractionMember,
     /,
     reason: hikari.UndefinedOr[str],
 ) -> None:
@@ -132,6 +132,17 @@ async def kick(
         to_respond.append(f" For {reason}.")
     await ctx.respond("".join(to_respond))
 
+@component.with_message_command
+@tanjun.with_owner_check
+@tanjun.as_message_command("close", "shutdown")
+async def close_bot(
+    _: tanjun.MessageContext,
+    bot: hikari.GatewayBot = tanjun.injected(type=hikari.GatewayBot)
+) -> None:
+    try:
+        await bot.close()
+    except Exception:
+        raise
 
 @component.with_command
 @tanjun.with_guild_check
@@ -145,7 +156,7 @@ async def kick(
 @tanjun.as_message_command("ban")
 async def ban(
     ctx: tanjun.abc.MessageContext,
-    member: hikari.Member,
+    member: hikari.InteractionMember,
     /,
     reason: hikari.UndefinedOr[str],
 ) -> None:
