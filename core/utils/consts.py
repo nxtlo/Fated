@@ -24,7 +24,7 @@
 
 from __future__ import annotations
 
-__all__: list[str] = ["COLOR", "API", "GENRES", "iter", "randomize"]
+__all__: list[str] = ["COLOR", "API", "GENRES", "TTS", "iter", "randomize"]
 
 import random
 import typing
@@ -66,6 +66,17 @@ GENRES: dict[str, int] = {
 }
 """Anime only genres."""
 
+TTS: dict[str, str] = {
+    "Spongebob": 'TM:m2aw3j03asrt',
+    "Mr.krabs": 'TM:p4m33qacqj5v',
+    "Peter Griffin": 'TM:9wqc59heasx8',
+    "The Weekend": 'TM:j9czhrg050ba',
+    'Trump': 'TM:xy6gvtrrhz67',
+    '50cent': 'TM:3cj7r4b4q9ks',
+    "Shaggy": 'TM:vesbrtjvtvsa',
+    'ScoopyDoo': 'TM:3fcxdr8nyvgm',
+    "Dr.Phill": 'TM:p87rnz4t8kgg'
+}
 
 def iter(map: typing.Iterable[typing.Any] | None = None) -> typing.Iterable[str]:
     if map is None:

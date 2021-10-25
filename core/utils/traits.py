@@ -241,7 +241,8 @@ class NetRunner(FastProtocolChecking, typing.Protocol):
         self,
         method: typing.Literal["GET", "POST", "PUT", "DELETE", "PATCH"],
         url: str | yarl.URL,
-        getter: typing.Any | _GETTER_TYPE | None = None,
+        read: bool = False,
+        getter: typing.Any | _GETTER_TYPE | bytes | None = None,
         **kwargs: typing.Any,
     ) -> data_binding.JSONArray | data_binding.JSONObject | _GETTER_TYPE | None:
         """Perform an http request

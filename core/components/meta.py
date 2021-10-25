@@ -33,6 +33,7 @@ import shutil
 import subprocess as sp
 import sys
 import time
+import aiohttp
 
 import hikari
 import humanize as hz
@@ -43,7 +44,8 @@ from tanjun import _backoff as backoff_
 from aiobungie.internal import time as time_
 from tanjun import abc
 
-from core.utils import cache, format, traits
+from core.utils import cache, format, net, traits
+from core.utils import consts
 
 component = tanjun.Component(name="meta")
 prefix_group = component.with_slash_command(
@@ -306,6 +308,21 @@ async def avatar_view(ctx: abc.SlashContext, /, member: hikari.Member) -> None:
     embed = hikari.Embed(title=member.username).set_image(avatar)
     await ctx.respond(embed=embed)
 
+@component.with_message_command(copy=True)
+@tanjun.with_greedy_argument("text", converters=(str,))
+@tanjun.with_argument("voice")
+@tanjun.with_parser
+@tanjun.as_message_command("ts")
+async def test_tts(ctx: abc.MessageContext, voice: str, text: str, net_: net.HTTPNet = net.HTTPNet()) -> None:
+    """View of your discord avatar or other member."""
+    api = net.Wrapper(net_)
+    for _ in range(3):
+        try:
+            tts = await api.do_tts(voice, text=text)
+        except aiohttp.ContentTypeError:
+            continue
+    await ctx.respond(attachment=tts)
+    return None
 
 @component.with_command
 @tanjun.with_greedy_argument("query", converters=(str,))

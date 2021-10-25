@@ -40,6 +40,8 @@ import random as random_
 import typing
 from http import HTTPStatus as http
 
+import uuid
+import tempfile
 import aiohttp
 import attr
 import hikari
@@ -116,22 +118,24 @@ class HTTPNet(traits.NetRunner):
         self,
         method: typing.Literal["GET", "POST", "PUT", "DELETE", "PATCH"],
         url: str | URL,
+        read: bool = False,
         getter: _GETTER_TYPE | None = None,
         **kwargs: typing.Any,
-    ) -> data_binding.JSONObject | data_binding.JSONArray | _GETTER_TYPE | None:
+    ) -> data_binding.JSONObject | data_binding.JSONArray | bytes | _GETTER_TYPE | None:
         async with rely:
-            return await self.__request(method, url, getter, **kwargs)
+            return await self.__request(method, url, read, getter, **kwargs)
 
     @typing.final
     async def __request(
         self,
         method: typing.Literal["GET", "POST", "PUT", "DELETE", "PATCH"],
         url: str | URL,
+        read: bool = False,
         getter: _GETTER_TYPE | None = None,
         **kwargs: typing.Any,
-    ) -> data_binding.JSONObject | data_binding.JSONArray | _GETTER_TYPE | None:
+    ) -> data_binding.JSONObject | data_binding.JSONArray | bytes | _GETTER_TYPE | None:
 
-        data: data_binding.JSONObject | data_binding.JSONArray | _GETTER_TYPE | None = None
+        data: data_binding.JSONObject | data_binding.JSONArray | bytes | _GETTER_TYPE | None = None
         backoff_ = backoff.Backoff(max_retries=6)
 
         user_agent: typing.Final[
@@ -152,6 +156,9 @@ class HTTPNet(traits.NetRunner):
                             _LOG.debug(
                                 f"{method} Request Success from {str(response.real_url)}"
                             )
+
+                            if read is True:
+                                return await response.read()
 
                             data = await response.json(encoding="utf-8")
                             if data is None:
@@ -193,7 +200,7 @@ class HTTPNet(traits.NetRunner):
 
     @staticmethod
     async def error_handle(response: aiohttp.ClientResponse, /) -> typing.NoReturn:
-        raise await __acquire_errors(response)
+        raise await acquire_errors(response)
 
 class Wrapper(interfaces.APIWrapper):
     """Wrapped around different apis.
@@ -392,6 +399,41 @@ class Wrapper(interfaces.APIWrapper):
             embed.set_author(name=author, url=url)
         return embed
 
+    async def do_tts(self, model: str, *, text: str) -> typing.Any:
+        async with self._net as cli:
+            json = {
+                "inference_text": text,
+                "tts_model_token": consts.TTS[model],
+                "uuid_idempotency_token": str(uuid.uuid4())
+            }
+            resp = await cli.request(
+                "POST",
+                "https://api.fakeyou.com/tts/inference",
+                json=json
+            )
+            if (job_token := resp.get("inference_job_token")):
+                wave = await cli.request(
+                    "GET",
+                    f"https://api.fakeyou.com/tts/job/{job_token}"
+                )
+                if isinstance(wave, dict):
+                    if (audio_path := wave['state'].get("maybe_public_bucket_wav_audio_path")) is None:
+                        await asyncio.sleep(2)
+                    # We need to make 2 requests here while the audio is being uploaded.
+                    wave = await cli.request(
+                        "GET",
+                        f"https://api.fakeyou.com/tts/job/{job_token}"
+                    )
+                    audio_path = wave['state'].get("maybe_public_bucket_wav_audio_path")
+                    final_path = f'https://storage.googleapis.com/vocodes-public{audio_path}'
+                    wave_bytes = await cli.request('GET', final_path, read=True)
+                    if isinstance(wave_bytes, bytes):
+                        tmp = tempfile.TemporaryFile('wb')
+                        with tmp as t:
+                            t.write(wave_bytes)
+                            t.seek(0)
+                        return t
+
     def _set_repo_owner_attrs(self, payload: dict[str, typing.Any]) -> interfaces.GithubUser:
         user: dict[str, typing.Any] = payload
         created_at: datetime.datetime | None = None
@@ -497,7 +539,7 @@ class Forbidden(Error):
 class InternalError(Error):
     data: DATA_TYPE = attr.field()
 
-async def __acquire_errors(response: aiohttp.ClientResponse, /) -> Error:
+async def acquire_errors(response: aiohttp.ClientResponse, /) -> Error:
     json_data = await response.json()
     real_data = {
         "data": json_data,

@@ -133,6 +133,10 @@ class APIWrapper(abc.ABC):
         """
 
     @abc.abstractmethod
+    async def do_tts(self, model: str, *, text: str) -> typing.Any:
+        ...
+
+    @abc.abstractmethod
     async def get_git_user(self, name: str) -> GithubUser | None:
         """Fetch a Github user.
 
