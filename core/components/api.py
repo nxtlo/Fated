@@ -46,7 +46,7 @@ git_group = component.with_slash_command(
 @tanjun.with_str_slash_option(
     "genre",
     "The anime genre. This can be used with the random option.",
-    choices=consts.iter(),
+    choices=consts.iter(consts.GENRES),
     default=consts.randomize(),
 )
 @tanjun.as_slash_command("anime", "Returns basic information about an anime.")

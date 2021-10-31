@@ -78,12 +78,10 @@ TTS: dict[str, str] = {
     "Dr.Phill": 'TM:p87rnz4t8kgg'
 }
 
-def iter(map: typing.Iterable[typing.Any] | None = None) -> typing.Iterable[str]:
-    if map is None:
-        map = GENRES
-        return (genre for genre in map.keys())
-    else:
-        return (thing for thing in map)  # type:ignore
+_K = typing.TypeVar("_K")
+
+def iter(map: dict[_K, typing.Any]) -> typing.Sequence[str | _K | typing.Any]:
+    return [k for k in map.keys()]
 
 
 def randomize(seq: SequenceOf[typing.Any] | None = None) -> typing.Any:

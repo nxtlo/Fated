@@ -8,12 +8,9 @@ config.py
 __pycache__/
 .mypy_cache/
 
-# Rust
-Cargo.lock
-target/
-*.so
-*.pyd
+# others
 dump.rdb
+.vscode/
 
 # Spotify stuff
 __cache__/

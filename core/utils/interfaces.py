@@ -242,6 +242,3 @@ class GithubUser:
     created_at: datetime.datetime | None = attr.field()
 
     repos_url: str = attr.field()
-
-    async def fetch_repos(self) -> typing.Sequence[GithubRepo]:
-        ...

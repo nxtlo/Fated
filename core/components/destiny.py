@@ -78,7 +78,7 @@ async def _get_destiny_player(
         # If they're not found means there's no player with the given name.
         return player[0]
     except IndexError:
-        raise aiobungie.PlayerNotFound(
+        raise aiobungie.NotFound(
             f"Didn't find player named `{name}` with type `{type}`. "
             "Make sure you include the full name looks like this `Fate#123`"
         ) from None
@@ -94,7 +94,7 @@ async def sync_player(
 ) -> None:
     try:
         player = await _get_destiny_player(client, name, _transform_type(type))
-    except aiobungie.PlayerNotFound as exc:
+    except aiobungie.NotFound as exc:
         await ctx.respond(exc)
         return None
 
@@ -149,7 +149,7 @@ async def profile_command(
 
         try:
             player = await _get_destiny_player(client, player_name, aiobungie.MembershipType.ALL)
-        except aiobungie.PlayerNotFound as exc:
+        except aiobungie.NotFound as exc:
             await ctx.respond(f"{exc}")
             return None
 
@@ -207,7 +207,7 @@ async def get_clan_command(
         else:
             clan: aiobungie.crate.Clan = await client.fetch_clan(query)
 
-    except aiobungie.ClanNotFound as e:
+    except aiobungie.NotFound as e:
         await ctx.respond(f"{e}")
         return None
 

@@ -40,12 +40,11 @@ import humanize as hz
 import psutil
 import tanjun
 
-from tanjun import _backoff as backoff_
+import yuyo
 from aiobungie.internal import time as time_
 from tanjun import abc
 
-from core.utils import cache, format, net, traits
-from core.utils import consts
+from core.utils import cache, format, net, traits, consts
 
 component = tanjun.Component(name="meta")
 prefix_group = component.with_slash_command(
@@ -103,7 +102,7 @@ async def download_song(
                     )
                     return None
 
-        backoff = backoff_.Backoff(max_retries=3)
+        backoff = yuyo.backoff.Backoff(max_retries=3)
         async for _ in backoff:
             try:
                 for file in path.iterdir():
@@ -237,7 +236,7 @@ async def color_fn(ctx: tanjun.abc.MessageContext, color: int) -> None:
 @tanjun.as_message_command("uptime")
 async def uptime(ctx: tanjun.abc.MessageContext) -> None:
     await ctx.respond(
-        f"Been up for {hz.naturaldelta(ctx.client.metadata['uptime'] - datetime.datetime.now())}"
+        f"Been up for {hz.precisedelta(ctx.client.metadata['uptime'] - datetime.datetime.now(), minimum_unit='MINUTES')}"
     )
 
 
@@ -308,21 +307,19 @@ async def avatar_view(ctx: abc.SlashContext, /, member: hikari.Member) -> None:
     embed = hikari.Embed(title=member.username).set_image(avatar)
     await ctx.respond(embed=embed)
 
-@component.with_message_command(copy=True)
-@tanjun.with_greedy_argument("text", converters=(str,))
-@tanjun.with_argument("voice")
-@tanjun.with_parser
-@tanjun.as_message_command("ts")
-async def test_tts(ctx: abc.MessageContext, voice: str, text: str, net_: net.HTTPNet = net.HTTPNet()) -> None:
+@component.with_slash_command(copy=True)
+@tanjun.with_str_slash_option("text", "The text input.")
+@tanjun.with_str_slash_option("voice", "The voice to speak.", choices=consts.iter(consts.TTS))
+@tanjun.as_slash_command("speech", "TTS command.")
+async def test_tts(ctx: abc.SlashContext, voice: str, text: str, net_: net.HTTPNet = net.HTTPNet()) -> None:
     """View of your discord avatar or other member."""
     api = net.Wrapper(net_)
-    for _ in range(3):
-        try:
-            tts = await api.do_tts(voice, text=text)
-        except aiohttp.ContentTypeError:
-            continue
-    await ctx.respond(attachment=tts)
-    return None
+    await ctx.defer()
+    try:
+        tts = await api.do_tts(voice, text=text)
+    except hikari.NotFoundError:
+        pass
+    await ctx.respond(tts)
 
 @component.with_command
 @tanjun.with_greedy_argument("query", converters=(str,))
@@ -335,7 +332,7 @@ async def say_command(ctx: abc.MessageContext, query: str) -> None:
 async def on_message_create(
     event: hikari.GuildMessageCreateEvent,
 ) -> None:
-    if event.is_bot or not event.is_human:
+    if event.is_bot or not event.is_human or event.message.content is None:
         return
 
 @tanjun.as_loader

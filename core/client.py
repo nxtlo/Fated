@@ -44,16 +44,11 @@ if typing.TYPE_CHECKING:
 
 
 async def get_prefix(
-    ctx: tanjun.abc.MessageContext = tanjun.injected(type=tanjun.abc.MessageContext),
+    ctx: tanjun.abc.MessageContext,
     hash: traits.HashRunner[str, hikari.Snowflake, str] = cache.Hash(),
 ) -> str | typing.Sequence[str]:
-    try:
-        guild: hikari.Snowflake = ctx.guild_id or (await ctx.fetch_guild()).id
-    except AttributeError:
-        pass
-    else:
-        if (prefix := await hash.get("prefixes", guild)) is not None:
-            return prefix
+    if (guild := ctx.guild_id) and (prefix := await hash.get("prefixes", guild)) is not None:
+        return prefix
     return ()
 
 
@@ -76,16 +71,16 @@ def build_bot() -> hikari_traits.GatewayBotAware:
 def build_client(bot: hikari_traits.GatewayBotAware) -> tanjun.Client:
     pg_pool = pool_.PgxPool()
     client_session = net.HTTPNet()
-    aiobungie_client = aiobungie.Client(config.BUNGIE_TOKEN, max_retries=6)
+    aiobungie_client = aiobungie.Client(config.BUNGIE_TOKEN, max_retries=2)
     client = (
         tanjun.Client.from_gateway_bot(
             bot,
             mention_prefix=True,
-            declare_global_commands=hikari.Snowflake(815920916043137076),
+            declare_global_commands=hikari.Snowflake(781336284424699906),
         )
         # pg pool
         .set_type_dependency(pool_.PoolT, pg_pool)
-        .add_client_callback(tanjun.ClientCallbackNames.STARTING, pg_pool.create_pool)
+        .add_client_callback(tanjun.ClientCallbackNames.STARTING, pg_pool.create_pool) # type: ignore
         .add_client_callback(tanjun.ClientCallbackNames.CLOSING, pg_pool.close)
         # own aiohttp client session.
         .set_type_dependency(net.HTTPNet, typing.cast(traits.NetRunner, client_session))
@@ -94,7 +89,7 @@ def build_client(bot: hikari_traits.GatewayBotAware) -> tanjun.Client:
         .set_type_dependency(
             traits.HashRunner, cache.Hash[object, object, object](max_connections=20)
         )
-        .set_type_dependency(cache.Memory, cache.Memory[object, object])
+        .set_type_dependency(cache.Memory, cache.Memory[object, object]())
         # aiobungie client
         .set_type_dependency(aiobungie.Client, aiobungie_client)
         .add_client_callback(
@@ -113,7 +108,7 @@ def build_client(bot: hikari_traits.GatewayBotAware) -> tanjun.Client:
         .load_modules("core.components.destiny")
         # Prefix stuff.
         .set_prefix_getter(get_prefix)
-        .add_prefix("?")
+        .add_prefix(".")
     )
 
     client.metadata["uptime"] = datetime.datetime.now()

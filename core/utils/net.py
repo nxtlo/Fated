@@ -41,7 +41,7 @@ import typing
 from http import HTTPStatus as http
 
 import uuid
-import tempfile
+import tempfile # type: ignore[unused-import]
 import aiohttp
 import attr
 import hikari
@@ -52,7 +52,8 @@ from hikari import _about as about
 from hikari.internal.time import (
     fast_iso8601_datetime_string_to_datetime as fast_datetime,
 )
-from tanjun import _backoff as backoff
+
+from yuyo import backoff
 from yarl import URL
 
 from . import consts, interfaces, traits
@@ -63,8 +64,8 @@ if typing.TYPE_CHECKING:
     import tanjun.abc
     from hikari.internal import data_binding
     _GETTER_TYPE = typing.TypeVar("_GETTER_TYPE", covariant=True)
+    DATA_TYPE = dict[str, typing.Any | int | str | hikari.UndefinedType | multidict.CIMultiDictProxy[str]]
 
-DATA_TYPE = dict[str, typing.Any | int | str | hikari.UndefinedType | multidict.CIMultiDictProxy[str]]
 _LOG: typing.Final[logging.Logger] = logging.getLogger(__name__)
 logging.basicConfig(level=logging.DEBUG)
 
@@ -399,7 +400,8 @@ class Wrapper(interfaces.APIWrapper):
             embed.set_author(name=author, url=url)
         return embed
 
-    async def do_tts(self, model: str, *, text: str) -> typing.Any:
+    async def do_tts(self, model: str, *, text: str) -> str | None:
+        print(model, consts.TTS[model])
         async with self._net as cli:
             json = {
                 "inference_text": text,
@@ -426,13 +428,14 @@ class Wrapper(interfaces.APIWrapper):
                     )
                     audio_path = wave['state'].get("maybe_public_bucket_wav_audio_path")
                     final_path = f'https://storage.googleapis.com/vocodes-public{audio_path}'
-                    wave_bytes = await cli.request('GET', final_path, read=True)
-                    if isinstance(wave_bytes, bytes):
-                        tmp = tempfile.TemporaryFile('wb')
-                        with tmp as t:
-                            t.write(wave_bytes)
-                            t.seek(0)
-                        return t
+                    return final_path
+                    #  wave_bytes = await cli.request('GET', final_path, read=True)
+                    #  if isinstance(wave_bytes, bytes):
+                    #      tmp = tempfile.TemporaryFile('wb')
+                    #      with tmp as t:
+                    #          t.write(wave_bytes)
+                    #          t.seek(0)
+                    #      return t
 
     def _set_repo_owner_attrs(self, payload: dict[str, typing.Any]) -> interfaces.GithubUser:
         user: dict[str, typing.Any] = payload
