@@ -33,18 +33,17 @@ import shutil
 import subprocess as sp
 import sys
 import time
-import aiohttp
 
+import aiohttp
 import hikari
 import humanize as hz
 import psutil
 import tanjun
-
 import yuyo
 from aiobungie.internal import time as time_
 from tanjun import abc
 
-from core.utils import cache, format, net, traits, consts
+from core.utils import cache, consts, format, net, traits
 
 component = tanjun.Component(name="meta")
 prefix_group = component.with_slash_command(
@@ -121,12 +120,13 @@ async def download_song(
                             await ctx.respond(format.with_block(sys.exc_info()[1]))
                             return
             except FileNotFoundError:
-                await ctx.respond(
-                    "Encountered an error, Trying again."
-                )
+                await ctx.respond("Encountered an error, Trying again.")
                 continue
             except Exception as exc:
-                raise RuntimeError(f"Error while downloading a song in {ctx.guild_id}") from exc
+                raise RuntimeError(
+                    f"Error while downloading a song in {ctx.guild_id}"
+                ) from exc
+
 
 @component.with_message_command
 @tanjun.as_message_command("ping")
@@ -307,11 +307,16 @@ async def avatar_view(ctx: abc.SlashContext, /, member: hikari.Member) -> None:
     embed = hikari.Embed(title=member.username).set_image(avatar)
     await ctx.respond(embed=embed)
 
+
 @component.with_slash_command(copy=True)
 @tanjun.with_str_slash_option("text", "The text input.")
-@tanjun.with_str_slash_option("voice", "The voice to speak.", choices=consts.iter(consts.TTS))
+@tanjun.with_str_slash_option(
+    "voice", "The voice to speak.", choices=consts.iter(consts.TTS)
+)
 @tanjun.as_slash_command("speech", "TTS command.")
-async def test_tts(ctx: abc.SlashContext, voice: str, text: str, net_: net.HTTPNet = net.HTTPNet()) -> None:
+async def test_tts(
+    ctx: abc.SlashContext, voice: str, text: str, net_: net.HTTPNet = net.HTTPNet()
+) -> None:
     """View of your discord avatar or other member."""
     api = net.Wrapper(net_)
     await ctx.defer()
@@ -321,6 +326,7 @@ async def test_tts(ctx: abc.SlashContext, voice: str, text: str, net_: net.HTTPN
         pass
     await ctx.respond(tts)
 
+
 @component.with_command
 @tanjun.with_greedy_argument("query", converters=(str,))
 @tanjun.with_parser
@@ -328,12 +334,14 @@ async def test_tts(ctx: abc.SlashContext, voice: str, text: str, net_: net.HTTPN
 async def say_command(ctx: abc.MessageContext, query: str) -> None:
     await ctx.respond(query)
 
+
 @component.with_listener(hikari.GuildMessageCreateEvent)
 async def on_message_create(
     event: hikari.GuildMessageCreateEvent,
 ) -> None:
     if event.is_bot or not event.is_human or event.message.content is None:
         return
+
 
 @tanjun.as_loader
 def load_meta(client: tanjun.Client) -> None:

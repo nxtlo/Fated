@@ -132,17 +132,19 @@ async def kick(
         to_respond.append(f" For {reason}.")
     await ctx.respond("".join(to_respond))
 
+
 @component.with_message_command
 @tanjun.with_owner_check
 @tanjun.as_message_command("close", "shutdown")
 async def close_bot(
     _: tanjun.MessageContext,
-    bot: hikari.GatewayBot = tanjun.injected(type=hikari.GatewayBot)
+    bot: hikari.GatewayBot = tanjun.injected(type=hikari.GatewayBot),
 ) -> None:
     try:
         await bot.close()
     except Exception:
         raise
+
 
 @component.with_command
 @tanjun.with_guild_check

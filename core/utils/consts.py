@@ -67,18 +67,19 @@ GENRES: dict[str, int] = {
 """Anime only genres."""
 
 TTS: dict[str, str] = {
-    "Spongebob": 'TM:m2aw3j03asrt',
-    "Mr.krabs": 'TM:p4m33qacqj5v',
-    "Peter Griffin": 'TM:9wqc59heasx8',
-    "The Weekend": 'TM:j9czhrg050ba',
-    'Trump': 'TM:xy6gvtrrhz67',
-    '50cent': 'TM:3cj7r4b4q9ks',
-    "Shaggy": 'TM:vesbrtjvtvsa',
-    'ScoopyDoo': 'TM:3fcxdr8nyvgm',
-    "Dr.Phill": 'TM:p87rnz4t8kgg'
+    "Spongebob": "TM:m2aw3j03asrt",
+    "Mr.krabs": "TM:p4m33qacqj5v",
+    "Peter Griffin": "TM:9wqc59heasx8",
+    "The Weekend": "TM:j9czhrg050ba",
+    "Trump": "TM:xy6gvtrrhz67",
+    "50cent": "TM:3cj7r4b4q9ks",
+    "Shaggy": "TM:vesbrtjvtvsa",
+    "ScoopyDoo": "TM:3fcxdr8nyvgm",
+    "Dr.Phill": "TM:p87rnz4t8kgg",
 }
 
 _K = typing.TypeVar("_K")
+
 
 def iter(map: dict[_K, typing.Any]) -> typing.Sequence[str | _K | typing.Any]:
     return [k for k in map.keys()]

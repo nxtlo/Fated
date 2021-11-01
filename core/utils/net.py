@@ -37,11 +37,11 @@ __all__: tuple[str, ...] = (
 import asyncio
 import logging
 import random as random_
+import tempfile  # type: ignore[unused-import]
 import typing
+import uuid
 from http import HTTPStatus as http
 
-import uuid
-import tempfile # type: ignore[unused-import]
 import aiohttp
 import attr
 import hikari
@@ -52,11 +52,10 @@ from hikari import _about as about
 from hikari.internal.time import (
     fast_iso8601_datetime_string_to_datetime as fast_datetime,
 )
-
-from yuyo import backoff
 from yarl import URL
+from yuyo import backoff
 
-from . import consts, interfaces, traits
+from . import consts, format, interfaces, traits
 
 if typing.TYPE_CHECKING:
     import types
@@ -508,6 +507,60 @@ class Wrapper(interfaces.APIWrapper):
             )) is not None:
                 return self._set_repo_attrs(raw_repo)  # type: ignore
             return None
+
+    async def git_release(self, user: str, repo_name: str, release: str) -> tuple[hikari.Embed, str | None]:
+        embed = hikari.Embed()
+        err: str | None = None
+        async with self._net as cli:
+            try:
+                if (repos := await cli.request("GET", f"https://api.github.com/repos/{user}/{repo_name}/releases")):
+                    assert isinstance(repos, list)
+
+                    repo: dict[str, typing.Any]
+                    for repo in repos:
+                        if repo['tag_name'] == release:
+
+                            repo_author = self._set_repo_owner_attrs(repo['author'])
+                            embed.set_author(
+                                name=f'{repo["tag_name"]} | {repo["name"]}',
+                                url=f'https://github.com/{user}/{repo_name}/releases/tag/{repo["tag_name"]}',
+                                icon=repo_author.avatar_url
+                            )
+
+                            if (body := repo.get("body", hikari.UNDEFINED)) and len(str(body)) <= 4096: 
+                                embed.description = format.with_block(body, lang='md')
+
+                            embed.timestamp = fast_datetime(repo['published_at'])  # type: ignore
+                            (
+                                embed
+                                .add_field(
+                                    "Information",
+                                    f"ID: {repo['id']}\n"
+                                    f"Prerelease: {repo['prerelease']}\n"
+                                    f"Drafted: {repo['draft']}\n"
+                                    f"Branch: {repo['target_commitish']}\n"
+                                    f"[Download zipball]({repo['zipball_url']})\n"
+                                    f"[Download tarball]({repo['tarball_url']})"
+                                )
+                                .add_field(
+                                    "Owner",
+                                    f"Name: [{repo_author.name}]({repo_author.url})\n"
+                                    f"ID: {repo_author.id}\n"
+                                    f"Type: {repo_author.type}"
+                                )
+                            )
+            except (hikari.NotFoundError, hikari.BadRequestError) as exc_:
+                err = exc_.message
+            except Error as exc:
+                err = str(exc.data['message'])
+        return embed, err
+
+
+    async def git_pr(self, pr_number: int) -> hikari.Embed | None:
+        ...
+
+    async def git_issue(self, issue_number: int) -> hikari.Embed | None:
+        ...
 
 @attr.define(weakref_slot=False, repr=False, auto_exc=True)
 class Error(RuntimeError):

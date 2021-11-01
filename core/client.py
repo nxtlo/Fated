@@ -47,7 +47,9 @@ async def get_prefix(
     ctx: tanjun.abc.MessageContext,
     hash: traits.HashRunner[str, hikari.Snowflake, str] = cache.Hash(),
 ) -> str | typing.Sequence[str]:
-    if (guild := ctx.guild_id) and (prefix := await hash.get("prefixes", guild)) is not None:
+    if (guild := ctx.guild_id) and (
+        prefix := await hash.get("prefixes", guild)
+    ) is not None:
         return prefix
     return ()
 
@@ -80,7 +82,7 @@ def build_client(bot: hikari_traits.GatewayBotAware) -> tanjun.Client:
         )
         # pg pool
         .set_type_dependency(pool_.PoolT, pg_pool)
-        .add_client_callback(tanjun.ClientCallbackNames.STARTING, pg_pool.create_pool) # type: ignore
+        .add_client_callback(tanjun.ClientCallbackNames.STARTING, pg_pool.create_pool)  # type: ignore
         .add_client_callback(tanjun.ClientCallbackNames.CLOSING, pg_pool.close)
         # own aiohttp client session.
         .set_type_dependency(net.HTTPNet, typing.cast(traits.NetRunner, client_session))

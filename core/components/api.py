@@ -264,6 +264,24 @@ async def git_repo(
         except hikari.HTTPError:
             raise
 
+@git_group.with_command
+@tanjun.with_str_slash_option("user", "The user or org ot look up.")
+@tanjun.with_str_slash_option("repo", "The repo name to look up.")
+@tanjun.with_str_slash_option("release", "The release tag to get.")
+@tanjun.as_slash_command("release", "Fetch a github project release and returns information about it.")
+async def get_release(ctx: tanjun.SlashContext, user: str, repo: str, release: str, net: net_.HTTPNet = tanjun.injected(type=net_.HTTPNet)) -> None:
+    git = net_.Wrapper(net)
+    try:
+        embed, err = await git.git_release(user, repo, release)
+    except hikari.BadRequestError:
+        return None
+    if embed:
+        await ctx.respond(embed=embed)
+        return
+    elif err:
+        await ctx.respond(err)
+        return None
+
 @tanjun.as_loader
 def load_api(client: tanjun.Client) -> None:
     client.add_component(component.copy())
