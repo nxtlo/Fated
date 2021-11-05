@@ -32,9 +32,6 @@ import pathlib
 import shutil
 import subprocess as sp
 import sys
-import time
-
-import aiohttp
 import hikari
 import humanize as hz
 import psutil
@@ -63,6 +60,7 @@ def _clean_up(path: pathlib.Path) -> None:
 
 
 @component.with_message_command
+@tanjun.with_owner_check
 @tanjun.with_argument("query", converters=(str,))
 @tanjun.with_option("output_format", "--output", "-o", converters=(str,), default="mp3")
 @tanjun.with_parser
@@ -126,22 +124,6 @@ async def download_song(
                 raise RuntimeError(
                     f"Error while downloading a song in {ctx.guild_id}"
                 ) from exc
-
-
-@component.with_message_command
-@tanjun.as_message_command("ping")
-async def ping(ctx: abc.MessageContext) -> None:
-    """Pong."""
-    start_time = time.perf_counter()
-    await ctx.rest.fetch_my_user()
-    time_taken = (time.perf_counter() - start_time) * 1_000
-    heartbeat_latency = (
-        ctx.shards.heartbeat_latency * 1_000 if ctx.shards else float("NAN")
-    )
-    await ctx.respond(
-        f"PONG\n - REST: {time_taken:.0f}ms\n - Gateway: {heartbeat_latency:.0f}ms"
-    )
-
 
 @prefix_group.with_command
 @tanjun.with_guild_check
@@ -209,16 +191,6 @@ async def clear_prefix(
     await ctx.edit_initial_response(
         f"Cleared `{found_prefix}` prefix. You can still use the main prefix which's `?`"
     )
-
-
-@component.with_message_command
-@tanjun.as_message_command("invite")
-async def invite(ctx: tanjun.abc.MessageContext) -> None:
-    """Gets you an invite link for the bot."""
-    me = ctx.cache.get_me() if ctx.cache else await ctx.rest.fetch_my_user()
-    route = f"https://discord.com/api/oauth2/authorize?client_id={me.id}&permissions=0&scope=bot"
-    await ctx.respond(route)
-
 
 @component.with_slash_command
 @tanjun.with_str_slash_option("color", "The color hex code.")
@@ -325,7 +297,6 @@ async def test_tts(
     except hikari.NotFoundError:
         pass
     await ctx.respond(tts)
-
 
 @component.with_command
 @tanjun.with_greedy_argument("query", converters=(str,))

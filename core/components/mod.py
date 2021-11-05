@@ -24,17 +24,25 @@
 from __future__ import annotations
 
 import sys
-
+import typing
 import asyncpg
 import hikari
 import tanjun
+import datetime
+import inspect
+import textwrap
+import io
+import contextlib
+import traceback
+import yuyo
+
 from tanjun import abc
 
 from core.psql import pool as pool_
 from core.utils import format
 
 component = tanjun.Component(name="mod")
-
+stdout: typing.Literal[789614938247266305] = 789614938247266305
 
 @component.with_message_command
 @tanjun.with_owner_check(halt_execution=True)
@@ -197,6 +205,199 @@ async def ban(
         to_respond.append(f" For {reason}.")
     await ctx.respond("".join(to_respond))
 
+# This command perform rest calls to get an uptodate
+# data instead of the cache.
+@component.with_message_command
+@tanjun.with_owner_check
+@tanjun.with_argument("id", default=None, converters=(int,))
+@tanjun.with_parser
+@tanjun.as_message_command("guild")
+async def get_guild(ctx: tanjun.MessageContext, id: hikari.Snowflakeish | int | None) -> None:
+
+    id = id or ctx.guild_id if ctx.guild_id else 411804307302776833
+    backoff = yuyo.Backoff(2)
+    async for _ in backoff:
+        try:
+            guild = await ctx.rest.fetch_guild(hikari.Snowflake(id))
+            guild_owner = await guild.fetch_owner()
+
+        except hikari.ForbiddenError as exc:
+            # not in guild most likely or missin access.
+            await ctx.respond(exc.message + '.')
+            return
+
+        # Ratelimited... somehow.
+        except hikari.RateLimitedError as exc:
+            backoff.set_next_backoff(exc.retry_after)
+
+        # 5xx, continue.
+        except hikari.InternalServerError:
+            pass
+
+        # Other errors. break.
+        else:
+            embed = hikari.Embed(title=guild.name, description=guild.id)
+            if guild.icon_url:
+                embed.set_thumbnail(guild.icon_url)
+            (
+                embed
+                .add_field("Information",
+                f"Members: {len(guild.get_members())}\n"
+                f"Created at: {guild.created_at}\n"
+                )
+                .add_field(
+                    "Owner",
+                    f"Name: {guild_owner.username}\n"
+                    f"ID: {guild_owner.id}"
+                )
+            )
+            await ctx.respond(embed=embed)
+            return
+
+@component.with_message_command
+@tanjun.with_owner_check
+@tanjun.as_message_command("guilds")
+async def get_guilds(ctx: tanjun.MessageContext) -> None:
+    guilds = ctx.cache.get_available_guilds_view()
+    embed = hikari.Embed(
+        description=format.with_block("\n".join(
+            f'{id}::{guild.name}::{len(guild.get_members())}' for id, guild in guilds.items()
+            ),
+        lang="css"
+        )
+    )
+    await ctx.respond(embed=embed)
+
+@component.with_listener(hikari.GuildJoinEvent)
+async def when_join_guilds(event: hikari.GuildJoinEvent) -> None:
+    guild = await event.fetch_guild()
+    guild_owner = await guild.fetch_owner()
+    embed = hikari.Embed(
+        title=f'{guild.name} | {guild.id}',
+        description="Joined a guild.",
+        timestamp=datetime.datetime.utcnow().astimezone(datetime.timezone.utc)
+    )
+    if guild.icon_url:
+        embed.set_thumbnail(guild.icon_url)
+    (
+        embed
+        .add_field("Member count", str(len(guild.get_members())))
+        .add_field("Created at", str(guild.created_at))
+        .add_field(
+            "Owner",
+            f"Name: {guild_owner.username}\n"
+            f"ID: {guild_owner.id}"
+        )
+    )
+    channel = typing.cast(hikari.TextableChannel, await event.app.rest.fetch_channel(stdout))
+    await channel.send(embed=embed)
+
+@component.with_listener(hikari.GuildLeaveEvent)
+async def when_leave_guilds(event: hikari.GuildLeaveEvent) -> None:
+    guild = event.old_guild
+    channel = typing.cast(hikari.TextableChannel, await event.app.rest.fetch_channel(stdout))
+    if guild:
+        embed = hikari.Embed(
+            title=f'{guild.name} | {guild.id}',
+            description="Left a guild.",
+            timestamp=datetime.datetime.utcnow().astimezone(datetime.timezone.utc))
+        embed.add_field("Created at", str(guild.created_at))
+        await channel.send(embed=embed)
+        return
+    await channel.send(f"Left from `UNDEFINED` guild {event.guild_id}")
+
+# Typed and adopted from RoboDanny <3
+@component.with_message_command
+@tanjun.with_owner_check
+@tanjun.with_greedy_argument("body", converters=(str,))
+@tanjun.with_parser
+@tanjun.as_message_command("eval")
+async def eval_command(ctx: tanjun.MessageContext, body: str, bot: hikari.GatewayBot = tanjun.inject(type=hikari.GatewayBot)) -> None:
+    """Evaluates python code"""
+    env = {
+        "ctx": ctx,
+        "bot": bot,
+        "channel": ctx.get_channel(),
+        "author": ctx.author,
+        "guild": ctx.get_guild(),
+        "message": ctx.message,
+        "source": inspect.getsource,
+    }
+
+    def cleanup_code(content: str) -> str:
+        """Automatically removes code blocks from the code."""
+        # remove ```py\n```
+        if content.startswith("```") and content.endswith("```"):
+            return "\n".join(content.split("\n")[1:-1])
+
+        return content.strip("` \n")
+
+    env.update(globals())
+
+    body = cleanup_code(body)
+    stdout = io.StringIO()
+    err = out = None
+
+    to_compile = f'async def func():\n{textwrap.indent(body, "  ")}'
+
+    def paginate(text: str) -> list[str]:
+        """Simple generator that paginates text."""
+        last = 0
+        pages: set[str] = set()
+        for curr in range(0, len(text)):
+            if curr % 1980 == 0:
+                pages.add(text[last:curr])
+                last = curr
+                appd_index = curr
+        if appd_index != len(text) - 1:
+            pages.add(text[last:curr])
+            print(pages)
+        return list(filter(lambda a: a != "", pages))
+
+    try:
+        exec(to_compile, env)
+    except Exception as e:
+        err = await ctx.respond(f"```py\n{e.__class__.__name__}: {e}\n```")
+        return await ctx.message.add_reaction("\u2049")
+
+    func = env["func"]
+    try:
+        with contextlib.redirect_stdout(stdout):
+            ret = await func()  # type: ignore
+    except Exception as e:
+        value = stdout.getvalue()
+        err = await ctx.respond(f"```py\n{value}{traceback.format_exc()}\n```")
+    else:
+        value = stdout.getvalue()
+        if ret is None:
+            if value:
+                try:
+
+                    out = await ctx.respond(f"```py\n{value}\n```")
+                except:
+                    paginated_text = paginate(value)
+                    for page in paginated_text:
+                        if page == paginated_text[-1]:
+                            out = await ctx.respond(f"```py\n{page}\n```")
+                            break
+                        await ctx.respond(f"```py\n{page}\n```")
+        else:
+            try:
+                out = await ctx.respond(f"```py\n{value}{ret}\n```")
+            except:
+                paginated_text = paginate(f"{value}{ret}")
+                for page in paginated_text:
+                    if page == paginated_text[-1]:
+                        out = await ctx.respond(f"```py\n{page}\n```")
+                        break
+                    await ctx.respond(f"```py\n{page}\n```")
+
+    if out:
+        await ctx.message.add_reaction("\u2705")  # tick
+    elif err:
+        await ctx.message.add_reaction("\u2049")  # x
+    else:
+        await ctx.message.add_reaction("\u2705")
 
 @tanjun.as_loader
 def load_mod(client: tanjun.Client) -> None:

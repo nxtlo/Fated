@@ -108,6 +108,7 @@ def build_client(bot: hikari_traits.GatewayBotAware) -> tanjun.Client:
         .load_modules("core.components.mod")
         .load_modules("core.components.api")
         .load_modules("core.components.destiny")
+        .load_modules("core.components.git")
         # Prefix stuff.
         .set_prefix_getter(get_prefix)
         .add_prefix(".")
@@ -135,7 +136,7 @@ def init() -> None:
     try:
         loop.run_until_complete(pool_.PgxPool.create_pool(build=True))
     except Exception:
-        click.echo("Couldn't build the daatabse tables.", err=True)
+        click.echo("Couldn't build the daatabse tables.", err=True, color=True)
         traceback.print_exc()
 
 
