@@ -33,7 +33,7 @@ import attr
 from hikari import config as hikari_config
 
 
-@attr.define(repr=False, weakref_slot=False, slots=True)
+@attr.frozen(repr=False, weakref_slot=False)
 class Config:
     """Handle the bot's configs."""
 
