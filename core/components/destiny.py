@@ -96,7 +96,7 @@ async def sync_player(
         player = await _get_destiny_player(client, name, _transform_type(type))
     except aiobungie.NotFound as exc:
         await ctx.respond(exc)
-        return None
+        return
 
     try:
         await pool.execute(
@@ -105,7 +105,7 @@ async def sync_player(
         )
     except asyncpg.exceptions.UniqueViolationError:
         await ctx.respond("You're already synced.")
-        return None
+        return
 
     await ctx.respond(f"Synced `{player.unique_name}` | `{player.id}`, `/destiny profile` to view your profile")
 
@@ -124,7 +124,7 @@ async def desync_command(
         await ctx.respond("Successfully desynced your membership.")
     else:
         await ctx.respond("You're not already synced.")
-        return None
+        return
 
 @destiny_group.with_command
 @tanjun.with_member_slash_option("member", "An optional discord member to get their profile.", default=None)
@@ -151,11 +151,11 @@ async def profile_command(
             player = await _get_destiny_player(client, player_name, aiobungie.MembershipType.ALL)
         except aiobungie.NotFound as exc:
             await ctx.respond(f"{exc}")
-            return None
+            return
 
-        if ctx.cache is not None or ctx.guild_id is not None:
-            member_colour = ctx.cache.get_member(ctx.get_guild().id, ctx.author).get_top_role().colour
-        embed = hikari.Embed(colour=member_colour)
+        if ctx.member and (role_colour := ctx.member.get_top_role()):
+            member_colour = role_colour
+        embed = hikari.Embed(colour=member_colour.colour)
         (
             embed
             .set_author(name=player.last_seen_name, icon=str(player.icon), url=player.link)
@@ -235,7 +235,7 @@ async def get_clan_command(
         .set_footer(", ".join(clan.tags))
     )
 
-    if isinstance(clan.owner, aiobungie.crate.ClanMember):
+    if clan.owner:
         owner_name = (
             f'{clan.owner.last_seen_name}#{clan.owner.code if clan.owner.code else ""}'
         )

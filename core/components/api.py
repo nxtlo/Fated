@@ -25,8 +25,8 @@
 
 from __future__ import annotations
 
-import json
 import typing
+
 import hikari
 import tanjun
 
@@ -34,6 +34,7 @@ from core.utils import consts, format
 from core.utils import net as net_
 
 component = tanjun.Component(name="api")
+
 
 @component.with_slash_command
 @tanjun.with_str_slash_option("name", "The anime's name.", default=None)
@@ -58,6 +59,7 @@ async def get_anime(
     if anime:
         await ctx.respond(embed=anime)
     return None
+
 
 @component.with_slash_command
 @tanjun.with_str_slash_option("name", "The manga name")
@@ -93,7 +95,7 @@ async def define(
 @component.with_message_command
 @tanjun.with_owner_check(halt_execution=True)
 @tanjun.with_greedy_argument("url", converters=str)
-@tanjun.with_option("method", "--method", "-m", default=None)
+@tanjun.with_option("method", "--method", "-m", default='GET')
 @tanjun.with_option("getter", "--get", "-g", default=None)
 @tanjun.with_parser
 @tanjun.as_message_command("net")
@@ -104,37 +106,24 @@ async def run_net(
     method: typing.Literal["GET", "POST"] = "GET",
     net: net_.HTTPNet = net_.HTTPNet(),
 ) -> None:
-    """Make a GET http request to an api or else.
-
-    Note: The api must be application/json type.
-
-    TODO: make this command with options for POST and GET methods maybe?
-
-    Parameters:
-        url : str
-            The api url to call.
-        net : HTTPNet
-            The http client we're making the request with.
-        --get | -g:
-            An optional key to get.
-        --method | -m:
-            The request method.
-    """
     async with net as cli:
         try:
             result = await cli.request(method, url, getter=getter)
-            formatted = format.with_block(json.dumps(result, sort_keys=True), lang="json")
-
-        except Exception:
+        except net_.Error:
             await ctx.respond(format.error(str=True))
+            return
         try:
+            formatted = format.with_block(result, lang="json")
             await ctx.respond(formatted)
         except hikari.HikariError:
             await ctx.respond(format.error(str=True))
+        except Exception:
+            pass
 
 @tanjun.as_loader
 def load_api(client: tanjun.Client) -> None:
     client.add_component(component.copy())
+
 
 @tanjun.as_unloader
 def unload_examples(client: tanjun.Client) -> None:

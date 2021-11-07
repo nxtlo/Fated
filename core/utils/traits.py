@@ -28,15 +28,12 @@ __all__: tuple[str, ...] = ("PoolRunner", "NetRunner", "HashRunner")
 
 import typing
 
-from hikari.internal.fast_protocol import FastProtocolChecking
+from hikari.internal import fast_protocol as fast
 
 # Hash types.
 HashT = typing.TypeVar("HashT")
-"""A type hint for the hash name."""
 FieldT = typing.TypeVar("FieldT")
-"""A type hint for the hash field."""
 ValueT = typing.TypeVar("ValueT")
-"""A type hint for the hash value."""
 
 if typing.TYPE_CHECKING:
     import aiohttp
@@ -48,25 +45,14 @@ if typing.TYPE_CHECKING:
 
     _GETTER_TYPE = typing.TypeVar("_GETTER_TYPE", covariant=True)
 
-# fmt: off
+
 @typing.runtime_checkable
-class HashRunner(typing.Generic[HashT, FieldT, ValueT], FastProtocolChecking, typing.Protocol):
-# fmt: on
-    """A Basic generic Implementation of redis hash protocol.
+class HashRunner(
+    typing.Generic[HashT, FieldT, ValueT], fast.FastProtocolChecking, typing.Protocol
+):
+    """A Basic generic Implementation of redis hash protocol."""
 
-    Example
-    -------
-    ```py
-    async def func() -> None:
-        # `str` is the name of the hash, `hikari.Snowflake` is the key, `hikari.Member` is the value.
-        cache: HashRunner[str, hikari.SnowFlake, hikari.Member] = cache.Hash()
-        member = await rest.fetch_member(...)
-        await cache.set("members", member.id, member)
-        get_member = await cache.get("members", member.id) -> hikari.Member(...)
-    ```
-    """
-
-    __slots__: typing.Sequence[str] = ()
+    __slots__ = ()
 
     async def set(self, hash: HashT, field: FieldT, value: ValueT) -> None:
         """Creates a new hash with field name and a value."""
@@ -99,14 +85,14 @@ class HashRunner(typing.Generic[HashT, FieldT, ValueT], FastProtocolChecking, ty
 
 
 @typing.runtime_checkable
-class PoolRunner(FastProtocolChecking, typing.Protocol):
+class PoolRunner(fast.FastProtocolChecking, typing.Protocol):
     """A typed asyncpg pool protocol."""
 
-    __slots__: typing.Sequence[str] = ()
+    __slots__ = ()
 
     @property
     def pool(self) -> asyncpg.Pool | None:
-        """Access to `self._pool`."""
+        raise NotImplementedError
 
     @classmethod
     async def create_pool(cls, *, build: bool = False) -> PoolRunner:
@@ -120,29 +106,14 @@ class PoolRunner(FastProtocolChecking, typing.Protocol):
 
         Returns
         --------
-        `PoolRunner`
-            The class itself.
+        `Self`
+            The pool.
         """
 
     async def execute(
         self, sql: str, /, *args: typing.Any, timeout: float | None = None
     ) -> None:
-        """A typed asyncpg execute method.
-
-        Parameters
-        -----------
-        sql : `str`
-            The sql query.
-        args : `typing.Any`
-            A sequence of any arguments.
-        timeout : `float` | `None`
-            An execution timeout.
-
-        Returns
-        -------
-        `builtins.NoneType`
-            None
-        """
+        raise NotImplementedError
 
     async def fetch(
         self,
@@ -151,22 +122,7 @@ class PoolRunner(FastProtocolChecking, typing.Protocol):
         *args: typing.Any,
         timeout: float | None = None,
     ) -> list[asyncpg.Record]:
-        """A typed asyncpg fetch method.
-
-        Parameters
-        ----------
-        sql : `str`
-            The sql query
-        args : `typing.Any`
-            A sequence of any arguments.
-        timeout : `float` | `None`
-            An execution timeout.
-
-        Returns
-        -------
-        `typing.List[asyncpg.Record]`
-            A typing of an asyncpg Records.
-        """
+        raise NotImplementedError
 
     async def fetchrow(
         self,
@@ -175,22 +131,7 @@ class PoolRunner(FastProtocolChecking, typing.Protocol):
         *args: typing.Any,
         timeout: float | None = None,
     ) -> list[asyncpg.Record] | dict[typing.Any, typing.Any]:
-        """A typed asyncpg fetchrow method.
-
-        Parameters
-        ----------
-        sql : `str`
-            The sql query
-        args : `typing.Any`
-            A sequence of any arguments.
-        timeout : `float` | `None`
-            An execution timeout.
-
-        Returns
-        -------
-        `typing.List[asyncpg.Record]`
-            The first row found in an asyncpg Record.
-        """
+        raise NotImplementedError
 
     async def fetchval(
         self,
@@ -200,36 +141,21 @@ class PoolRunner(FastProtocolChecking, typing.Protocol):
         column: int | None = None,
         timeout: float | None = None,
     ) -> typing.Any:
-        """A typed asyncpg fetchval method.
-
-        Parameters
-        ----------
-        sql : `str`
-            The sql query
-        args : `typing.Any`
-            A sequence of any arguments.
-        timeout : `float` | `None`
-            An execution timeout.
-
-        Returns
-        -------
-        `typing.Any`
-            First Any value found in the first record.
-        """
+        raise NotImplementedError
 
     async def close(self) -> None:
-        """Closes the database."""
+        raise NotImplementedError
 
     @staticmethod
     def tables() -> str:
-        """The sql schema file"""
+        raise NotImplementedError
 
 
 @typing.runtime_checkable
-class NetRunner(FastProtocolChecking, typing.Protocol):
+class NetRunner(fast.FastProtocolChecking, typing.Protocol):
     """An interface for our http client."""
 
-    __slots__: typing.Sequence[str] = ()
+    __slots__ = ()
 
     async def acquire(self) -> None:
         """Acquires the session if its closed or set to None."""
@@ -241,8 +167,7 @@ class NetRunner(FastProtocolChecking, typing.Protocol):
         self,
         method: typing.Literal["GET", "POST", "PUT", "DELETE", "PATCH"],
         url: str | yarl.URL,
-        read: bool = False,
-        getter: typing.Any | _GETTER_TYPE | bytes | None = None,
+        getter: typing.Any | _GETTER_TYPE | None = None,
         **kwargs: typing.Any,
     ) -> data_binding.JSONArray | data_binding.JSONObject | _GETTER_TYPE | None:
         """Perform an http request
@@ -265,7 +190,7 @@ class NetRunner(FastProtocolChecking, typing.Protocol):
             if your data is a dict[..., ...] You can use this
             parameter to get something specific value from the dict
             This is equl to `request['key']` -> `request(getter='key')`
-        kwargs : `typing.Any`
+        **kwargs : `typing.Any`
             Other keyword arguments you can pass to the request.
         """
 

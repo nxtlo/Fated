@@ -24,6 +24,7 @@
 from __future__ import annotations
 
 import datetime
+import logging
 import subprocess
 import traceback
 import typing
@@ -32,7 +33,7 @@ import aiobungie
 import click
 import hikari
 import tanjun
-from hikari.internal import aio
+from hikari.internal import aio, ux
 
 from core.psql import pool as pool_
 from core.utils import cache
@@ -54,7 +55,7 @@ async def get_prefix(
     return ()
 
 
-def build_bot() -> hikari_traits.GatewayBotAware:
+def build_bot() -> hikari.impl.GatewayBot:
     # This is only global to pass it between
     # The bot and the client
     global config
@@ -62,6 +63,7 @@ def build_bot() -> hikari_traits.GatewayBotAware:
 
     intents = hikari.Intents.ALL_GUILDS | hikari.Intents.ALL_MESSAGES
     bot = hikari.GatewayBot(
+        banner=None,
         token=config.BOT_TOKEN,
         intents=intents,
         cache_settings=hikari.CacheSettings(components=config.CACHE),
@@ -73,7 +75,7 @@ def build_bot() -> hikari_traits.GatewayBotAware:
 def build_client(bot: hikari_traits.GatewayBotAware) -> tanjun.Client:
     pg_pool = pool_.PgxPool()
     client_session = net.HTTPNet()
-    aiobungie_client = aiobungie.Client(config.BUNGIE_TOKEN, max_retries=2)
+    aiobungie_client = aiobungie.Client(config.BUNGIE_TOKEN, max_retries=4)
     client = (
         tanjun.Client.from_gateway_bot(
             bot,
@@ -118,12 +120,24 @@ def build_client(bot: hikari_traits.GatewayBotAware) -> tanjun.Client:
     return client
 
 
+def _enable_logging(
+    hikari: bool = False, net: bool = False, aiobungie: bool = False
+) -> None:
+    if hikari:
+        logging.getLogger("hikari.rest").setLevel(ux.TRACE)
+        logging.getLogger("hikari.cache").setLevel(logging.DEBUG)
+    if net:
+        logging.getLogger("core.net").setLevel(logging.DEBUG)
+    if aiobungie:
+        logging.getLogger("aiobungie.rest").setLevel(logging.DEBUG)
+
+
 @click.group(name="main", invoke_without_command=True, options_metavar="[options]")
 @click.pass_context
 def main(ctx: click.Context) -> None:
+    _enable_logging(False, True, True)
     if ctx.invoked_subcommand is None:
-        build_bot().run()
-
+        build_bot().run(status=hikari.Status.DO_NOT_DISTURB)
 
 @main.group(short_help="Handles the db configs.", options_metavar="[options]")
 def db() -> None:

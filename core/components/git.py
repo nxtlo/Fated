@@ -25,14 +25,16 @@
 
 from __future__ import annotations
 
-import typing
 import asyncio
+import itertools
+import typing
+
 import hikari
 import tanjun
-import itertools
 
 from core.utils import interfaces
 from core.utils import net as net_
+
 component = tanjun.Component(name="git")
 git_group = component.with_slash_command(
     tanjun.SlashCommandGroup("git", "Commands related to github.")

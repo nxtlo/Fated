@@ -40,7 +40,7 @@ if typing.TYPE_CHECKING:
 _T = typing.TypeVar("_T")
 
 
-@attr.define(weakref_slot=False, hash=False, repr=True)
+@attr.mutable(weakref_slot=False, hash=False, repr=True)
 class HashView(typing.Generic[_T]):
     key: _T = attr.field()
     value: _T = attr.field()
@@ -49,7 +49,7 @@ class HashView(typing.Generic[_T]):
 class APIWrapper(abc.ABC):
     """An abctract interface for our wrapper class."""
 
-    __slots__: typing.Sequence[str] = ()
+    __slots__ = ()
 
     @abc.abstractmethod
     async def get_anime(
@@ -60,122 +60,33 @@ class APIWrapper(abc.ABC):
         random: bool | None = None,
         genre: str,
     ) -> hikari.Embed | None:
-        """Fetch an anime from jikan api.
-
-        Parameters
-        ----------
-        _ | ctx : `tanjun.abc.SlashContext`
-            The discord slash context.
-        name : `str` | `None`
-            The anime name. If kept to None, A random anime will be returned.
-        genre : `str`
-            The anime's genre. If kept to None. A random genre will be selected.
-
-        Notes
-        -----
-        * If random was `True` and genre is `None`,
-        A random anime with a random genre will be returned.
-
-        * If random was `None` and the genre is selected.
-        A random anime based on the selected genre will be returned.
-
-        Returns
-        -------
-        `hikari.Embed`
-            A hikari embed contains the anime data
-            if the the request was succesfulanime was found.
-        `None`
-            The anime was not found.
-        """
+        raise NotImplementedError
 
     @abc.abstractmethod
     async def get_manga(
         self, _: tanjun.abc.SlashContext, name: str, /
     ) -> hikari.Embed | None:
-        """Fetch an manga from jikan api and returns the first one found.
-
-        Parameters
-        ----------
-        _ | ctx : `tanjun.abc.SlashContext`
-            The discord's slash context.
-        name : `str`
-            The manga name.
-
-        Returns
-        -------
-        hikari.Embed
-            A hikari embed contains the manga data
-            if the the request was successful manga was found.
-        `None`
-            The manga was not found.
-        """
+        raise NotImplementedError
 
     @abc.abstractmethod
     async def get_definition(
         self, ctx: tanjun.abc.SlashContext, name: str
     ) -> hikari.Embed | None:
-        """Get the definition by its name from urban dictionary.
-
-        Parameters
-        ----------
-        ctx : `tanjun.abc.SlashContext`
-            The discord's slash context.
-        name : `str`
-            The name of the definition.
-
-        Returns
-        -------
-        `hikari.Embed`
-            A hikari embed contains the definition data
-            if the the request was successful definition was found.
-        `None`
-            The definition was not found.
-        """
-
-    @abc.abstractmethod
-    async def do_tts(self, model: str, *, text: str) -> typing.Any:
-        ...
+        raise NotImplementedError
 
     @abc.abstractmethod
     async def get_git_user(self, name: str) -> GithubUser | None:
-        """Fetch a Github user.
-
-        Parameters
-        -----------
-        name : `str`
-            The user name.
-
-        Returns
-        --------
-        `GithubUser`
-            A github user object.
-        """
+        raise NotImplementedError
 
     @abc.abstractmethod
     async def get_git_repo(self, name: str) -> typing.Sequence[GithubRepo] | None:
-        """Fetch a Github repo.
-
-        Parameters
-        -----------
-        name : `str`
-            The repo name.
-
-        Returns
-        --------
-        `GithubRepo`
-            A github repo object
-        """
-
-
-# TODO: impl this for github component.
+        raise NotImplementedError
 
 
 @attr.define(hash=False, weakref_slot=False, kw_only=True)
 class GithubRepo:
-    """Represents a repo on github."""
 
     owner: GithubUser | None = attr.field(repr=True)
-    """The repo's owner."""
 
     id: int = attr.field()
 
@@ -211,11 +122,6 @@ class GithubRepo:
 
 @attr.define(hash=False, weakref_slot=False, kw_only=True, repr=False)
 class GithubUser:
-    """Represents a user on github."""
-
-    # We only care about the fields we need.
-
-    api: APIWrapper = attr.field()
 
     name: hikari.UndefinedOr[str] = attr.field(repr=True)
 

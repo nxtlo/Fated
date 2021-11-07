@@ -37,9 +37,8 @@ __all__: tuple[str, ...] = (
 import asyncio
 import logging
 import random as random_
-import tempfile  # type: ignore[unused-import]
 import typing
-import uuid
+from collections import abc as collections
 from http import HTTPStatus as http
 
 import aiohttp
@@ -52,7 +51,7 @@ from hikari import _about as about
 from hikari.internal.time import (
     fast_iso8601_datetime_string_to_datetime as fast_datetime,
 )
-from yarl import URL
+import yarl
 from yuyo import backoff
 
 from . import consts, format, interfaces, traits
@@ -65,41 +64,18 @@ if typing.TYPE_CHECKING:
     _GETTER_TYPE = typing.TypeVar("_GETTER_TYPE", covariant=True)
     DATA_TYPE = dict[str, typing.Any | int | str | hikari.UndefinedType | multidict.CIMultiDictProxy[str]]
 
-_LOG: typing.Final[logging.Logger] = logging.getLogger(__name__)
-logging.basicConfig(level=logging.DEBUG)
-
-class _Rely:
-
-    __slots__: typing.Sequence[str] = ("_lock",)
-
-    def __init__(self) -> None:
-
-        self._lock = asyncio.Lock()
-
-    async def __aenter__(self) -> None:
-        await self.acquire()
-
-    async def __aexit__(
-        self,
-        _: BaseException | None,
-        __: BaseException | None,
-        ___: types.TracebackType | None,
-    ) -> None:
-        self._lock.release()
-
-    async def acquire(self) -> None:
-        await self._lock.acquire()
-
-
-rely = _Rely()
+_LOG: typing.Final[logging.Logger] = logging.getLogger("core.net")
+_LOG.setLevel(logging.DEBUG)
 
 class HTTPNet(traits.NetRunner):
     """A client to make http requests with."""
 
-    __slots__: typing.Sequence[str] = ("_session",)
+    __slots__: typing.Sequence[str] = ("_session", "_lock")
+    __rest = hikari.impl.RESTClientImpl
 
-    def __init__(self) -> None:
+    def __init__(self, lock: asyncio.Lock | None = None) -> None:
         self._session: hikari.UndefinedOr[aiohttp.ClientSession] = hikari.UNDEFINED
+        self._lock = lock
 
     async def acquire(self) -> None:
         if self._session is hikari.UNDEFINED:
@@ -117,31 +93,32 @@ class HTTPNet(traits.NetRunner):
     async def request(
         self,
         method: typing.Literal["GET", "POST", "PUT", "DELETE", "PATCH"],
-        url: str | URL,
-        read: bool = False,
+        url: str | yarl.URL,
         getter: _GETTER_TYPE | None = None,
         **kwargs: typing.Any,
-    ) -> data_binding.JSONObject | data_binding.JSONArray | bytes | _GETTER_TYPE | None:
-        async with rely:
-            return await self.__request(method, url, read, getter, **kwargs)
+    ) -> data_binding.JSONObject | data_binding.JSONArray | _GETTER_TYPE | None:
+        if not self._lock:
+            self._lock = asyncio.Lock()
+        async with self._lock:
+            return await self.__request(method, url, getter, **kwargs)
 
     @typing.final
     async def __request(
         self,
         method: typing.Literal["GET", "POST", "PUT", "DELETE", "PATCH"],
-        url: str | URL,
-        read: bool = False,
+        url: str | yarl.URL,
         getter: _GETTER_TYPE | None = None,
         **kwargs: typing.Any,
-    ) -> data_binding.JSONObject | data_binding.JSONArray | bytes | _GETTER_TYPE | None:
+    ) -> data_binding.JSONObject | data_binding.JSONArray | _GETTER_TYPE | None:
 
-        data: data_binding.JSONObject | data_binding.JSONArray | bytes | _GETTER_TYPE | None = None
+        data: data_binding.JSONObject | data_binding.JSONArray | _GETTER_TYPE | None = None
         backoff_ = backoff.Backoff(max_retries=6)
 
         user_agent: typing.Final[
             str
         ] = f"Fated DiscorsBot Hikari/{about.__version__}"
 
+        headers: collections.Mapping[str, str]
         kwargs["headers"] = headers = {}
         headers["User-Agent"] = user_agent
 
@@ -149,18 +126,14 @@ class HTTPNet(traits.NetRunner):
             async for _ in backoff_:
                 try:
                     async with self._session.request(  # type: ignore
-                        method, URL(url) if type(url) is URL else url, **kwargs
+                        method, yarl.URL(url) if type(url) is yarl.URL else url, **kwargs
                     ) as response:
-
                         if http.MULTIPLE_CHOICES > response.status >= http.OK:
-                            _LOG.debug(
-                                f"{method} Request Success from {str(response.real_url)}"
-                            )
-
-                            if read is True:
-                                return await response.read()
-
                             data = await response.json(encoding="utf-8")
+                            _LOG.debug(
+                                f"{method} Request Success from {str(response.real_url)} "
+                                f"{self.__rest._stringify_http_message(response.headers, data)} "
+                            )
                             if data is None:
                                 return None
 
@@ -173,12 +146,13 @@ class HTTPNet(traits.NetRunner):
                                     )
 
                             return data
-
                         await self.error_handle(response)
 
+                # Handle the ratelimiting.
                 except RateLimited as exc:
-                    _LOG.warn(
-                        f"We're being ratelimited for {exc.retry_after:,}: {exc.message}"
+                    _LOG.warning(
+                        f"We're being ratelimited for {exc.retry_after:,}: {exc.message} "
+                        f"{exc.data['headers']}, {method}::{exc.data['url']}"
                     )
                     backoff_.set_next_backoff(exc.retry_after)
 
@@ -203,16 +177,9 @@ class HTTPNet(traits.NetRunner):
         raise await acquire_errors(response)
 
 class Wrapper(interfaces.APIWrapper):
-    """Wrapped around different apis.
+    """A wrapper around different apis."""
 
-    Attributes
-    ----------
-    client : `tairs.NetRunner`
-        The aiohttp client runner.
-        This always defaults to `net.HTTPNet` is should not be modified.
-    """
-
-    __slots__: typing.Sequence[str] = ("_net",)
+    __slots__ = ("_net",)
 
     def __init__(self, client: HTTPNet) -> None:
         self._net = client
@@ -399,50 +366,12 @@ class Wrapper(interfaces.APIWrapper):
             embed.set_author(name=author, url=url)
         return embed
 
-    async def do_tts(self, model: str, *, text: str) -> str | None:
-        print(model, consts.TTS[model])
-        async with self._net as cli:
-            json = {
-                "inference_text": text,
-                "tts_model_token": consts.TTS[model],
-                "uuid_idempotency_token": str(uuid.uuid4())
-            }
-            resp = await cli.request(
-                "POST",
-                "https://api.fakeyou.com/tts/inference",
-                json=json
-            )
-            if (job_token := resp.get("inference_job_token")):
-                wave = await cli.request(
-                    "GET",
-                    f"https://api.fakeyou.com/tts/job/{job_token}"
-                )
-                if isinstance(wave, dict):
-                    if (audio_path := wave['state'].get("maybe_public_bucket_wav_audio_path")) is None:
-                        await asyncio.sleep(2)
-                    # We need to make 2 requests here while the audio is being uploaded.
-                    wave = await cli.request(
-                        "GET",
-                        f"https://api.fakeyou.com/tts/job/{job_token}"
-                    )
-                    audio_path = wave['state'].get("maybe_public_bucket_wav_audio_path")
-                    final_path = f'https://storage.googleapis.com/vocodes-public{audio_path}'
-                    return final_path
-                    #  wave_bytes = await cli.request('GET', final_path, read=True)
-                    #  if isinstance(wave_bytes, bytes):
-                    #      tmp = tempfile.TemporaryFile('wb')
-                    #      with tmp as t:
-                    #          t.write(wave_bytes)
-                    #          t.seek(0)
-                    #      return t
-
     def _set_repo_owner_attrs(self, payload: dict[str, typing.Any]) -> interfaces.GithubUser:
         user: dict[str, typing.Any] = payload
         created_at: datetime.datetime | None = None
         if(raw_created := user.get('created_at')):
             created_at = fast_datetime(raw_created)  # type: ignore
         user_obj = interfaces.GithubUser(
-            api=self,
             name=user.get("login", hikari.UNDEFINED),
             id=user["id"],
             url=user['html_url'],
@@ -495,7 +424,9 @@ class Wrapper(interfaces.APIWrapper):
 
     async def get_git_user(self, name: str, /) -> interfaces.GithubUser | None:
         async with self._net as cli:
-            if(raw_user := await cli.request("GET", URL(consts.API['git']['user']) / name)) is not None:
+            if(raw_user := await cli.request(
+                "GET",
+                yarl.URL(consts.API['git']['user']) / name)) is not None:
                 return self._set_repo_owner_attrs(raw_user)  # type: ignore
             return None
 
@@ -555,18 +486,10 @@ class Wrapper(interfaces.APIWrapper):
                 err = str(exc.data['message'])
         return embed, err
 
-
-    async def git_pr(self, pr_number: int) -> hikari.Embed | None:
-        ...
-
-    async def git_issue(self, issue_number: int) -> hikari.Embed | None:
-        ...
-
 @attr.define(weakref_slot=False, repr=False, auto_exc=True)
 class Error(RuntimeError):
     """Main error class."""
     data: DATA_TYPE = attr.field()
-
 
 @attr.define(weakref_slot=False, repr=False, auto_exc=True)
 class Unauthorized(Error):
@@ -580,7 +503,7 @@ class NotFound(Error):
 class RateLimited(Error):
     data: DATA_TYPE = attr.field()
     retry_after: float = attr.field()
-    message: str = attr.field()
+    message: hikari.UndefinedOr[str] = attr.field()
 
 @attr.define(weakref_slot=False, repr=False, auto_exc=True)
 class BadRequest(Error):
@@ -596,6 +519,8 @@ class InternalError(Error):
     data: DATA_TYPE = attr.field()
 
 async def acquire_errors(response: aiohttp.ClientResponse, /) -> Error:
+    if response.content_type != "application/json":
+        raise RuntimeError(f"Expected JSON data but got: {response.content_type}")
     json_data = await response.json()
     real_data = {
         "data": json_data,
@@ -617,8 +542,8 @@ async def acquire_errors(response: aiohttp.ClientResponse, /) -> Error:
         case http.FORBIDDEN:
             return Forbidden(real_data)
         case http.TOO_MANY_REQUESTS:
-            retry_after = response.headers["Retry-After"]
-            message = response.headers["message"]
+            retry_after = response.headers.get("retry-after", 3.0)
+            message = response.headers.get("message", hikari.UNDEFINED)
             return RateLimited(real_data, message=message, retry_after=float(retry_after))
         case http.UNAUTHORIZED:
             return Unauthorized(real_data)
@@ -626,6 +551,7 @@ async def acquire_errors(response: aiohttp.ClientResponse, /) -> Error:
             pass
 
     status = http(response.status)
+    _: object
     match status:
         case (500, 502, 504):  # noqa: E211
             return InternalError(real_data)

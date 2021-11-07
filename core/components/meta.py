@@ -32,6 +32,7 @@ import pathlib
 import shutil
 import subprocess as sp
 import sys
+
 import hikari
 import humanize as hz
 import psutil
@@ -40,9 +41,10 @@ import yuyo
 from aiobungie.internal import time as time_
 from tanjun import abc
 
-from core.utils import cache, consts, format, net, traits
+from core.utils import cache, format, traits
 
 component = tanjun.Component(name="meta")
+component.metadata['about'] = "Meta/casual commands."
 prefix_group = component.with_slash_command(
     tanjun.SlashCommandGroup("prefix", "Handle the bot prefix configs.")
 )
@@ -125,6 +127,7 @@ async def download_song(
                     f"Error while downloading a song in {ctx.guild_id}"
                 ) from exc
 
+
 @prefix_group.with_command
 @tanjun.with_guild_check
 @tanjun.with_author_permission_check(
@@ -191,6 +194,7 @@ async def clear_prefix(
     await ctx.edit_initial_response(
         f"Cleared `{found_prefix}` prefix. You can still use the main prefix which's `?`"
     )
+
 
 @component.with_slash_command
 @tanjun.with_str_slash_option("color", "The color hex code.")
@@ -280,31 +284,12 @@ async def avatar_view(ctx: abc.SlashContext, /, member: hikari.Member) -> None:
     await ctx.respond(embed=embed)
 
 
-@component.with_slash_command(copy=True)
-@tanjun.with_str_slash_option("text", "The text input.")
-@tanjun.with_str_slash_option(
-    "voice", "The voice to speak.", choices=consts.iter(consts.TTS)
-)
-@tanjun.as_slash_command("speech", "TTS command.")
-async def test_tts(
-    ctx: abc.SlashContext, voice: str, text: str, net_: net.HTTPNet = net.HTTPNet()
-) -> None:
-    """View of your discord avatar or other member."""
-    api = net.Wrapper(net_)
-    await ctx.defer()
-    try:
-        tts = await api.do_tts(voice, text=text)
-    except hikari.NotFoundError:
-        pass
-    await ctx.respond(tts)
-
 @component.with_command
 @tanjun.with_greedy_argument("query", converters=(str,))
 @tanjun.with_parser
 @tanjun.as_message_command("say")
 async def say_command(ctx: abc.MessageContext, query: str) -> None:
     await ctx.respond(query)
-
 
 @component.with_listener(hikari.GuildMessageCreateEvent)
 async def on_message_create(

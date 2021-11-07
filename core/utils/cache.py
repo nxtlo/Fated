@@ -19,12 +19,14 @@ MKeyT = typing.TypeVar("MKeyT")
 MValueT = typing.TypeVar("MValueT")
 
 # Hash types.
-HashT = typing.TypeVar("HashT")
-FieldT = typing.TypeVar("FieldT")
-ValueT = typing.TypeVar("ValueT")
+HashT = traits.HashT
+FieldT = traits.FieldT
+ValueT = traits.ValueT
 
 
-class Hash(traits.HashRunner, typing.Generic[HashT, FieldT, ValueT]):
+class Hash(
+    traits.HashRunner, typing.Generic[traits.HashT, traits.FieldT, traits.ValueT]
+):
     # For some reason its not showing the inherited class docs.
 
     """A Basic generic Implementation of redis hash protocol.
