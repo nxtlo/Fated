@@ -78,7 +78,7 @@ def build_client(bot: hikari_traits.GatewayBotAware) -> tanjun.Client:
         tanjun.Client.from_gateway_bot(
             bot,
             mention_prefix=True,
-            declare_global_commands=hikari.Snowflake(781336284424699906),
+            declare_global_commands=True,
         )
         # pg pool
         .set_type_dependency(pool_.PoolT, pg_pool)
