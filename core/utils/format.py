@@ -23,7 +23,7 @@
 
 from __future__ import annotations
 
-__all__: list[str] = ["parse_code", "with_block"]
+__all__: list[str] = ["parse_code", "with_block", "error"]
 
 import sys
 import typing
