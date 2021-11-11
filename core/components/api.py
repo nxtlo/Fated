@@ -91,6 +91,126 @@ async def define(
         await ctx.respond(embed=definition)
     return None
 
+# Fun stuff.
+
+@component.with_message_command
+@tanjun.as_message_command("dog", "doggo")
+async def doggo(ctx: tanjun.MessageContext, net: net_.HTTPNet = net_.HTTPNet()) -> None:
+    try:
+        async with net as client:
+            resp = await client.request(
+                "GET",
+                "https://some-random-api.ml/animal/dog",
+            )
+            if resp is not None:
+                assert isinstance(resp, dict)
+                embed = hikari.Embed(description=resp['fact'])
+                embed.set_image(resp['image'])
+    except net_.Error as exc:
+        await ctx.respond(format.with_block(**exc.data))
+        return
+    await ctx.respond(embed=embed)
+
+@component.with_message_command
+@tanjun.as_message_command("cat", "kitten", "kittie")
+async def kittie(ctx: tanjun.MessageContext, net: net_.HTTPNet = net_.HTTPNet()) -> None:
+    try:
+        async with net as client:
+            resp = await client.request(
+                "GET",
+                "https://some-random-api.ml/animal/cat",
+            )
+            if resp is not None:
+                assert isinstance(resp, dict)
+                embed = hikari.Embed(description=resp['fact'])
+                embed.set_image(resp['image'])
+    except net_.Error as exc:
+        await ctx.respond(format.with_block(**exc.data))
+        return
+    await ctx.respond(embed=embed)
+
+@component.with_message_command
+@tanjun.with_argument("member", converters=tanjun.to_member, default=None)
+@tanjun.with_parser
+@tanjun.as_message_command("wink")
+async def wink(
+    ctx: tanjun.MessageContext,
+    member: hikari.Member | None,
+    net: net_.HTTPNet = net_.HTTPNet()
+) -> None:
+    try:
+        async with net as client:
+            resp = await client.request(
+                "GET",
+                "https://some-random-api.ml/animu/wink",
+                getter="link"
+            )
+            if resp is not None:
+                assert isinstance(resp, str)
+                embed = hikari.Embed(
+                    description=f"{ctx.author.username} winked at {member.username if member else 'their self'} UwU!"
+                )
+                embed.set_image(resp)
+    except net_.Error as exc:
+        await ctx.respond(format.with_block(**exc.data))
+        return
+    await ctx.respond(embed=embed)
+
+@component.with_message_command
+@tanjun.with_argument("member", converters=tanjun.to_member, default=None)
+@tanjun.with_parser
+@tanjun.as_message_command("pat")
+async def pat(
+    ctx: tanjun.MessageContext,
+    member: hikari.Member | None,
+    net: net_.HTTPNet = net_.HTTPNet()
+) -> None:
+    try:
+        async with net as client:
+            resp = await client.request(
+                "GET",
+                "https://some-random-api.ml/animu/pat",
+                getter='link'
+            )
+            if resp is not None:
+                assert isinstance(resp, str)
+                embed = hikari.Embed(
+                    description=f"{ctx.author.username} pats {member.username if member else 'their self'} UwU!"
+                )
+                embed.set_image(resp)
+    except net_.Error as exc:
+        await ctx.respond(format.with_block(**exc.data))
+        return
+    await ctx.respond(embed=embed)
+
+@component.with_message_command
+@tanjun.with_argument("member", converters=tanjun.to_member, default=None)
+@tanjun.with_parser
+@tanjun.as_message_command("jail")
+async def jail(
+    ctx: tanjun.MessageContext,
+    member: hikari.Member | None,
+    net: net_.HTTPNet = net_.HTTPNet()
+) -> None:
+    member = member or ctx.member
+    try:
+        async with net as client:
+            assert member is not None
+            resp = await client.request(
+                "GET",
+                f"https://some-random-api.ml/canvas/jail?avatar={member.avatar_url}",
+                read_bytes=True
+            )
+            if resp is not None:
+                assert isinstance(resp, bytes)
+                embed = hikari.Embed(
+                    description=f"{ctx.author.username} jails {member.username if member else 'their self'}"
+                )
+                embed.set_image(resp)
+    except net_.Error as exc:
+        await ctx.respond(format.with_block(**exc.data))
+        return
+    await ctx.respond(embed=embed)
 
 @component.with_message_command
 @tanjun.with_owner_check(halt_execution=True)

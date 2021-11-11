@@ -95,23 +95,25 @@ class HTTPNet(traits.NetRunner):
         method: typing.Literal["GET", "POST", "PUT", "DELETE", "PATCH"],
         url: str | yarl.URL,
         getter: _GETTER_TYPE | None = None,
+        read_bytes: bool = False,
         **kwargs: typing.Any,
-    ) -> data_binding.JSONObject | data_binding.JSONArray | _GETTER_TYPE | None:
+    ) -> data_binding.JSONObject | data_binding.JSONArray | hikari.Resourceish | _GETTER_TYPE | None:
         if not self._lock:
             self._lock = asyncio.Lock()
         async with self._lock:
-            return await self.__request(method, url, getter, **kwargs)
+            return await self.__request(method, url, getter, read_bytes, **kwargs)
 
     @typing.final
     async def __request(
         self,
         method: typing.Literal["GET", "POST", "PUT", "DELETE", "PATCH"],
         url: str | yarl.URL,
-        getter: _GETTER_TYPE | None = None,
+        getter: _GETTER_TYPE |  None = None,
+        read_bytes: bool = False,
         **kwargs: typing.Any,
-    ) -> data_binding.JSONObject | data_binding.JSONArray | _GETTER_TYPE | None:
+    ) -> data_binding.JSONObject | data_binding.JSONArray | hikari.Resourceish | _GETTER_TYPE | None:
 
-        data: data_binding.JSONObject | data_binding.JSONArray | _GETTER_TYPE | None = None
+        data: data_binding.JSONObject | data_binding.JSONArray | hikari.Resourceish | _GETTER_TYPE | None = None
         backoff_ = backoff.Backoff(max_retries=6)
 
         user_agent: typing.Final[
@@ -129,10 +131,13 @@ class HTTPNet(traits.NetRunner):
                         method, yarl.URL(url) if type(url) is yarl.URL else url, **kwargs
                     ) as response:
                         if http.MULTIPLE_CHOICES > response.status >= http.OK:
+                            if read_bytes:
+                                return await response.read()
+
                             data = await response.json(encoding="utf-8")
                             _LOG.debug(
                                 f"{method} Request Success from {str(response.real_url)} "
-                                f"{self.__rest._stringify_http_message(response.headers, data)} "
+                                f"{self.__rest._stringify_http_message(response.headers, data)} "  # type: ignore
                             )
                             if data is None:
                                 return None

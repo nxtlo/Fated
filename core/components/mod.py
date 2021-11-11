@@ -89,52 +89,37 @@ async def run_sql(
 
     await ctx.respond(format.with_block(result))
 
-@component.with_command
+@component.with_slash_command
 @tanjun.with_guild_check
 @tanjun.with_own_permission_check(
     hikari.Permissions.KICK_MEMBERS,
     error_message="Bot doesn't have permissions to kick members.",
 )
-@tanjun.with_greedy_argument("reason", converters=(str,), default=None)
-@tanjun.with_argument("member", converters=tanjun.to_member, default=None)
-@tanjun.with_parser
-@tanjun.as_message_command("kick")
+@tanjun.with_author_permission_check(hikari.Permissions.KICK_MEMBERS)
+@tanjun.with_str_slash_option("reason", "The reason to kick the member.", converters=(str,), default=None)
+@tanjun.with_member_slash_option("member", "The member to kick.")
+@tanjun.as_slash_command("kick", "Kick someone out of the guild.")
 async def kick(
-    ctx: tanjun.abc.MessageContext,
-    member: hikari.InteractionMember,
+    ctx: tanjun.abc.SlashContext,
+    member: hikari.Member | None,
     /,
     reason: hikari.UndefinedOr[str],
 ) -> None:
-    """Kick someone out of the guild
 
-    Parameters:
-        member : `hikari.InteractionMember`
-            The member you want to kick.
-        reason : `hikari.UndefinedOr[str]`
-            The reason to replace at the audit log.
-            This can be left undefined.
-    """
-    if member is None:
-        await ctx.respond("No member was provided.")
-        return
+    try:
+        guild = await ctx.fetch_guild()
+    except hikari.HikariError:
+        guild = ctx.get_guild()
 
-    if ctx.cache:
-        member = ctx.cache.get_member(ctx.guild_id, member.id)  # type:ignore
-    else:
+    if guild:
         try:
-            member = await ctx.client.rest.fetch_member(
-                ctx.guild_id, member.id  # type:ignore
+            member = await ctx.rest.fetch_member(
+                guild.id, member.id
             )
         except hikari.HTTPError:
-            await ctx.respond("Couldn't find the member in cache nor rest.")
-            return
-    try:
-        guild = ctx.get_guild() or await ctx.fetch_guild()
-        await guild.kick(member.id, reason=reason)
-    except hikari.ForbiddenError as exc:
-        await ctx.respond(f"You lack the {exc.message} permissions to perform this.")
-        return
+            member = ctx.cache.get_member(guild.id, member.id)
 
+        await guild.kick(member.id, reason=reason)
     to_respond = [f"Member {member.username}#{member.discriminator} has been kicked"]
     if reason:
         to_respond.append(f" For {reason}.")
@@ -152,56 +137,40 @@ async def close_bot(
     except Exception:
         raise
 
-
-@component.with_command
+@component.with_slash_command
 @tanjun.with_guild_check
 @tanjun.with_own_permission_check(
-    hikari.Permissions.KICK_MEMBERS,
+    hikari.Permissions.BAN_MEMBERS,
     error_message="Bot doesn't have permissions to ban members.",
 )
-@tanjun.with_greedy_argument("reason", converters=(str,), default=None)
-@tanjun.with_argument("member", converters=tanjun.to_member, default=None)
-@tanjun.with_parser
-@tanjun.as_message_command("ban")
+@tanjun.with_author_permission_check(hikari.Permissions.BAN_MEMBERS)
+@tanjun.with_str_slash_option("reason", "An optional reason for the ban.")
+@tanjun.with_member_slash_option("member", "The member to ban.")
+@tanjun.as_slash_command("ban", "Ban someone from the guild.")
 async def ban(
-    ctx: tanjun.abc.MessageContext,
-    member: hikari.InteractionMember,
+    ctx: tanjun.abc.SlashContext,
+    member: hikari.Member | None,
     /,
     reason: hikari.UndefinedOr[str],
 ) -> None:
-    """Ban someone out of the guild
 
-    Parameters:
-        member : `hikari.InteractionMember`
-            The member you want to kick.
-        reason : `hikari.UndefinedOr[str]`
-            The reason to replace at the audit log.
-            This can be left undefined.
-    """
-    if member is None:
-        await ctx.respond("No member was provided.")
-        return
+    try:
+        guild = await ctx.fetch_guild()
+    except hikari.HikariError:
+        guild = ctx.get_guild()
 
-    if ctx.cache:
-        member = ctx.cache.get_member(ctx.guild_id, member.id)  # type:ignore
-    else:
+    if guild:
         try:
-            member = await ctx.client.rest.fetch_member(
-                ctx.guild_id, member.id  # type:ignore
+            member = await ctx.rest.fetch_member(
+                guild.id, member.id
             )
         except hikari.HTTPError:
-            await ctx.respond("Couldn't find the member in cache nor rest.")
-            return
-    try:
-        guild = ctx.get_guild() or await ctx.fetch_guild()
-        await guild.ban(member.id, reason=reason)
-    except hikari.ForbiddenError as exc:
-        await ctx.respond(f"You lack the {exc.message} permissions to perform this.")
-        return
+            member = ctx.cache.get_member(guild.id, member.id)
 
+        await guild.ban(member.id, reason=reason)
     to_respond = [f"Member {member.username}#{member.discriminator} has been banned"]
     if reason:
-        to_respond.append(f" For {reason}.")
+        to_respond.append(f" for {reason}.")
     await ctx.respond("".join(to_respond))
 
 
@@ -212,7 +181,7 @@ async def ban(
 @tanjun.with_argument("id", default=None, converters=(int,))
 @tanjun.with_parser
 @tanjun.as_message_command("guild")
-async def get_guild(
+async def fetch_guild(
     ctx: tanjun.MessageContext, id: hikari.Snowflakeish | int | None
 ) -> None:
 
@@ -256,7 +225,7 @@ async def get_guild(
 @component.with_message_command
 @tanjun.with_owner_check
 @tanjun.as_message_command("guilds")
-async def get_guilds(ctx: tanjun.MessageContext) -> None:
+async def fetch_guilds(ctx: tanjun.MessageContext) -> None:
     guilds = ctx.cache.get_available_guilds_view()
     embed = hikari.Embed(
         description=format.with_block(

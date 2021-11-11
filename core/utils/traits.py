@@ -39,6 +39,7 @@ if typing.TYPE_CHECKING:
     import aiohttp
     import asyncpg
     import yarl
+    import hikari
     from hikari.internal import data_binding
 
     from .interfaces import HashView
@@ -168,8 +169,9 @@ class NetRunner(fast.FastProtocolChecking, typing.Protocol):
         method: typing.Literal["GET", "POST", "PUT", "DELETE", "PATCH"],
         url: str | yarl.URL,
         getter: typing.Any | _GETTER_TYPE | None = None,
+        read_bytes: bool = False,
         **kwargs: typing.Any,
-    ) -> data_binding.JSONArray | data_binding.JSONObject | _GETTER_TYPE | None:
+    ) -> data_binding.JSONArray | data_binding.JSONObject | hikari.Resourceish | _GETTER_TYPE | None:
         """Perform an http request
 
         Parameters
@@ -186,10 +188,13 @@ class NetRunner(fast.FastProtocolChecking, typing.Protocol):
 
         url : `str` | `yarl.URL`
             The api url. This also can be used as a `yarl.URL(...)` object.
-        getter: `typing.Any`
+        getter: `T`
             if your data is a dict[..., ...] You can use this
             parameter to get something specific value from the dict
             This is equl to `request['key']` -> `request(getter='key')`
+        read_bytes : `bool`
+            If set to true then the request will read the bytes
+            and return them.
         **kwargs : `typing.Any`
             Other keyword arguments you can pass to the request.
         """

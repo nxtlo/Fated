@@ -249,7 +249,10 @@ async def about_command(
         "Cache",
         f"**Members**: {len(cache.get_members_view())}\n"
         f"**Available guilds**: {len(cache.get_available_guilds_view())}\n"
-        f"**Channels**: {len(cache.get_guild_channels_view())}",
+        f"**Channels**: {len(cache.get_guild_channels_view())}\n"
+        f"**Emojis**: {len(cache.get_emojis_view())}\n"
+        f"**Roles**: {len(cache.get_roles_view())}\n"
+        f"**Messages**: {len(cache.get_messages_view())}",
         inline=False,
     )
     embed.add_field(
@@ -282,14 +285,6 @@ async def avatar_view(ctx: abc.SlashContext, /, member: hikari.Member) -> None:
     avatar = member.avatar_url or member.default_avatar_url
     embed = hikari.Embed(title=member.username).set_image(avatar)
     await ctx.respond(embed=embed)
-
-
-@component.with_command
-@tanjun.with_greedy_argument("query", converters=(str,))
-@tanjun.with_parser
-@tanjun.as_message_command("say")
-async def say_command(ctx: abc.MessageContext, query: str) -> None:
-    await ctx.respond(query)
 
 @component.with_listener(hikari.GuildMessageCreateEvent)
 async def on_message_create(
