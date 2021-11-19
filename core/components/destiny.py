@@ -25,6 +25,8 @@
 
 from __future__ import annotations
 
+__all__: tuple[str, ...] = ("destiny",)
+
 import typing
 
 import aiobungie
@@ -34,12 +36,9 @@ import humanize
 import tanjun
 
 from core.psql import pool
+from core.utils import consts
 
-component = tanjun.Component(name="destiny")
-
-destiny_group: typing.Final[tanjun.abc.SlashCommandGroup] = component.with_slash_command(
-    tanjun.SlashCommandGroup("destiny", "Commands related to Destiny 2.")
-)
+destiny_group = tanjun.slash_command_group("destiny", "Commands related to Destiny 2.")
 
 _PLATFORMS: tuple[str, ...] = (
     "Steam",
@@ -83,7 +82,7 @@ async def _get_destiny_player(
             "Make sure you include the full name looks like this `Fate#123`"
         ) from None
 
-async def sync_player(
+async def _sync_player(
     ctx: tanjun.abc.SlashContext, 
     client: aiobungie.Client,
     pool: pool.PoolT,
@@ -110,8 +109,21 @@ async def sync_player(
     await ctx.respond(f"Synced `{player.unique_name}` | `{player.id}`, `/destiny profile` to view your profile")
 
 @destiny_group.with_command
+@tanjun.with_str_slash_option("name", "The unique bungie name. Looks like this `Fate#123`")
+@tanjun.with_str_slash_option("type", "The membership type.", choices=_PLATFORMS)
+@tanjun.as_slash_command("sync", "Sync your destiny membership with this bot.")
+async def sync(
+    ctx: tanjun.abc.SlashContext,
+    name: str,
+    type: str,
+    pool: pool.PoolT = tanjun.injected(type=pool.PoolT),
+    client: aiobungie.Client = tanjun.injected(type=aiobungie.Client)
+) -> None:
+    await _sync_player(ctx, client, pool, name=name, type=type)
+
+@destiny_group.with_command
 @tanjun.as_slash_command("desync", "Desync your destiny membership with this bot.")
-async def desync_command(
+async def desync(
     ctx: tanjun.abc.SlashContext,
     pool: pool.PoolT = tanjun.injected(type=pool.PoolT),
 ) -> None:
@@ -127,10 +139,25 @@ async def desync_command(
         return
 
 @destiny_group.with_command
+@tanjun.with_member_slash_option("member", "An optional discord member to get their characters.", default=None)
+@tanjun.with_str_slash_option("name", "An optional player name to search for.", default=None)
+@tanjun.with_int_slash_option("id", "An optional player id to search for.", default=None)
+@tanjun.as_slash_command("character", "Information about a member's Destiny characters.")
+async def characters(
+    ctx: tanjun.abc.SlashContext,
+    name: str | None,
+    member: hikari.InteractionMember | None,
+    id: int | None,
+    client: aiobungie.Client = tanjun.injected(type=aiobungie.Client),
+    pool: pool.PoolT = tanjun.injected(type=pool.PoolT)
+) -> None:
+    ...
+
+@destiny_group.with_command
 @tanjun.with_member_slash_option("member", "An optional discord member to get their profile.", default=None)
 @tanjun.with_str_slash_option("name", "An optional player name to search for.", default=None)
 @tanjun.as_slash_command("profile", "Information about a member's destiny membership.")
-async def profile_command(
+async def profiles(
     ctx: tanjun.abc.SlashContext,
     name: str | None,
     member: hikari.Member,
@@ -153,9 +180,10 @@ async def profile_command(
             await ctx.respond(f"{exc}")
             return
 
+        colour = consts.COLOR['invis']
         if ctx.member and (role_colour := ctx.member.get_top_role()):
-            member_colour = role_colour
-        embed = hikari.Embed(colour=member_colour.colour)
+            colour = role_colour.colour
+        embed = hikari.Embed(colour=colour)
         (
             embed
             .set_author(name=player.last_seen_name, icon=str(player.icon), url=player.link)
@@ -173,19 +201,6 @@ async def profile_command(
         await ctx.respond(embed=embed)
 
 @destiny_group.with_command
-@tanjun.with_str_slash_option("name", "The unique bungie name. Looks like this `Fate#123`")
-@tanjun.with_str_slash_option("type", "The membership type.", choices=_PLATFORMS)
-@tanjun.as_slash_command("sync", "Sync your destiny membership with this bot.")
-async def sync_command(
-    ctx: tanjun.abc.SlashContext,
-    name: str,
-    type: str,
-    pool: pool.PoolT = tanjun.injected(type=pool.PoolT),
-    client: aiobungie.Client = tanjun.injected(type=aiobungie.Client)
-) -> None:
-    await sync_player(ctx, client, pool, name=name, type=type)
-
-@destiny_group.with_command
 @tanjun.with_str_slash_option(
     "query",
     "The clan name or id.",
@@ -193,7 +208,7 @@ async def sync_command(
     default=4389205
 )
 @tanjun.as_slash_command("clan", "Searches for Destiny clans by their name.")
-async def get_clan_command(
+async def get_clan(
     ctx: tanjun.abc.SlashContext,
     query: str | int,
     client: aiobungie.Client = tanjun.injected(type=aiobungie.Client),
@@ -205,56 +220,50 @@ async def get_clan_command(
         if isinstance(query, int):
             clan = await client.fetch_clan_from_id(query)
         else:
-            clan: aiobungie.crate.Clan = await client.fetch_clan(query)
-
+            clan = await client.fetch_clan(query)
     except aiobungie.NotFound as e:
         await ctx.respond(f"{e}")
         return None
 
-    embed = hikari.Embed(description=f'**{clan.about}**')
+    embed = hikari.Embed(description=f'{clan.about}')
     (
         embed.set_author(name=clan.name, url=clan.url, icon=str(clan.avatar))
         .set_thumbnail(str(clan.avatar))
         .set_image(str(clan.banner))
         .add_field(
             "About",
-            f"**ID**: `{clan.id}`\n"
-            f"**Total members**: `{clan.member_count}`\n"
-            f"**About**: {clan.motto}\n"
-            f"**Public**: `{clan.is_public}`\n"
-            f"**Creation date**: {humanize.precisedelta(clan.created_at, minimum_unit='hours')}\n"
-            f"**Type**: {clan.type}",
+            f"ID: `{clan.id}`\n"
+            f"Total members: `{clan.member_count}`\n"
+            f"About: {clan.motto}\n"
+            f"Public: `{clan.is_public}`\n"
+            f"Creation date: {humanize.precisedelta(clan.created_at, minimum_unit='hours')}\n"
+            f"Type: {clan.type}",
             inline=False,
         )
         .add_field(
             "Features",
-            f"**Join Leve**: `{clan.features.join_level}`\n"
-            f"**Capabilities**: `{clan.features.capabilities}`\n"
-            f"**Memberships**: {', '.join(str(c) for c in clan.features.membership_types)}",
+            f"Join Leve: `{clan.features.join_level}`\n"
+            f"Capabilities: `{clan.features.capabilities}`\n"
+            f"Memberships: {', '.join(str(c) for c in clan.features.membership_types)}",
         )
         .set_footer(", ".join(clan.tags))
     )
 
     if clan.owner:
-        owner_name = (
-            f'{clan.owner.last_seen_name}#{clan.owner.code if clan.owner.code else ""}'
-        )
         embed.add_field(
             f"Owner",
-            f"**Name**: [{owner_name}]({clan.owner.link})\n"
-            f"**ID**: `{clan.owner.id}`\n"
-            f"**Joined at**: {humanize.precisedelta(clan.owner.joined_at, minimum_unit='hours')}\n"
-            f"**Type**: `{str(clan.owner.type)}`\n"
-            f"**Last seen**: {humanize.precisedelta(clan.owner.last_online, minimum_unit='minutes')}\n"
-            f"**Public profile**: `{clan.owner.is_public}`\n"
-            f"**Membership types**: {', '.join(str(t) for t in clan.owner.types)}",
+            f"Name: [{clan.owner.unique_name}]({clan.owner.link})\n"
+            f"ID: `{clan.owner.id}`\n"
+            f"Joined at: {humanize.precisedelta(clan.owner.joined_at, minimum_unit='hours')}\n"
+            f"Type: `{str(clan.owner.type)}`\n"
+            f"Last seen: {humanize.precisedelta(clan.owner.last_online, minimum_unit='minutes')}\n"
+            f"Public profile: `{clan.owner.is_public}`\n"
+            f"Membership types: {', '.join(str(t) for t in clan.owner.types)}",
         )
     await ctx.respond(embed=embed)
 
-@tanjun.as_loader
-def load_destiny(client: tanjun.abc.Client):
-    client.add_component(component.copy())
-
-@tanjun.as_unloader
-def unload_examples(client: tanjun.Client) -> None:
-    client.remove_component_by_name(component.name)
+destiny = (
+    tanjun.Component(name="destiny", strict=True)
+    .detect_commands()
+    .make_loader()
+)

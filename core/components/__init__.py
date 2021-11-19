@@ -22,3 +22,9 @@
 # SOFTWARE.
 
 from __future__ import annotations
+
+from .api import api as api
+from .destiny import destiny as destiny
+from .git import git as git
+from .meta import meta as meta
+from .mod import mod as mod

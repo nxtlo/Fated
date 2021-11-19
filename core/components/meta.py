@@ -25,6 +25,8 @@
 
 from __future__ import annotations
 
+__all__: tuple[str, ...] = ("meta",)
+
 import datetime
 import logging
 import os
@@ -43,14 +45,9 @@ from tanjun import abc
 
 from core.utils import cache, format, traits
 
-component = tanjun.Component(name="meta")
-component.metadata['about'] = "Meta/casual commands."
-prefix_group = component.with_slash_command(
-    tanjun.SlashCommandGroup("prefix", "Handle the bot prefix configs.")
-)
+prefix_group = tanjun.slash_command_group("prefix", "Handle the bot prefix configs.")
 
 
-@component.with_listener(hikari.ShardReadyEvent)
 async def on_ready(_: hikari.ShardReadyEvent) -> None:
     logging.info("Bot ready.")
 
@@ -61,7 +58,6 @@ def _clean_up(path: pathlib.Path) -> None:
     return None
 
 
-@component.with_message_command
 @tanjun.with_owner_check
 @tanjun.with_argument("query", converters=(str,))
 @tanjun.with_option("output_format", "--output", "-o", converters=(str,), default="mp3")
@@ -196,7 +192,6 @@ async def clear_prefix(
     )
 
 
-@component.with_slash_command
 @tanjun.with_str_slash_option("color", "The color hex code.")
 @tanjun.as_slash_command("colour", "Returns a view of a color by its hex.")
 async def color_fn(ctx: tanjun.abc.MessageContext, color: int) -> None:
@@ -208,7 +203,6 @@ async def color_fn(ctx: tanjun.abc.MessageContext, color: int) -> None:
     await ctx.respond(embed=embed)
 
 
-@component.with_message_command
 @tanjun.as_message_command("uptime")
 async def uptime(ctx: tanjun.abc.MessageContext) -> None:
     await ctx.respond(
@@ -216,7 +210,6 @@ async def uptime(ctx: tanjun.abc.MessageContext) -> None:
     )
 
 
-@component.with_slash_command
 @tanjun.as_slash_command("about", "Information about the bot itself.")
 async def about_command(
     ctx: abc.SlashContext,
@@ -276,7 +269,6 @@ async def about_command(
     await ctx.respond(embed=embed)
 
 
-@component.with_slash_command(copy=True)
 @tanjun.with_member_slash_option("member", "The discord member", default=None)
 @tanjun.as_slash_command("avatar", "Returns the avatar of a discord member or yours.")
 async def avatar_view(ctx: abc.SlashContext, /, member: hikari.Member) -> None:
@@ -286,7 +278,7 @@ async def avatar_view(ctx: abc.SlashContext, /, member: hikari.Member) -> None:
     embed = hikari.Embed(title=member.username).set_image(avatar)
     await ctx.respond(embed=embed)
 
-@component.with_listener(hikari.GuildMessageCreateEvent)
+
 async def on_message_create(
     event: hikari.GuildMessageCreateEvent,
 ) -> None:
@@ -294,11 +286,10 @@ async def on_message_create(
         return
 
 
-@tanjun.as_loader
-def load_meta(client: tanjun.Client) -> None:
-    client.add_component(component.copy())
-
-
-@tanjun.as_unloader
-def unload_examples(client: tanjun.Client) -> None:
-    client.remove_component_by_name(component.name)
+meta = (
+    tanjun.Component(name="meta", strict=True)
+    .add_listener(hikari.GuildMessageCreateEvent, on_message_create)
+    .add_listener(hikari.ShardReadyEvent, on_ready)
+    .detect_commands()
+    .make_loader()
+)

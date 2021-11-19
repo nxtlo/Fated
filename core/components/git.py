@@ -25,6 +25,8 @@
 
 from __future__ import annotations
 
+__all__: tuple[str, ...] = ("git",)
+
 import asyncio
 import itertools
 import typing
@@ -35,10 +37,7 @@ import tanjun
 from core.utils import interfaces
 from core.utils import net as net_
 
-component = tanjun.Component(name="git")
-git_group = component.with_slash_command(
-    tanjun.SlashCommandGroup("git", "Commands related to github.")
-)
+git_group = tanjun.slash_command_group("git", "Commands related to github.")
 
 @git_group.with_command
 @tanjun.with_str_slash_option("name", "The name gitub user.")
@@ -145,8 +144,7 @@ async def git_repo(
                 embed=_make_embed(next(future)[0])
             )
             try:
-                # This is still buggy.
-                async with bot.stream(hikari.InteractionCreateEvent, 30) as stream:
+                with bot.stream(hikari.InteractionCreateEvent, 30) as stream:
                     async for event in stream.filter(("interaction.user.id", ctx.author.id)):
                         try:
                             match event.interaction.custom_id:  # type: ignore
@@ -185,10 +183,8 @@ async def get_release(ctx: tanjun.SlashContext, user: str, repo: str, release: s
         await ctx.respond(err)
         return None
 
-@tanjun.as_loader
-def load_git(client: tanjun.Client) -> None:
-    client.add_component(component.copy())
-
-@tanjun.as_unloader
-def unload_git(client: tanjun.Client) -> None:
-    client.remove_component_by_name(component.name)
+git = (
+    tanjun.Component(name="git", strict=True)
+    .detect_commands()
+    .make_loader()
+)

@@ -46,12 +46,13 @@ import attr
 import hikari
 import humanize
 import multidict
+import yarl
 from aiobungie.internal import time
 from hikari import _about as about
+from hikari.internal import net
 from hikari.internal.time import (
     fast_iso8601_datetime_string_to_datetime as fast_datetime,
 )
-import yarl
 from yuyo import backoff
 
 from . import consts, format, interfaces, traits
@@ -77,9 +78,19 @@ class HTTPNet(traits.NetRunner):
         self._session: hikari.UndefinedOr[aiohttp.ClientSession] = hikari.UNDEFINED
         self._lock = lock
 
-    async def acquire(self) -> None:
-        if self._session is hikari.UNDEFINED:
-            self._session = aiohttp.ClientSession()
+    async def acquire(self) -> aiohttp.ClientSession:
+        if isinstance(self._session, hikari.UndefinedType):
+            http_settings = hikari.HTTPSettings()
+            connector = net.create_tcp_connector(http_settings)
+            self._session = net.create_client_session(
+                connector,
+                connector_owner=False,
+                http_settings=http_settings,
+                raise_for_status=False,
+                trust_env=False
+            )
+            return self._session
+        raise RuntimeError("Session is already running...")
 
     async def close(self) -> None:
         if self._session is not hikari.UNDEFINED and not self._session.closed:
@@ -101,10 +112,10 @@ class HTTPNet(traits.NetRunner):
         if not self._lock:
             self._lock = asyncio.Lock()
         async with self._lock:
-            return await self.__request(method, url, getter, read_bytes, **kwargs)
+            return await self._request(method, url, getter, read_bytes, **kwargs)
 
     @typing.final
-    async def __request(
+    async def _request(
         self,
         method: typing.Literal["GET", "POST", "PUT", "DELETE", "PATCH"],
         url: str | yarl.URL,
@@ -118,7 +129,7 @@ class HTTPNet(traits.NetRunner):
 
         user_agent: typing.Final[
             str
-        ] = f"Fated DiscorsBot Hikari/{about.__version__}"
+        ] = f"Fated DiscordBot(https://github.com/nxtlo/Fated) Hikari/{about.__version__}"
 
         headers: collections.Mapping[str, str]
         kwargs["headers"] = headers = {}

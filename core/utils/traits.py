@@ -38,8 +38,8 @@ ValueT = typing.TypeVar("ValueT")
 if typing.TYPE_CHECKING:
     import aiohttp
     import asyncpg
-    import yarl
     import hikari
+    import yarl
     from hikari.internal import data_binding
 
     from .interfaces import HashView
@@ -122,7 +122,7 @@ class PoolRunner(fast.FastProtocolChecking, typing.Protocol):
         /,
         *args: typing.Any,
         timeout: float | None = None,
-    ) -> list[asyncpg.Record]:
+    ) -> list[typing.Any]:
         raise NotImplementedError
 
     async def fetchrow(
@@ -131,7 +131,7 @@ class PoolRunner(fast.FastProtocolChecking, typing.Protocol):
         /,
         *args: typing.Any,
         timeout: float | None = None,
-    ) -> list[asyncpg.Record] | dict[typing.Any, typing.Any]:
+    ) -> list[typing.Any] | dict[str, typing.Any]:
         raise NotImplementedError
 
     async def fetchval(
@@ -158,8 +158,8 @@ class NetRunner(fast.FastProtocolChecking, typing.Protocol):
 
     __slots__ = ()
 
-    async def acquire(self) -> None:
-        """Acquires the session if its closed or set to None."""
+    async def acquire(self) -> aiohttp.ClientSession:
+        """Acquires the session if its closed or set to `hikari.UNDEFINED`"""
 
     async def close(self) -> None:
         """Closes the http session."""

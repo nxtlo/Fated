@@ -25,6 +25,8 @@
 
 from __future__ import annotations
 
+__all__: tuple[str, ...] = ("api",)
+
 import typing
 
 import hikari
@@ -33,10 +35,7 @@ import tanjun
 from core.utils import consts, format
 from core.utils import net as net_
 
-component = tanjun.Component(name="api")
 
-
-@component.with_slash_command
 @tanjun.with_str_slash_option("name", "The anime's name.", default=None)
 @tanjun.with_bool_slash_option("random", "Get a random anime.", default=True)
 @tanjun.with_str_slash_option(
@@ -61,7 +60,6 @@ async def get_anime(
     return None
 
 
-@component.with_slash_command
 @tanjun.with_str_slash_option("name", "The manga name")
 @tanjun.as_slash_command("manga", "Returns basic information about a manga.")
 async def get_manga(
@@ -77,7 +75,6 @@ async def get_manga(
     return None
 
 
-@component.with_slash_command
 @tanjun.with_str_slash_option("name", "The name of the definition.")
 @tanjun.as_slash_command("def", "Returns a definition given a name.")
 async def define(
@@ -91,9 +88,10 @@ async def define(
         await ctx.respond(embed=definition)
     return None
 
+
 # Fun stuff.
 
-@component.with_message_command
+
 @tanjun.as_message_command("dog", "doggo")
 async def doggo(ctx: tanjun.MessageContext, net: net_.HTTPNet = net_.HTTPNet()) -> None:
     try:
@@ -104,16 +102,18 @@ async def doggo(ctx: tanjun.MessageContext, net: net_.HTTPNet = net_.HTTPNet()) 
             )
             if resp is not None:
                 assert isinstance(resp, dict)
-                embed = hikari.Embed(description=resp['fact'])
-                embed.set_image(resp['image'])
+                embed = hikari.Embed(description=resp["fact"])
+                embed.set_image(resp["image"])
     except net_.Error as exc:
         await ctx.respond(format.with_block(**exc.data))
         return
     await ctx.respond(embed=embed)
 
-@component.with_message_command
+
 @tanjun.as_message_command("cat", "kitten", "kittie")
-async def kittie(ctx: tanjun.MessageContext, net: net_.HTTPNet = net_.HTTPNet()) -> None:
+async def kittie(
+    ctx: tanjun.MessageContext, net: net_.HTTPNet = net_.HTTPNet()
+) -> None:
     try:
         async with net as client:
             resp = await client.request(
@@ -122,28 +122,26 @@ async def kittie(ctx: tanjun.MessageContext, net: net_.HTTPNet = net_.HTTPNet())
             )
             if resp is not None:
                 assert isinstance(resp, dict)
-                embed = hikari.Embed(description=resp['fact'])
-                embed.set_image(resp['image'])
+                embed = hikari.Embed(description=resp["fact"])
+                embed.set_image(resp["image"])
     except net_.Error as exc:
         await ctx.respond(format.with_block(**exc.data))
         return
     await ctx.respond(embed=embed)
 
-@component.with_message_command
+
 @tanjun.with_argument("member", converters=tanjun.to_member, default=None)
 @tanjun.with_parser
 @tanjun.as_message_command("wink")
 async def wink(
     ctx: tanjun.MessageContext,
     member: hikari.Member | None,
-    net: net_.HTTPNet = net_.HTTPNet()
+    net: net_.HTTPNet = net_.HTTPNet(),
 ) -> None:
     try:
         async with net as client:
             resp = await client.request(
-                "GET",
-                "https://some-random-api.ml/animu/wink",
-                getter="link"
+                "GET", "https://some-random-api.ml/animu/wink", getter="link"
             )
             if resp is not None:
                 assert isinstance(resp, str)
@@ -156,21 +154,19 @@ async def wink(
         return
     await ctx.respond(embed=embed)
 
-@component.with_message_command
+
 @tanjun.with_argument("member", converters=tanjun.to_member, default=None)
 @tanjun.with_parser
 @tanjun.as_message_command("pat")
 async def pat(
     ctx: tanjun.MessageContext,
     member: hikari.Member | None,
-    net: net_.HTTPNet = net_.HTTPNet()
+    net: net_.HTTPNet = net_.HTTPNet(),
 ) -> None:
     try:
         async with net as client:
             resp = await client.request(
-                "GET",
-                "https://some-random-api.ml/animu/pat",
-                getter='link'
+                "GET", "https://some-random-api.ml/animu/pat", getter="link"
             )
             if resp is not None:
                 assert isinstance(resp, str)
@@ -183,14 +179,14 @@ async def pat(
         return
     await ctx.respond(embed=embed)
 
-@component.with_message_command
+
 @tanjun.with_argument("member", converters=tanjun.to_member, default=None)
 @tanjun.with_parser
 @tanjun.as_message_command("jail")
 async def jail(
     ctx: tanjun.MessageContext,
     member: hikari.Member | None,
-    net: net_.HTTPNet = net_.HTTPNet()
+    net: net_.HTTPNet = net_.HTTPNet(),
 ) -> None:
     member = member or ctx.member
     try:
@@ -199,7 +195,7 @@ async def jail(
             resp = await client.request(
                 "GET",
                 f"https://some-random-api.ml/canvas/jail?avatar={member.avatar_url}",
-                read_bytes=True
+                read_bytes=True,
             )
             if resp is not None:
                 assert isinstance(resp, bytes)
@@ -212,10 +208,10 @@ async def jail(
         return
     await ctx.respond(embed=embed)
 
-@component.with_message_command
+
 @tanjun.with_owner_check(halt_execution=True)
 @tanjun.with_greedy_argument("url", converters=str)
-@tanjun.with_option("method", "--method", "-m", default='GET')
+@tanjun.with_option("method", "--method", "-m", default="GET")
 @tanjun.with_option("getter", "--get", "-g", default=None)
 @tanjun.with_parser
 @tanjun.as_message_command("net")
@@ -240,11 +236,5 @@ async def run_net(
         except Exception:
             pass
 
-@tanjun.as_loader
-def load_api(client: tanjun.Client) -> None:
-    client.add_component(component.copy())
 
-
-@tanjun.as_unloader
-def unload_examples(client: tanjun.Client) -> None:
-    client.remove_component_by_name(component.name)
+api = tanjun.Component(name="api", strict=True).detect_commands().make_loader()

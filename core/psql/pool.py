@@ -23,7 +23,7 @@
 
 from __future__ import annotations
 
-__all__: typing.Sequence[str] = ("PgxPool", "PoolT")
+__all__: tuple[str, ...] = ("PgxPool", "PoolT")
 
 import asyncio
 import logging
@@ -98,7 +98,7 @@ class PgxPool(traits.PoolRunner):
         /,
         *args: typing.Any,
         timeout: float | None = None,
-    ) -> list[asyncpg.Record]:
+    ) -> list[typing.Any]:
         return await self._pool.fetch(sql, *args, timeout=timeout)
 
     async def fetchrow(
@@ -107,7 +107,7 @@ class PgxPool(traits.PoolRunner):
         /,
         *args: typing.Any,
         timeout: float | None = None,
-    ) -> list[asyncpg.Record] | dict[typing.Any, typing.Any]:
+    ) -> list[typing.Any] | dict[str, typing.Any]:
         return await self._pool.fetchrow(sql, *args, timeout=timeout)
 
     async def fetchval(

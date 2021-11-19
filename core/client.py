@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import datetime
 import logging
+import pathlib
 import subprocess
 import traceback
 import typing
@@ -106,11 +107,7 @@ def build_client(bot: hikari_traits.GatewayBotAware) -> tanjun.Client:
         .set_callback_override(cache.Hash, traits.HashRunner)
         .set_callback_override(cache.Memory, cache.Memory)
         # Components.
-        .load_modules("core.components.meta")
-        .load_modules("core.components.mod")
-        .load_modules("core.components.api")
-        .load_modules("core.components.destiny")
-        .load_modules("core.components.git")
+        .load_modules("core.components")
         # Prefix stuff.
         .set_prefix_getter(get_prefix)
         .add_prefix(".")
@@ -121,7 +118,10 @@ def build_client(bot: hikari_traits.GatewayBotAware) -> tanjun.Client:
 
 
 def _enable_logging(
-    hikari: bool = False, net: bool = False, aiobungie: bool = False
+    hikari: bool = False,
+    tanjun: bool = False,
+    net: bool = False,
+    aiobungie: bool = False,
 ) -> None:
     if hikari:
         logging.getLogger("hikari.rest").setLevel(ux.TRACE)
@@ -130,14 +130,20 @@ def _enable_logging(
         logging.getLogger("core.net").setLevel(logging.DEBUG)
     if aiobungie:
         logging.getLogger("aiobungie.rest").setLevel(logging.DEBUG)
+    if tanjun:
+        logging.getLogger("hikari.tanjun").setLevel(logging.DEBUG)
+        logging.getLogger("hikari.tanjun.context").setLevel(logging.DEBUG)
+        logging.getLogger("hikari.tanjun.clients").setLevel(logging.DEBUG)
+        logging.getLogger("hikari.tanjun.components").setLevel(logging.DEBUG)
 
 
 @click.group(name="main", invoke_without_command=True, options_metavar="[options]")
 @click.pass_context
 def main(ctx: click.Context) -> None:
-    _enable_logging(False, True, True)
+    _enable_logging(hikari=False, tanjun=True, net=True, aiobungie=True)
     if ctx.invoked_subcommand is None:
         build_bot().run(status=hikari.Status.DO_NOT_DISTURB)
+
 
 @main.group(short_help="Handles the db configs.", options_metavar="[options]")
 def db() -> None:
