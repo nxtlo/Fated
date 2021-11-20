@@ -22,6 +22,9 @@
 # SOFTWARE.
 
 from __future__ import annotations
+import logging
+
+from yuyo import backoff
 
 __all__: tuple[str, ...] = ("mod",)
 
@@ -33,6 +36,7 @@ import sys
 import textwrap
 import traceback
 import typing
+import random as rand
 
 import asyncpg
 import hikari
@@ -45,6 +49,33 @@ from core.utils import format
 
 STDOUT: typing.Final[hikari.Snowflakeish] = hikari.Snowflake(789614938247266305)
 
+@tanjun.with_member_slash_option("member", "The member to impersonate")
+@tanjun.with_guild_check
+@tanjun.as_slash_command("impersonate", "impersonate members.")
+async def impersonate(ctx: tanjun.SlashContext, member: hikari.InteractionMember | None) -> None:
+    guild = await ctx.fetch_guild()
+    channels = [c.id for c in guild.get_channels().values()]
+    channel = rand.choice(channels)
+    try:
+        async for message in (
+            ctx.rest.fetch_messages(channel)
+            .skip_while(
+                lambda m: m.content is not None
+            )
+            .filter((".author.id", member.id or ctx.author.id))
+            .map(".content")
+        ):
+            await ctx.respond(message)
+            return
+    except (hikari.ForbiddenError, hikari.InternalServerError, StopIteration):
+        pass
+    except hikari.RateLimitedError:
+        return
+
+@tanjun.as_message_command("reload")
+async def reload(ctx: tanjun.MessageContext) -> None:
+    ctx.client.reload_modules(f"core.components")
+    await ctx.respond(f"Reloaded modules")
 
 @tanjun.with_owner_check(halt_execution=True)
 @tanjun.with_greedy_argument("query", converters=str)
@@ -234,7 +265,6 @@ async def fetch_guilds(ctx: tanjun.MessageContext) -> None:
         )
     )
     await ctx.respond(embed=embed)
-
 
 # Typed and adopted from RoboDanny <3
 @tanjun.with_owner_check

@@ -221,12 +221,12 @@ async def about_command(
     from tanjun import __version__ as tanjun_version
 
     procs = psutil.Process()
-    mem_usage = procs.memory_full_info().uss / 1024 ** 2
-    cpu_usage = procs.cpu_percent() / psutil.cpu_count()
+    mem_usage = (procs.memory_full_info().uss / 1024)**2
+    cpu_usage = (procs.cpu_percent() / psutil.cpu_count())
 
     if ctx.cache:
-        bot = ctx.cache.get_me()
         cache = ctx.cache
+        bot = cache.get_me()
 
     embed = hikari.Embed(
         title=bot.username,
