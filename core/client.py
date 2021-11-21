@@ -25,7 +25,6 @@ from __future__ import annotations
 
 import datetime
 import logging
-import pathlib
 import subprocess
 import traceback
 import typing
@@ -47,7 +46,7 @@ if typing.TYPE_CHECKING:
 
 async def get_prefix(
     ctx: tanjun.abc.MessageContext,
-    hash: traits.HashRunner[str, hikari.Snowflake, str] = cache.Hash(),
+    hash: traits.HashRunner[str, hikari.Snowflake, str] = tanjun.inject(type=traits.HashRunner),
 ) -> str | typing.Sequence[str]:
     if (guild := ctx.guild_id) and (
         prefix := await hash.get("prefixes", guild)
@@ -100,12 +99,6 @@ def build_client(bot: hikari_traits.GatewayBotAware) -> tanjun.Client:
         .add_client_callback(
             tanjun.ClientCallbackNames.CLOSING, aiobungie_client.rest.close
         )
-        # Since there's no ctx.bot, ctx.client.bot. We also need to Inject our bot.
-        .set_type_dependency(hikari.GatewayBot, bot)
-        # Global injected call backs.
-        .set_callback_override(net.HTTPNet, traits.NetRunner)
-        .set_callback_override(cache.Hash, traits.HashRunner)
-        .set_callback_override(cache.Memory, cache.Memory)
         # Components.
         .load_modules("core.components")
         # Prefix stuff.

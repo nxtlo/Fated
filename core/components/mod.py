@@ -22,9 +22,6 @@
 # SOFTWARE.
 
 from __future__ import annotations
-import logging
-
-from yuyo import backoff
 
 __all__: tuple[str, ...] = ("mod",)
 
@@ -36,7 +33,6 @@ import sys
 import textwrap
 import traceback
 import typing
-import random as rand
 
 import asyncpg
 import hikari
@@ -45,33 +41,113 @@ import yuyo
 from tanjun import abc
 
 from core.psql import pool as pool_
-from core.utils import format
+from core.utils import cache, format
 
 STDOUT: typing.Final[hikari.Snowflakeish] = hikari.Snowflake(789614938247266305)
 
-@tanjun.with_member_slash_option("member", "The member to impersonate")
-@tanjun.with_guild_check
-@tanjun.as_slash_command("impersonate", "impersonate members.")
-async def impersonate(ctx: tanjun.SlashContext, member: hikari.InteractionMember | None) -> None:
-    guild = await ctx.fetch_guild()
-    channels = [c.id for c in guild.get_channels().values()]
-    channel = rand.choice(channels)
+# @tanjun.with_member_slash_option("member", "The member to impersonate")
+# @tanjun.with_guild_check
+# @tanjun.as_slash_command("impersonate", "impersonate members.")
+# async def impersonate(ctx: tanjun.SlashContext, member: hikari.InteractionMember | None) -> None:
+    # guild = await ctx.fetch_guild()
+    # channels = [c.id for c in guild.get_channels().values()]
+    # channel = rand.choice(channels)
+    # try:
+        # async for message in (
+            # ctx.rest.fetch_messages(channel)
+            # .skip_while(
+                # lambda m: m.content is not None
+            # )
+            # .filter((".author.id", member.id or ctx.author.id))
+            # .map(".content")
+        # ):
+            # await ctx.respond(message)
+            # return
+    # except (hikari.ForbiddenError, hikari.InternalServerError, StopIteration):
+        # pass
+    # except hikari.RateLimitedError:
+        # return
+
+@tanjun.with_owner_check
+@tanjun.as_message_command_group("cache")
+async def cacher(ctx: tanjun.MessageContext,) -> None:
+    # This will always not respond.
+    assert not ctx.has_responded
+
+@cacher.with_command
+@tanjun.with_greedy_argument("value", default=None)
+@tanjun.with_argument("key")
+@tanjun.with_parser
+@tanjun.as_message_command("put")
+async def put(
+    ctx: tanjun.MessageContext,
+    key: typing.Any,
+    value: typing.Any | None,
+    cache_: cache.Memory[typing.Any, typing.Any] = tanjun.inject(type=cache.Memory)
+) -> None:
+    match key:
+        case "me":
+            author = ctx.author
+            cache_.put(author.id, author)
+            await ctx.respond(f"Cached author {author.id}")
+        case "guild":
+            guild = await ctx.fetch_guild()
+            cache_.put(guild.id, guild)
+            await ctx.respond(f"Cached guild {guild.id}")
+        case "member":
+            assert isinstance(value, hikari.Member)
+            member = typing.cast(hikari.InteractionMember, value)
+            cache_.put(member.id, member)
+            await ctx.respond(f"Cached member {member.id}")
+        case _:
+            cache_.put(key, value)
+            await ctx.respond(f"Cached {key} to {value}")
+
+@cacher.with_command
+@tanjun.with_greedy_argument("key")
+@tanjun.with_parser
+@tanjun.as_message_command("get")
+async def get(
+    ctx: tanjun.MessageContext,
+    key: typing.Any,
+    cache_: cache.Memory[typing.Any, typing.Any] = tanjun.inject(type=cache.Memory)
+) -> None:
+    await ctx.respond(cache_.get(key, "NOT_FOUND"))
+
+@cacher.with_command
+@tanjun.with_greedy_argument("key")
+@tanjun.with_parser
+@tanjun.as_message_command("del")
+async def remove(
+    ctx: tanjun.MessageContext,
+    key: typing.Any,
+    cache_: cache.Memory[typing.Any, typing.Any] = tanjun.inject(type=cache.Memory)
+) -> None:
     try:
-        async for message in (
-            ctx.rest.fetch_messages(channel)
-            .skip_while(
-                lambda m: m.content is not None
-            )
-            .filter((".author.id", member.id or ctx.author.id))
-            .map(".content")
-        ):
-            await ctx.respond(message)
-            return
-    except (hikari.ForbiddenError, hikari.InternalServerError, StopIteration):
-        pass
-    except hikari.RateLimitedError:
+        del cache_[key]
+        await ctx.respond("Ok")
+    except KeyError:
+        await ctx.respond("Key not found in cache.")
         return
 
+@cacher.with_command
+@tanjun.as_message_command("items")
+async def cache_items(
+    ctx: tanjun.MessageContext,
+    cache_: cache.Memory[typing.Any, typing.Any] = tanjun.inject(type=cache.Memory)
+) -> None:
+    await ctx.respond(format.with_block(cache_.__repr__()))
+
+@cacher.with_command
+@tanjun.as_message_command("clear")
+async def cache_clear(
+    ctx: tanjun.MessageContext,
+    cache_: cache.Memory[typing.Any, typing.Any] = tanjun.inject(type=cache.Memory)
+) -> None:
+    cache_.clear()
+    await ctx.respond(format.with_block(cache_.__repr__()))
+
+@tanjun.with_owner_check
 @tanjun.as_message_command("reload")
 async def reload(ctx: tanjun.MessageContext) -> None:
     ctx.client.reload_modules(f"core.components")
@@ -253,7 +329,7 @@ async def fetch_guild(
 
 @tanjun.with_owner_check
 @tanjun.as_message_command("guilds")
-async def fetch_guilds(ctx: tanjun.MessageContext) -> None:
+async def get_guilds(ctx: tanjun.MessageContext) -> None:
     guilds = ctx.cache.get_available_guilds_view()
     embed = hikari.Embed(
         description=format.with_block(

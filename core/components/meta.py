@@ -25,6 +25,8 @@
 
 from __future__ import annotations
 
+from tanjun.injecting import inject
+
 __all__: tuple[str, ...] = ("meta",)
 
 import datetime
@@ -43,7 +45,7 @@ import yuyo
 from aiobungie.internal import time as time_
 from tanjun import abc
 
-from core.utils import cache, format, traits
+from core.utils import format, traits
 
 prefix_group = tanjun.slash_command_group("prefix", "Handle the bot prefix configs.")
 
@@ -135,7 +137,9 @@ async def download_song(
 async def set_prefix(
     ctx: tanjun.abc.SlashContext,
     prefix: str | None,
-    hash: traits.HashRunner[str, hikari.Snowflake, str] = cache.Hash(),
+    hash: traits.HashRunner[str, hikari.Snowflake, str] = tanjun.inject(
+        type=traits.HashRunner
+    ),
 ) -> None:
 
     if prefix is None:
@@ -167,7 +171,9 @@ async def set_prefix(
 @tanjun.as_slash_command("clear", "Clear the bot prefix to a custom one.")
 async def clear_prefix(
     ctx: tanjun.abc.SlashContext,
-    hash: traits.HashRunner[str, hikari.Snowflake, str] = cache.Hash(),
+    hash: traits.HashRunner[str, hikari.Snowflake, str] = tanjun.inject(
+        type=traits.HashRunner
+    ),
 ) -> None:
 
     if ctx.cache:
@@ -221,8 +227,8 @@ async def about_command(
     from tanjun import __version__ as tanjun_version
 
     procs = psutil.Process()
-    mem_usage = (procs.memory_full_info().uss / 1024)**2
-    cpu_usage = (procs.cpu_percent() / psutil.cpu_count())
+    mem_usage = (procs.memory_full_info().uss / 1024) ** 2
+    cpu_usage = procs.cpu_percent() / psutil.cpu_count()
 
     if ctx.cache:
         cache = ctx.cache

@@ -50,7 +50,7 @@ async def get_anime(
     name: str,
     random: bool | None,
     genre: str,
-    net: net_.HTTPNet = net_.HTTPNet(),
+    net: net_.HTTPNet = tanjun.inject(type=net_.HTTPNet),
 ) -> None:
     await ctx.defer()
     jian = net_.Wrapper(net)
@@ -65,7 +65,7 @@ async def get_anime(
 async def get_manga(
     ctx: tanjun.abc.SlashContext,
     name: str,
-    net: net_.HTTPNet = net_.HTTPNet(),
+    net: net_.HTTPNet = tanjun.inject(type=net_.HTTPNet),
 ) -> None:
     await ctx.defer()
     jian = net_.Wrapper(net)
@@ -80,7 +80,7 @@ async def get_manga(
 async def define(
     ctx: tanjun.abc.SlashContext,
     name: str,
-    net: net_.HTTPNet = net_.HTTPNet(),
+    net: net_.HTTPNet = tanjun.inject(type=net_.HTTPNet),
 ) -> None:
     urban = net_.Wrapper(net)
     definition = await urban.get_definition(ctx, name)
@@ -93,7 +93,10 @@ async def define(
 
 
 @tanjun.as_message_command("dog", "doggo")
-async def doggo(ctx: tanjun.MessageContext, net: net_.HTTPNet = net_.HTTPNet()) -> None:
+async def doggo(
+    ctx: tanjun.MessageContext,
+    net: net_.HTTPNet = tanjun.inject(type=net_.HTTPNet),
+) -> None:
     try:
         async with net as client:
             resp = await client.request(
@@ -112,7 +115,8 @@ async def doggo(ctx: tanjun.MessageContext, net: net_.HTTPNet = net_.HTTPNet()) 
 
 @tanjun.as_message_command("cat", "kitten", "kittie")
 async def kittie(
-    ctx: tanjun.MessageContext, net: net_.HTTPNet = net_.HTTPNet()
+    ctx: tanjun.MessageContext,
+    net: net_.HTTPNet = tanjun.inject(type=net_.HTTPNet),
 ) -> None:
     try:
         async with net as client:
@@ -136,7 +140,7 @@ async def kittie(
 async def wink(
     ctx: tanjun.MessageContext,
     member: hikari.Member | None,
-    net: net_.HTTPNet = net_.HTTPNet(),
+    net: net_.HTTPNet = tanjun.inject(type=net_.HTTPNet),
 ) -> None:
     try:
         async with net as client:
@@ -161,7 +165,7 @@ async def wink(
 async def pat(
     ctx: tanjun.MessageContext,
     member: hikari.Member | None,
-    net: net_.HTTPNet = net_.HTTPNet(),
+    net: net_.HTTPNet = tanjun.inject(type=net_.HTTPNet),
 ) -> None:
     try:
         async with net as client:
@@ -186,7 +190,7 @@ async def pat(
 async def jail(
     ctx: tanjun.MessageContext,
     member: hikari.Member | None,
-    net: net_.HTTPNet = net_.HTTPNet(),
+    net: net_.HTTPNet = tanjun.inject(type=net_.HTTPNet),
 ) -> None:
     member = member or ctx.member
     try:
@@ -220,7 +224,7 @@ async def run_net(
     url: str,
     getter: str | None,
     method: typing.Literal["GET", "POST"] = "GET",
-    net: net_.HTTPNet = net_.HTTPNet(),
+    net: net_.HTTPNet = tanjun.inject(type=net_.HTTPNet),
 ) -> None:
     async with net as cli:
         try:

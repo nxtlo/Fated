@@ -25,16 +25,19 @@ from __future__ import annotations
 
 __all__: tuple[str, ...] = ("Memory", "Hash")
 
+import collections.abc as collections
 import copy
 import logging
 import typing
 
 import aioredis
+from hikari.internal import collections as hikari_collections
 
 from . import traits
 from .interfaces import HashView
 
 _LOG: typing.Final[logging.Logger] = logging.getLogger(__name__)
+_T = typing.TypeVar("_T")
 logging.basicConfig(level=logging.DEBUG)
 
 # Memory types.
@@ -136,7 +139,9 @@ class Hash(
     async def len(self, hash: HashT) -> int:
         return await self.__execute_command("HLEN", hash)
 
-    async def all(self, hash: HashT) -> typing.MutableSequence[HashView[ValueT]] | None:
+    async def all(
+        self, hash: HashT
+    ) -> collections.MutableSequence[HashView[ValueT]] | None:
         coro: dict[typing.Any, typing.Any] = await self.__execute_command("HVALS", hash)
         pending = []
         for v in coro:
@@ -157,49 +162,44 @@ class Hash(
         return copy.deepcopy(self)
 
 
-class Memory(typing.MutableMapping[MKeyT, MValueT]):
+class Memory(hikari_collections.FreezableDict[MKeyT, MValueT]):
     """A very basic in memory cache that we may api, embeds, etc."""
 
-    __slots__: tuple[str, ...] = ("_map",)
+    __slots__ = ("_map",)
+    _map: hikari_collections.ExtendedMutableMapping[MKeyT, MValueT]
 
     def __init__(self) -> None:
-        self._map: dict[MKeyT, MValueT] = {}
-
-    def __call__(self, *_: typing.Any, **__: typing.Any) -> Memory[MKeyT, MValueT]:
-        return self
-
-    @property
-    def map(self) -> dict[MKeyT, MValueT]:
-        return self._map
+        self._map = hikari_collections.FreezableDict()
 
     def clear(self) -> None:
-        self.map.clear()
+        self._map.clear()
 
-    def clone(self) -> dict[MKeyT, MValueT]:
-        return self.map.copy()
+    def clone(self) -> hikari_collections.ExtendedMutableMapping[MKeyT, MValueT]:
+        return self._map.copy()
 
     def __repr__(self) -> str:
-        return (
-            f"<Cache items {len(self)} | Keys: {self.keys()} - Values {self.values()}"
-        )
+        return f"<MemoryCache size={len(self)}, {', '.join(f'{k}={v!r}' for k, v in self._map.items())}"
 
     def __getitem__(self, k: MKeyT) -> MValueT:
-        return self.map[k]
+        return self._map[k]
 
     def __iter__(self) -> typing.Iterator[MKeyT]:
-        return iter(self.map)
+        return iter(self._map)
 
     def __setitem__(self, k: MKeyT, v: MValueT) -> None:
-        self.map[k] = v
+        self._map[k] = v
 
     def __delitem__(self, v: MKeyT) -> None:
-        del self.map[v]
+        del self._map[v]
 
     def __len__(self) -> int:
-        return len(self.map)
+        return len(self._map)
 
-    def values(self) -> typing.ValuesView[MValueT]:
+    def values(self) -> collections.ValuesView[MValueT]:
         return self._map.values()
 
-    def keys(self) -> typing.KeysView[MKeyT]:
+    def keys(self) -> collections.KeysView[MKeyT]:
         return self._map.keys()
+
+    def put(self, key: MKeyT, value: MValueT) -> None:
+        self._map[key] = value

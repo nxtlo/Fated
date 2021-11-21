@@ -43,7 +43,7 @@ git_group = tanjun.slash_command_group("git", "Commands related to github.")
 @tanjun.with_str_slash_option("name", "The name gitub user.")
 @tanjun.as_slash_command("user", "Get information about a github user.")
 async def git_user(
-    ctx: tanjun.abc.SlashContext, name: str, net: net_.HTTPNet = net_.HTTPNet()
+    ctx: tanjun.abc.SlashContext, name: str, net: net_.HTTPNet = tanjun.inject(type=net_.HTTPNet)
 ) -> None:
 
     git = net_.Wrapper(net)
@@ -107,7 +107,7 @@ def _make_embed(repo: interfaces.GithubRepo) -> hikari.Embed:
 async def git_repo(
     ctx: tanjun.abc.SlashContext,
     name: str,
-    net: net_.HTTPNet = net_.HTTPNet(),
+    net: net_.HTTPNet = tanjun.inject(type=net_.HTTPNet),
     bot: hikari.GatewayBot = tanjun.injected(type=hikari.GatewayBot),
 ) -> None:
     git = net_.Wrapper(net)
@@ -170,7 +170,13 @@ async def git_repo(
 @tanjun.with_str_slash_option("repo", "The repo name to look up.")
 @tanjun.with_str_slash_option("release", "The release tag to get.")
 @tanjun.as_slash_command("release", "Fetch a github project release and returns information about it.")
-async def get_release(ctx: tanjun.SlashContext, user: str, repo: str, release: str, net: net_.HTTPNet = tanjun.injected(type=net_.HTTPNet)) -> None:
+async def get_release(
+    ctx: tanjun.SlashContext,
+    user: str,
+    repo: str,
+    release: str,
+    net: net_.HTTPNet = tanjun.injected(type=net_.HTTPNet)
+) -> None:
     git = net_.Wrapper(net)
     try:
         embed, err = await git.git_release(user, repo, release)
