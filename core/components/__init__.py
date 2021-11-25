@@ -23,8 +23,16 @@
 
 from __future__ import annotations
 
-from .api import api as api
-from .destiny import destiny as destiny
-from .git import git as git
-from .meta import meta as meta
-from .mod import mod as mod
+__all__: tuple[str, ...] = (
+    "api_loader",
+    "destiny_loader",
+    "git_loader",
+    "meta_loader",
+    "mod_loader",
+)
+
+from .api import api_loader
+from .destiny import destiny_loader
+from .git import git_loader
+from .meta import meta_loader
+from .mod import mod_loader

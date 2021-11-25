@@ -34,6 +34,12 @@ _log = logging.getLogger("run")
 
 if os.name != "nt":
     try:
+        import pyjion
+        pyjion.enable()
+        pyjion.config(debug=False, level=2, graph=False, pgc=True, threshold=30)
+    except ImportError:
+        pass
+    try:
         import uvloop
     except ImportError:
         pass

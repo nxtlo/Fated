@@ -25,7 +25,7 @@
 
 from __future__ import annotations
 
-__all__: tuple[str, ...] = ("destiny",)
+__all__: tuple[str, ...] = ("destiny", "destiny_loader")
 
 import typing
 
@@ -262,8 +262,6 @@ async def get_clan(
         )
     await ctx.respond(embed=embed)
 
-destiny = (
-    tanjun.Component(name="destiny", strict=True)
-    .detect_commands()
-    .make_loader()
-)
+destiny = tanjun.Component(name="Destiny/Bungie", strict=True).load_from_scope()
+destiny.metadata['about'] = f"Component that's related to Destiny2 and [Bungie's API]({aiobungie.__url__})"
+destiny_loader = destiny.make_loader()

@@ -23,8 +23,9 @@
 
 from __future__ import annotations
 
-__all__: tuple[str, ...] = ("mod",)
+__all__: tuple[str, ...] = ("mod", "mod_loader")
 
+import asyncio
 import contextlib
 import datetime
 import inspect
@@ -34,6 +35,7 @@ import textwrap
 import traceback
 import typing
 
+import aiobungie
 import asyncpg
 import hikari
 import tanjun
@@ -41,67 +43,34 @@ import yuyo
 from tanjun import abc
 
 from core.psql import pool as pool_
-from core.utils import cache, format
+from core.utils import cache, format, traits
 
 STDOUT: typing.Final[hikari.Snowflakeish] = hikari.Snowflake(789614938247266305)
 
-# @tanjun.with_member_slash_option("member", "The member to impersonate")
-# @tanjun.with_guild_check
-# @tanjun.as_slash_command("impersonate", "impersonate members.")
-# async def impersonate(ctx: tanjun.SlashContext, member: hikari.InteractionMember | None) -> None:
-    # guild = await ctx.fetch_guild()
-    # channels = [c.id for c in guild.get_channels().values()]
-    # channel = rand.choice(channels)
-    # try:
-        # async for message in (
-            # ctx.rest.fetch_messages(channel)
-            # .skip_while(
-                # lambda m: m.content is not None
-            # )
-            # .filter((".author.id", member.id or ctx.author.id))
-            # .map(".content")
-        # ):
-            # await ctx.respond(message)
-            # return
-    # except (hikari.ForbiddenError, hikari.InternalServerError, StopIteration):
-        # pass
-    # except hikari.RateLimitedError:
-        # return
 
 @tanjun.with_owner_check
 @tanjun.as_message_command_group("cache")
-async def cacher(ctx: tanjun.MessageContext,) -> None:
+async def cacher(
+    ctx: tanjun.MessageContext,
+) -> None:
     # This will always not respond.
     assert not ctx.has_responded
 
+
 @cacher.with_command
-@tanjun.with_greedy_argument("value", default=None)
+@tanjun.with_greedy_argument("value")
 @tanjun.with_argument("key")
 @tanjun.with_parser
 @tanjun.as_message_command("put")
 async def put(
     ctx: tanjun.MessageContext,
     key: typing.Any,
-    value: typing.Any | None,
-    cache_: cache.Memory[typing.Any, typing.Any] = tanjun.inject(type=cache.Memory)
+    value: typing.Any,
+    cache_: cache.Memory[typing.Any, typing.Any] = tanjun.inject(type=cache.Memory),
 ) -> None:
-    match key:
-        case "me":
-            author = ctx.author
-            cache_.put(author.id, author)
-            await ctx.respond(f"Cached author {author.id}")
-        case "guild":
-            guild = await ctx.fetch_guild()
-            cache_.put(guild.id, guild)
-            await ctx.respond(f"Cached guild {guild.id}")
-        case "member":
-            assert isinstance(value, hikari.Member)
-            member = typing.cast(hikari.InteractionMember, value)
-            cache_.put(member.id, member)
-            await ctx.respond(f"Cached member {member.id}")
-        case _:
-            cache_.put(key, value)
-            await ctx.respond(f"Cached {key} to {value}")
+    cache_.put(key, value)
+    await ctx.respond(f"Cached {key} to {value}")
+
 
 @cacher.with_command
 @tanjun.with_greedy_argument("key")
@@ -110,9 +79,10 @@ async def put(
 async def get(
     ctx: tanjun.MessageContext,
     key: typing.Any,
-    cache_: cache.Memory[typing.Any, typing.Any] = tanjun.inject(type=cache.Memory)
+    cache_: cache.Memory[typing.Any, typing.Any] = tanjun.inject(type=cache.Memory),
 ) -> None:
     await ctx.respond(cache_.get(key, "NOT_FOUND"))
+
 
 @cacher.with_command
 @tanjun.with_greedy_argument("key")
@@ -121,7 +91,7 @@ async def get(
 async def remove(
     ctx: tanjun.MessageContext,
     key: typing.Any,
-    cache_: cache.Memory[typing.Any, typing.Any] = tanjun.inject(type=cache.Memory)
+    cache_: cache.Memory[typing.Any, typing.Any] = tanjun.inject(type=cache.Memory),
 ) -> None:
     try:
         del cache_[key]
@@ -130,28 +100,32 @@ async def remove(
         await ctx.respond("Key not found in cache.")
         return
 
+
 @cacher.with_command
 @tanjun.as_message_command("items")
 async def cache_items(
     ctx: tanjun.MessageContext,
-    cache_: cache.Memory[typing.Any, typing.Any] = tanjun.inject(type=cache.Memory)
+    cache_: cache.Memory[typing.Any, typing.Any] = tanjun.inject(type=cache.Memory),
 ) -> None:
-    await ctx.respond(format.with_block(cache_.__repr__()))
+    await ctx.respond(format.with_block(cache_.view()))
+
 
 @cacher.with_command
 @tanjun.as_message_command("clear")
 async def cache_clear(
     ctx: tanjun.MessageContext,
-    cache_: cache.Memory[typing.Any, typing.Any] = tanjun.inject(type=cache.Memory)
+    cache_: cache.Memory[typing.Any, typing.Any] = tanjun.inject(type=cache.Memory),
 ) -> None:
     cache_.clear()
-    await ctx.respond(format.with_block(cache_.__repr__()))
+    await ctx.respond(format.with_block(cache_.view()))
+
 
 @tanjun.with_owner_check
 @tanjun.as_message_command("reload")
 async def reload(ctx: tanjun.MessageContext) -> None:
     ctx.client.reload_modules(f"core.components")
     await ctx.respond(f"Reloaded modules")
+
 
 @tanjun.with_owner_check(halt_execution=True)
 @tanjun.with_greedy_argument("query", converters=str)
@@ -342,7 +316,7 @@ async def get_guilds(ctx: tanjun.MessageContext) -> None:
     )
     await ctx.respond(embed=embed)
 
-# Typed and adopted from RoboDanny <3
+
 @tanjun.with_owner_check
 @tanjun.with_greedy_argument("body", converters=(str,))
 @tanjun.with_parser
@@ -350,16 +324,22 @@ async def get_guilds(ctx: tanjun.MessageContext) -> None:
 async def eval_command(
     ctx: tanjun.MessageContext,
     body: str,
+    /,
     bot: hikari.GatewayBot = tanjun.inject(type=hikari.GatewayBot),
+    aiobungie_: aiobungie.traits.ClientBase = tanjun.inject(type=aiobungie.Client),
+    net: traits.NetRunner = tanjun.inject(type=traits.NetRunner),
+    pool: traits.PoolRunner = tanjun.inject(type=pool_.PoolT),
 ) -> None:
     """Evaluates python code"""
     env = {
         "ctx": ctx,
         "bot": bot,
-        "channel": ctx.get_channel(),
-        "author": ctx.author,
-        "guild": ctx.get_guild(),
-        "message": ctx.message,
+        "aiobungie": aiobungie_,
+        "hikari": hikari,
+        "tanjun": tanjun,
+        "asyncio": asyncio,
+        "pool": pool,
+        "net": net,
         "source": inspect.getsource,
     }
 
@@ -390,7 +370,6 @@ async def eval_command(
                 appd_index = curr
         if appd_index != len(text) - 1:
             pages.add(text[last:curr])
-            print(pages)
         return list(filter(lambda a: a != "", pages))
 
     try:
@@ -411,9 +390,8 @@ async def eval_command(
         if ret is None:
             if value:
                 try:
-
                     out = await ctx.respond(f"```py\n{value}\n```")
-                except:
+                except Exception:
                     paginated_text = paginate(value)
                     for page in paginated_text:
                         if page == paginated_text[-1]:
@@ -432,14 +410,11 @@ async def eval_command(
                     await ctx.respond(f"```py\n{page}\n```")
 
     if out:
-        await ctx.message.add_reaction("\u2705")  # tick
+        await ctx.message.add_reaction("\u2705")
     elif err:
-        await ctx.message.add_reaction("\u2049")  # x
+        await ctx.message.add_reaction("\u2049")
     else:
         await ctx.message.add_reaction("\u2705")
-
-
-# This is the channel where logs will be sent to.
 
 
 async def when_join_guilds(event: hikari.GuildJoinEvent) -> None:
@@ -481,9 +456,9 @@ async def when_leave_guilds(event: hikari.GuildLeaveEvent) -> None:
 
 
 mod = (
-    tanjun.Component(name="mod", strict=True)
+    tanjun.Component(name="Moderation", strict=True)
     .add_listener(hikari.GuildJoinEvent, when_join_guilds)
     .add_listener(hikari.GuildLeaveEvent, when_leave_guilds)
-    .detect_commands()
-    .make_loader()
-)
+).load_from_scope()
+mod.metadata["about"] = "Component for either moderation commands or owner only."
+mod_loader = mod.make_loader()

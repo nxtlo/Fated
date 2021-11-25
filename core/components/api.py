@@ -25,14 +25,18 @@
 
 from __future__ import annotations
 
-__all__: tuple[str, ...] = ("api",)
+__all__: tuple[str, ...] = (
+    "api",
+    "api_loader",
+)
 
+import datetime
 import typing
 
 import hikari
 import tanjun
 
-from core.utils import consts, format
+from core.utils import cache, consts, format
 from core.utils import net as net_
 
 
@@ -51,13 +55,20 @@ async def get_anime(
     random: bool | None,
     genre: str,
     net: net_.HTTPNet = tanjun.inject(type=net_.HTTPNet),
+    cache: cache.Memory[str, hikari.Embed] = tanjun.inject(type=cache.Memory),
 ) -> None:
+    if name and (cached_anime := cache.get(name.lower())):
+        await ctx.respond(embed=cached_anime)
+        return
+
     await ctx.defer()
     jian = net_.Wrapper(net)
     anime = await jian.get_anime(ctx, name, random=random, genre=genre)
     if anime:
+        # Cache the anime if a name is not none.
+        if name:
+            cache.put(name.lower(), anime).set_expiry(datetime.timedelta(hours=6))
         await ctx.respond(embed=anime)
-    return None
 
 
 @tanjun.with_str_slash_option("name", "The manga name")
@@ -66,13 +77,20 @@ async def get_manga(
     ctx: tanjun.abc.SlashContext,
     name: str,
     net: net_.HTTPNet = tanjun.inject(type=net_.HTTPNet),
+    cache: cache.Memory[str, hikari.Embed] = tanjun.inject(type=cache.Memory),
 ) -> None:
+    if name and (cached_manga := cache.get(name.lower())):
+        await ctx.respond(embed=cached_manga)
+        return
+
     await ctx.defer()
     jian = net_.Wrapper(net)
     manga = await jian.get_manga(ctx, name)
-    if manga is not None:
+    if manga:
+        if name:
+            # Cache the manga if a name is not none.
+            cache.put(name, manga).set_expiry(datetime.timedelta(minutes=1))
         await ctx.respond(embed=manga)
-    return None
 
 
 @tanjun.with_str_slash_option("name", "The name of the definition.")
@@ -86,13 +104,10 @@ async def define(
     definition = await urban.get_definition(ctx, name)
     if definition:
         await ctx.respond(embed=definition)
-    return None
 
 
 # Fun stuff.
-
-
-@tanjun.as_message_command("dog", "doggo")
+@tanjun.as_message_command("dog")
 async def doggo(
     ctx: tanjun.MessageContext,
     net: net_.HTTPNet = tanjun.inject(type=net_.HTTPNet),
@@ -113,7 +128,7 @@ async def doggo(
     await ctx.respond(embed=embed)
 
 
-@tanjun.as_message_command("cat", "kitten", "kittie")
+@tanjun.as_message_command("cat")
 async def kittie(
     ctx: tanjun.MessageContext,
     net: net_.HTTPNet = tanjun.inject(type=net_.HTTPNet),
@@ -241,4 +256,6 @@ async def run_net(
             pass
 
 
-api = tanjun.Component(name="api", strict=True).detect_commands().make_loader()
+api = tanjun.Component(name="APIs", strict=True).load_from_scope()
+api.metadata["about"] = "Component that makes API calls to different APIs."
+api_loader = api.make_loader()

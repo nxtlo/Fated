@@ -25,9 +25,7 @@
 
 from __future__ import annotations
 
-from tanjun.injecting import inject
-
-__all__: tuple[str, ...] = ("meta",)
+__all__: tuple[str, ...] = ("meta", "meta_loader")
 
 import datetime
 import logging
@@ -36,6 +34,7 @@ import pathlib
 import shutil
 import subprocess as sp
 import sys
+import typing
 
 import hikari
 import humanize as hz
@@ -43,7 +42,6 @@ import psutil
 import tanjun
 import yuyo
 from aiobungie.internal import time as time_
-from tanjun import abc
 
 from core.utils import format, traits
 
@@ -60,13 +58,58 @@ def _clean_up(path: pathlib.Path) -> None:
     return None
 
 
-@tanjun.with_owner_check
-@tanjun.with_argument("query", converters=(str,))
-@tanjun.with_option("output_format", "--output", "-o", converters=(str,), default="mp3")
+def iter_commands(ctx: tanjun.MessageContext) -> list[dict[tanjun.abc.Component, str]]:
+    commands: list[dict[tanjun.abc.Component, str]] = []
+    for command in ctx.client.iter_message_commands():
+        assert command.component is not None
+        commands += {
+            c: "|".join(command.names)
+            for c in ctx.client.components
+            if command.component.name == c.name
+        }
+    return commands
+
+# TODO: Fix this.
+@tanjun.with_greedy_argument("command_name", converters=str, default=None)
 @tanjun.with_parser
-@tanjun.as_message_command("spotify", "sp")
-async def download_song(
-    ctx: tanjun.abc.MessageContext, query: str, output_format: str
+@tanjun.as_message_command("help")
+async def help(ctx: tanjun.MessageContext, command_name: str | None) -> None:
+    embed = hikari.Embed()
+    if command_name is None:
+        for commands in iter_commands(ctx):
+            for commands_ in [(k, v) for k, v in commands.items()]:
+                component, command = commands_
+            embed.add_field(
+                component.name,
+                f"{component.metadata['about']}\n" f"**Commands**: {command}\n",
+                inline=True,
+            )
+        await ctx.respond(embed=embed)
+        return
+
+    else:
+        for command in ctx.client.iter_commands():
+            if isinstance(command, tanjun.MessageCommand):
+                name = command.names
+            else:
+                name = typing.cast(tanjun.SlashCommand, command).name
+            if name == command_name:
+                embed.title = f"{command.component.name} | {name}"
+                embed.description = command.metadata.get("about", hikari.UNDEFINED)
+        try:
+            await ctx.respond(embed=embed)
+            return
+        # Content is empty.
+        except hikari.BadRequestError:
+            await ctx.respond(f"Command name {command_name} not found.")
+            return
+
+@tanjun.with_owner_check
+@tanjun.with_str_slash_option("url", "The song name or url.")
+@tanjun.with_str_slash_option("output", "The audio output format", default="mp3", choices=("mp3, m4a", "wav"))
+@tanjun.as_slash_command("spotify", "Downloads a song from spotify given a name or url.")
+async def download_spotify_song(
+    ctx: tanjun.abc.SlashContext, query: str, output_format: str
 ) -> None:
     """Downloads a song from spotify giving a link or name."""
     if query is not None:
@@ -77,6 +120,7 @@ async def download_song(
         else:
             os.mkdir("__cache__")
 
+            ok = await ctx.respond("Downloading...")
             with sp.Popen(
                 [
                     "spotdl",
@@ -90,8 +134,6 @@ async def download_song(
                 stderr=sp.PIPE,
                 stdin=sp.PIPE,
             ) as sh:
-                ok = await ctx.respond("Downloading...")
-
                 _, nil = sh.communicate()
                 if nil:
                     await ctx.respond(
@@ -109,8 +151,8 @@ async def download_song(
                         and not file.name == ".spotdl-cache"
                     ):
                         try:
-                            await ctx.respond(attachment=file)
-                            await ok.delete()
+                            assert ok is not None
+                            await ok.respond(attachment=file)
                             _clean_up(path)
                             sh.terminate()
                             return
@@ -218,7 +260,7 @@ async def uptime(ctx: tanjun.abc.MessageContext) -> None:
 
 @tanjun.as_slash_command("about", "Information about the bot itself.")
 async def about_command(
-    ctx: abc.SlashContext,
+    ctx: tanjun.SlashContext,
 ) -> None:
     """Info about the bot itself."""
 
@@ -277,7 +319,7 @@ async def about_command(
 
 @tanjun.with_member_slash_option("member", "The discord member", default=None)
 @tanjun.as_slash_command("avatar", "Returns the avatar of a discord member or yours.")
-async def avatar_view(ctx: abc.SlashContext, /, member: hikari.Member) -> None:
+async def avatar_view(ctx: tanjun.SlashContext, /, member: hikari.Member) -> None:
     """View of your discord avatar or other member."""
     member = member or ctx.author
     avatar = member.avatar_url or member.default_avatar_url
@@ -293,9 +335,9 @@ async def on_message_create(
 
 
 meta = (
-    tanjun.Component(name="meta", strict=True)
+    tanjun.Component(name="Meta", strict=True)
     .add_listener(hikari.GuildMessageCreateEvent, on_message_create)
     .add_listener(hikari.ShardReadyEvent, on_ready)
-    .detect_commands()
-    .make_loader()
-)
+).load_from_scope()
+meta.metadata["about"] = "Component for misc and random commands."
+meta_loader = meta.make_loader()

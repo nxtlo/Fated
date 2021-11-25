@@ -25,16 +25,17 @@
 
 from __future__ import annotations
 
-__all__: tuple[str, ...] = ("git",)
+__all__: tuple[str, ...] = ("git", "git_loader")
 
 import asyncio
+import datetime
 import itertools
 import typing
 
 import hikari
 import tanjun
 
-from core.utils import interfaces
+from core.utils import cache, interfaces
 from core.utils import net as net_
 
 git_group = tanjun.slash_command_group("git", "Commands related to github.")
@@ -43,8 +44,14 @@ git_group = tanjun.slash_command_group("git", "Commands related to github.")
 @tanjun.with_str_slash_option("name", "The name gitub user.")
 @tanjun.as_slash_command("user", "Get information about a github user.")
 async def git_user(
-    ctx: tanjun.abc.SlashContext, name: str, net: net_.HTTPNet = tanjun.inject(type=net_.HTTPNet)
+    ctx: tanjun.abc.SlashContext,
+    name: str,
+    net: net_.HTTPNet = tanjun.inject(type=net_.HTTPNet),
+    cache: cache.Memory[str, hikari.Embed] = tanjun.inject(type=cache.Memory)
 ) -> None:
+    if cached_user := cache.get(name):
+        await ctx.respond(embed=cached_user)
+        return
 
     git = net_.Wrapper(net)
     await ctx.defer()
@@ -72,7 +79,8 @@ async def git_user(
             )
             .add_field("User type", user.type, inline=True)
         )
-    await ctx.edit_initial_response(embed=embed)
+        cache.put(name, embed).set_expiry(datetime.timedelta(hours=6))
+    await ctx.respond(embed=embed)
 
 def _make_embed(repo: interfaces.GithubRepo) -> hikari.Embed:
     embed = (
@@ -128,6 +136,7 @@ async def git_repo(
         future = pairs(iter(repos))
         await ctx.defer()
         try:
+            old = next(future)[0]
             await ctx.edit_initial_response(
                 component=(
                     ctx.rest.build_action_row()
@@ -141,19 +150,21 @@ async def git_repo(
                     .set_label("Next")
                     .add_to_container()
                 ),
-                embed=_make_embed(next(future)[0])
+                embed=_make_embed(old)
             )
+            nxt = old
             try:
                 with bot.stream(hikari.InteractionCreateEvent, 30) as stream:
                     async for event in stream.filter(("interaction.user.id", ctx.author.id)):
                         try:
                             match event.interaction.custom_id:  # type: ignore
                                 case "next":
+                                    old = nxt
                                     nxt = next(future)[1]
                                     await ctx.edit_initial_response(embed=_make_embed(nxt))
                                 case "prev":
-                                    prev = next(future)[0]
-                                    await ctx.edit_initial_response(embed=_make_embed(prev))
+                                    nxt = old
+                                    await ctx.edit_initial_response(embed=_make_embed(old))
                                 case _:
                                     await ctx.delete_initial_response()
                         except StopIteration:
@@ -189,8 +200,6 @@ async def get_release(
         await ctx.respond(err)
         return None
 
-git = (
-    tanjun.Component(name="git", strict=True)
-    .detect_commands()
-    .make_loader()
-)
+git = tanjun.Component(name="Git", strict=True).load_from_scope()
+git.metadata['about'] = "Component related to Github's API."
+git_loader = git.make_loader()

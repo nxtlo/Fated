@@ -27,17 +27,18 @@ __all__: tuple[str, ...] = ("Memory", "Hash")
 
 import collections.abc as collections
 import copy
+import datetime
 import logging
 import typing
 
 import aioredis
+from hikari.internal import cache as hikari_cache
 from hikari.internal import collections as hikari_collections
 
 from . import traits
 from .interfaces import HashView
 
 _LOG: typing.Final[logging.Logger] = logging.getLogger(__name__)
-_T = typing.TypeVar("_T")
 logging.basicConfig(level=logging.DEBUG)
 
 # Memory types.
@@ -48,6 +49,8 @@ MValueT = typing.TypeVar("MValueT")
 HashT = traits.HashT
 FieldT = traits.FieldT
 ValueT = traits.ValueT
+
+T = typing.TypeVar("T")
 
 
 class Hash(
@@ -163,28 +166,69 @@ class Hash(
 
 
 class Memory(hikari_collections.FreezableDict[MKeyT, MValueT]):
-    """A very basic in memory cache that we may api, embeds, etc."""
+    """A very basic in memory cache that we may use it for APIs, embeds, etc."""
 
-    __slots__ = ("_map",)
+    __slots__ = ("_map", "expire_after", "on_expire")
     _map: hikari_collections.ExtendedMutableMapping[MKeyT, MValueT]
 
-    def __init__(self) -> None:
-        self._map = hikari_collections.FreezableDict()
+    def __init__(
+        self,
+        expire_after: datetime.timedelta | None = None,
+        *,
+        on_expire: collections.Callable[..., typing.Any] | None = None,
+    ) -> None:
+        self.expire_after = expire_after
+        self.on_expire = on_expire
+        if not expire_after:
+            # By default we only need to cache stuff
+            # for 12 hours.
+            expire_after = datetime.timedelta(hours=12)
+        self._map = hikari_collections.TimedCacheMap[MKeyT, MValueT](
+            expiry=expire_after, on_expire=on_expire
+        )
 
     def clear(self) -> None:
         self._map.clear()
+        self.expire_after = None
+        self.on_expire = None
 
     def clone(self) -> hikari_collections.ExtendedMutableMapping[MKeyT, MValueT]:
         return self._map.copy()
 
+    def view(self) -> str:
+        return self.__repr__()
+
+    def values(self) -> collections.ValuesView[MValueT]:
+        return self._map.values()
+
+    def keys(self) -> collections.KeysView[MKeyT]:
+        return self._map.keys()
+
+    def put(self, key: MKeyT, value: MValueT) -> Memory[MKeyT, MValueT]:
+        self._map[key] = value
+        return self
+
+    def set_expiry(self, date: datetime.timedelta) -> datetime.timedelta:
+        self.expire_after = date
+        return date
+
+    def set_on_expire(self, obj: collections.Callable[..., T]) -> T:
+        self.on_expire = obj
+        return typing.cast(T, obj)
+
     def __repr__(self) -> str:
-        return f"<MemoryCache size={len(self)}, {', '.join(f'{k}={v!r}' for k, v in self._map.items())}"
+        empty_cache = hikari_cache.EmptyCacheView()
+        if self._map is not None:
+            rpr = "\n".join(f"MemoryCache {k!r}={v!r}" for k, v in self._map.items())
+        else:
+            rpr = empty_cache.__repr__()
+        return rpr
 
     def __getitem__(self, k: MKeyT) -> MValueT:
         return self._map[k]
 
-    def __iter__(self) -> typing.Iterator[MKeyT]:
-        return iter(self._map)
+    def __iter__(self) -> collections.Iterator[MKeyT]:
+        return self._map.__iter__()
 
     def __setitem__(self, k: MKeyT, v: MValueT) -> None:
         self._map[k] = v
@@ -193,13 +237,4 @@ class Memory(hikari_collections.FreezableDict[MKeyT, MValueT]):
         del self._map[v]
 
     def __len__(self) -> int:
-        return len(self._map)
-
-    def values(self) -> collections.ValuesView[MValueT]:
-        return self._map.values()
-
-    def keys(self) -> collections.KeysView[MKeyT]:
-        return self._map.keys()
-
-    def put(self, key: MKeyT, value: MValueT) -> None:
-        self._map[key] = value
+        return self._map.__len__()

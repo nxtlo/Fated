@@ -32,6 +32,7 @@ import typing
 import aiobungie
 import click
 import hikari
+import psutil
 import tanjun
 from hikari.internal import aio, ux
 
@@ -46,7 +47,9 @@ if typing.TYPE_CHECKING:
 
 async def get_prefix(
     ctx: tanjun.abc.MessageContext,
-    hash: traits.HashRunner[str, hikari.Snowflake, str] = tanjun.inject(type=traits.HashRunner),
+    hash: traits.HashRunner[str, hikari.Snowflake, str] = tanjun.inject(
+        type=traits.HashRunner
+    ),
 ) -> str | typing.Sequence[str]:
     if (guild := ctx.guild_id) and (
         prefix := await hash.get("prefixes", guild)
@@ -70,6 +73,13 @@ def build_bot() -> hikari.impl.GatewayBot:
     )
     build_client(bot)
     return bot
+
+
+def _shutdown_redis() -> None:
+    for proc in psutil.process_iter():
+        if proc.name == "redis-server":
+            proc.kill()
+            logging.debug("Killed redis-server")
 
 
 def build_client(bot: hikari_traits.GatewayBotAware) -> tanjun.Client:
@@ -99,6 +109,7 @@ def build_client(bot: hikari_traits.GatewayBotAware) -> tanjun.Client:
         .add_client_callback(
             tanjun.ClientCallbackNames.CLOSING, aiobungie_client.rest.close
         )
+        .add_client_callback(tanjun.ClientCallbackNames.CLOSED, _shutdown_redis)
         # Components.
         .load_modules("core.components")
         # Prefix stuff.
@@ -136,7 +147,6 @@ def main(ctx: click.Context) -> None:
     _enable_logging(hikari=False, tanjun=True, net=True, aiobungie=True)
     if ctx.invoked_subcommand is None:
         build_bot().run(status=hikari.Status.DO_NOT_DISTURB)
-
 
 @main.group(short_help="Handles the db configs.", options_metavar="[options]")
 def db() -> None:

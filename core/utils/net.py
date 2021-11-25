@@ -344,7 +344,8 @@ class Wrapper(interfaces.APIWrapper):
                 await ctx.respond(f"Couldn't find definition about `{name}`")
                 return None
 
-            defn = random_.choice(resp)  # type: ignore
+            assert isinstance(resp, list)
+            defn = random_.choice(resp)
             embed = hikari.Embed(
                 colour=consts.COLOR["invis"], title=f"Definition for {name}"
             )
@@ -443,7 +444,8 @@ class Wrapper(interfaces.APIWrapper):
             if(raw_user := await cli.request(
                 "GET",
                 yarl.URL(consts.API['git']['user']) / name)) is not None:
-                return self._set_repo_owner_attrs(raw_user)  # type: ignore
+                assert isinstance(raw_user, dict)
+                return self._set_repo_owner_attrs(raw_user)
             return None
 
     async def get_git_repo(self, name: str) -> typing.Sequence[interfaces.GithubRepo] | None:
@@ -452,9 +454,11 @@ class Wrapper(interfaces.APIWrapper):
                 "GET",
                 consts.API['git']['repo'].format(name)
             )) is not None:
-                return self._set_repo_attrs(raw_repo)  # type: ignore
+                assert isinstance(raw_repo, dict)
+                return self._set_repo_attrs(raw_repo)
             return None
 
+    # Can we cache this and expire after x hours?
     async def git_release(self, user: str, repo_name: str, release: str) -> tuple[hikari.Embed, str | None]:
         embed = hikari.Embed()
         err: str | None = None
