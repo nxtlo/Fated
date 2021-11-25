@@ -106,13 +106,13 @@ async def help(ctx: tanjun.MessageContext, command_name: str | None) -> None:
 
 @tanjun.with_owner_check
 @tanjun.with_str_slash_option("url", "The song name or url.")
-@tanjun.with_str_slash_option("output", "The audio output format", default="mp3", choices=("mp3, m4a", "wav"))
+@tanjun.with_str_slash_option("output", "The audio output format", default="mp3", choices=("mp3", "m4a", "wav"))
 @tanjun.as_slash_command("spotify", "Downloads a song from spotify given a name or url.")
 async def download_spotify_song(
     ctx: tanjun.abc.SlashContext, url: str, output: str
 ) -> None:
     """Downloads a song from spotify giving a link or name."""
-    if query is not None:
+    if url is not None:
         path = pathlib.Path("__cache__")
 
         if path.exists():
@@ -120,15 +120,15 @@ async def download_spotify_song(
         else:
             os.mkdir("__cache__")
 
-            ok = await ctx.respond("Downloading...")
+            ok = await ctx.create_initial_response("Downloading...")
             with sp.Popen(
                 [
                     "spotdl",
-                    query,
+                    url,
                     "--output",
                     "__cache__",
                     "--output-format",
-                    output_format,
+                    output,
                 ],
                 shell=False,
                 stderr=sp.PIPE,
@@ -151,14 +151,14 @@ async def download_spotify_song(
                         and not file.name == ".spotdl-cache"
                     ):
                         try:
-                            assert ok is not None
-                            await ok.respond(attachment=file)
-                            _clean_up(path)
+                            await ctx.edit_initial_response(attachment=file)
                             sh.terminate()
                             return
                         except Exception:
                             await ctx.respond(format.with_block(sys.exc_info()[1]))
                             return
+                        finally:
+                            _clean_up(path)
             except FileNotFoundError:
                 await ctx.respond("Encountered an error, Trying again.")
                 continue
