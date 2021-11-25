@@ -109,7 +109,7 @@ async def help(ctx: tanjun.MessageContext, command_name: str | None) -> None:
 @tanjun.with_str_slash_option("output", "The audio output format", default="mp3", choices=("mp3, m4a", "wav"))
 @tanjun.as_slash_command("spotify", "Downloads a song from spotify given a name or url.")
 async def download_spotify_song(
-    ctx: tanjun.abc.SlashContext, query: str, output_format: str
+    ctx: tanjun.abc.SlashContext, url: str, output: str
 ) -> None:
     """Downloads a song from spotify giving a link or name."""
     if query is not None:

@@ -43,7 +43,10 @@ import yuyo
 from tanjun import abc
 
 from core.psql import pool as pool_
-from core.utils import cache, format, traits
+from core.utils import cache, format, net as net_
+
+if typing.TYPE_CHECKING:
+	from core.utils import traits
 
 STDOUT: typing.Final[hikari.Snowflakeish] = hikari.Snowflake(789614938247266305)
 
@@ -327,7 +330,7 @@ async def eval_command(
     /,
     bot: hikari.GatewayBot = tanjun.inject(type=hikari.GatewayBot),
     aiobungie_: aiobungie.traits.ClientBase = tanjun.inject(type=aiobungie.Client),
-    net: traits.NetRunner = tanjun.inject(type=traits.NetRunner),
+    net: traits.NetRunner = tanjun.inject(type=net_.HTTPNet),
     pool: traits.PoolRunner = tanjun.inject(type=pool_.PoolT),
 ) -> None:
     """Evaluates python code"""
