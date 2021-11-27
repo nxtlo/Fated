@@ -38,7 +38,6 @@ import asyncio
 import logging
 import random as random_
 import typing
-from collections import abc as collections
 from http import HTTPStatus as http
 
 import aiohttp
@@ -47,7 +46,9 @@ import hikari
 import humanize
 import multidict
 import yarl
+
 from aiobungie.internal import time
+
 from hikari import _about as about
 from hikari.internal import net
 from hikari.internal.time import (
@@ -59,7 +60,7 @@ from . import consts, format, interfaces, traits
 
 if typing.TYPE_CHECKING:
     import types
-
+    import collections.abc as collections
     import tanjun.abc
     from hikari.internal import data_binding
     _GETTER_TYPE = typing.TypeVar("_GETTER_TYPE", covariant=True)
@@ -331,7 +332,7 @@ class Wrapper(interfaces.APIWrapper):
 
     async def get_definition(
         self, ctx: tanjun.abc.SlashContext, name: str
-    ) -> hikari.Embed | None:
+    ) -> collections.Generator[hikari.Embed, None, None] | None:
         async with self._net as cli:
 
             resp = (
@@ -345,43 +346,25 @@ class Wrapper(interfaces.APIWrapper):
                 return None
 
             assert isinstance(resp, list)
-            defn = random_.choice(resp)
-            embed = hikari.Embed(
-                colour=consts.COLOR["invis"], title=f"Definition for {name}"
-            )
 
-            def replace(s: str) -> str:
+            def replace_(s: str) -> str:
                 return s.replace("]", "").replace("[", "")
 
-            try:
-                example: str = defn["example"]
-                embed.add_field("Example", replace(example))
-            except (KeyError, ValueError):
-                pass
-
-            # This cannot be None.
-            definition: str = defn["definition"]
-            embed.description = replace(definition)
-
-            try:
-                up_voted: int = defn["thumbs_up"]
-                down_votes: int = defn["thumbs_down"]
-                embed.set_footer(
-                    text=f"\U0001f44d {up_voted} - \U0001f44e {down_votes}"
+            embeds = (
+                hikari.Embed(
+                    colour=consts.COLOR["invis"],
+                    title=f"Definition for {name}",
+                    description=replace_(defn.get("definition", hikari.UNDEFINED)),
+                    timestamp=fast_datetime(defn.get("written_on")) or None  # type: ignore
                 )
-            except KeyError:
-                pass
-
-            try:
-                date: str = defn["written_on"]
-                embed.timestamp = fast_datetime(date)  # type: ignore
-            except KeyError:
-                pass
-
-            url: str = defn["permalink"]
-            author: str = defn["author"]
-            embed.set_author(name=author, url=url)
-        return embed
+                .add_field("Example", replace_(defn.get("example", hikari.UNDEFINED)))
+                .set_footer(
+                    text=f"\U0001f44d {defn.get('thumbs_up', 0)} - \U0001f44e {defn.get('thumb_down', 0)}"
+                )
+                .set_author(name=defn.get("author"), url=defn.get(defn.get("permalink")))
+                for defn in resp
+            )
+        return embeds
 
     def _set_repo_owner_attrs(self, payload: dict[str, typing.Any]) -> interfaces.GithubUser:
         user: dict[str, typing.Any] = payload

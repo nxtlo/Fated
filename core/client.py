@@ -28,7 +28,7 @@ import logging
 import subprocess
 import traceback
 import typing
-
+import yuyo
 import aiobungie
 import click
 import hikari
@@ -58,7 +58,7 @@ async def get_prefix(
     return ()
 
 
-def build_bot() -> hikari.impl.GatewayBot:
+def _build_bot() -> hikari.impl.GatewayBot:
     # This is only global to pass it between
     # The bot and the client
     global config
@@ -71,7 +71,7 @@ def build_bot() -> hikari.impl.GatewayBot:
         intents=intents,
         cache_settings=hikari.CacheSettings(components=config.CACHE),
     )
-    build_client(bot)
+    _build_client(bot)
     return bot
 
 
@@ -81,11 +81,11 @@ def _shutdown_redis() -> None:
             proc.kill()
             logging.debug("Killed redis-server")
 
-
-def build_client(bot: hikari_traits.GatewayBotAware) -> tanjun.Client:
+def _build_client(bot: hikari_traits.GatewayBotAware) -> tanjun.Client:
     pg_pool = pool_.PgxPool()
     client_session = net.HTTPNet()
     aiobungie_client = aiobungie.Client(config.BUNGIE_TOKEN, max_retries=4)
+    yuyo_client = yuyo.ComponentClient.from_gateway_bot(bot, event_managed=False)
     client = (
         tanjun.Client.from_gateway_bot(
             bot,
@@ -110,6 +110,10 @@ def build_client(bot: hikari_traits.GatewayBotAware) -> tanjun.Client:
             tanjun.ClientCallbackNames.CLOSING, aiobungie_client.rest.close
         )
         .add_client_callback(tanjun.ClientCallbackNames.CLOSED, _shutdown_redis)
+        # yuyo
+        .set_type_dependency(yuyo.ComponentClient, yuyo_client)
+        .add_client_callback(tanjun.ClientCallbackNames.STARTING, yuyo_client.open)
+        .add_client_callback(tanjun.ClientCallbackNames.CLOSING, yuyo_client.close)
         # Components.
         .load_modules("core.components")
         # Prefix stuff.
@@ -146,7 +150,7 @@ def _enable_logging(
 def main(ctx: click.Context) -> None:
     _enable_logging(hikari=False, tanjun=True, net=True, aiobungie=True)
     if ctx.invoked_subcommand is None:
-        build_bot().run(status=hikari.Status.DO_NOT_DISTURB)
+        _build_bot().run(status=hikari.Status.DO_NOT_DISTURB)
 
 @main.group(short_help="Handles the db configs.", options_metavar="[options]")
 def db() -> None:

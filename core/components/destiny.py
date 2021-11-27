@@ -21,7 +21,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-"""Commands related to destiny 2 and bungie's API"""
+"""Commands related to Bungie's API to test aiobungie."""
 
 from __future__ import annotations
 
@@ -34,36 +34,25 @@ import asyncpg
 import hikari
 import humanize
 import tanjun
+import yuyo
 
 from core.psql import pool
-from core.utils import consts
+from core.utils import consts, format
 
 destiny_group = tanjun.slash_command_group("destiny", "Commands related to Destiny 2.")
 
-_PLATFORMS: tuple[str, ...] = (
-    "Steam",
-    "PSN",
-    "Stadia",
-    "XBox",
-)
+_PLATFORMS: dict[str, aiobungie.MembershipType] = {
+    "Steam": aiobungie.MembershipType.STEAM,
+    "PSN": aiobungie.MembershipType.PSN,
+    "Stadia": aiobungie.MembershipType.STADIA,
+    "XBox": aiobungie.MembershipType.XBOX
+}
 
-def _transform_type(
-    type: str,
-) -> aiobungie.MembershipType:
-
-    convert: aiobungie.MembershipType
-    match type:
-        case "steam":
-            convert = aiobungie.MembershipType.STEAM
-        case "xbox":
-            convert = aiobungie.MembershipType.XBOX
-        case "psn":
-            convert = aiobungie.MembershipType.PSN
-        case "stadia":
-            convert = aiobungie.MembershipType.STADIA
-        case _:
-            convert = aiobungie.MembershipType.ALL
-    return convert
+_CHARACTERS: dict[str, aiobungie.Class] = {
+    "Warlock": aiobungie.Class.WARLOCK,
+    "Hunter": aiobungie.Class.HUNTER,
+    "Titan": aiobungie.Class.TITAN
+}
 
 async def _get_destiny_player(
     client: aiobungie.Client,
@@ -92,7 +81,7 @@ async def _sync_player(
     type: str,
 ) -> None:
     try:
-        player = await _get_destiny_player(client, name, _transform_type(type))
+        player = await _get_destiny_player(client, name, _PLATFORMS[type])
     except aiobungie.NotFound as exc:
         await ctx.respond(exc)
         return
@@ -110,7 +99,7 @@ async def _sync_player(
 
 @destiny_group.with_command
 @tanjun.with_str_slash_option("name", "The unique bungie name. Looks like this `Fate#123`")
-@tanjun.with_str_slash_option("type", "The membership type.", choices=_PLATFORMS)
+@tanjun.with_str_slash_option("type", "The membership type.", choices=consts.iter(_PLATFORMS))
 @tanjun.as_slash_command("sync", "Sync your destiny membership with this bot.")
 async def sync(
     ctx: tanjun.abc.SlashContext,
@@ -140,18 +129,75 @@ async def desync(
 
 @destiny_group.with_command
 @tanjun.with_member_slash_option("member", "An optional discord member to get their characters.", default=None)
-@tanjun.with_str_slash_option("name", "An optional player name to search for.", default=None)
-@tanjun.with_int_slash_option("id", "An optional player id to search for.", default=None)
+@tanjun.with_str_slash_option("platform", "The membership type to return", choices=consts.iter(_PLATFORMS))
+@tanjun.with_str_slash_option("id", "An optional player id to search for.", default=None)
 @tanjun.as_slash_command("character", "Information about a member's Destiny characters.")
 async def characters(
     ctx: tanjun.abc.SlashContext,
-    name: str | None,
+    platform: str,
     member: hikari.InteractionMember | None,
-    id: int | None,
+    id: str | None,
     client: aiobungie.Client = tanjun.injected(type=aiobungie.Client),
-    pool: pool.PoolT = tanjun.injected(type=pool.PoolT)
+    pool: pool.PoolT = tanjun.injected(type=pool.PoolT),
+    component_client: yuyo.ComponentClient = tanjun.inject(type=yuyo.ComponentClient)
 ) -> None:
-    ...
+    author = member or ctx.author
+    if member and id:
+        await ctx.respond("Can't specify a member and an id at the same time.")
+        return
+
+    id = id or await pool.fetchval("SELECT bungie_id FROM destiny WHERE ctx_id = $1", author.id)
+    if id:
+        try:
+            char_resp = await client.fetch_profile(int(id), _PLATFORMS[platform], aiobungie.ComponentType.CHARACTERS)
+        except Exception as e:
+            await ctx.respond(embed=hikari.Embed(description=format.with_block(e)))
+            return
+
+        if char_mapper := char_resp.characters:
+            iterator = tuple(c for c in char_mapper.values())
+            pages = iter((
+                (
+                    hikari.UNDEFINED,
+                    hikari.Embed(title=str(char.class_type))
+                        .set_image(char.emblem.url)
+                        .set_thumbnail(char.emblem_icon.url)
+                        .set_author(name=str(char.id), url=char.url)
+                        .add_field(
+                            "Information",
+                            f"Power: {char.light}\n"
+                            f"Class: {char.class_type}\n"
+                            f"Gender: {char.gender}\n"
+                            f"Race: {char.race}\n"
+                            f"Played Time: {char.total_played_time}\n"
+                            f"Last played: {char.last_played}\n"
+                            f"Title hash: {char.title_hash if char.title_hash else 'N/A'}\n"
+                            f"Member ID: {char.member_id}\nMember Type: {char.member_type}\n"
+                        )
+                        .add_field(
+                            "Stats",
+                            "\n".join([f'{key}: {val}' for key, val in char.stats.items()])
+                        ),
+                        # We dont need char_id since its in the object itself.
+                )
+                for char in iterator
+            ))
+            paginator = yuyo.ComponentPaginator(
+                pages,
+                authors=(author,),
+                triggers=(
+                    yuyo.pagination.LEFT_DOUBLE_TRIANGLE,
+                    yuyo.pagination.LEFT_TRIANGLE,
+                    yuyo.pagination.STOP_SQUARE,
+                    yuyo.pagination.RIGHT_TRIANGLE,
+                    yuyo.pagination.RIGHT_DOUBLE_TRIANGLE,
+                ),
+            )
+            next_char = await paginator.get_next_entry()
+            assert next_char
+            content, embed = next_char
+            msg = await ctx.respond(content=content, embed=embed, component=paginator, ensure_result=True)
+            component_client.set_executor(msg, paginator)
 
 @destiny_group.with_command
 @tanjun.with_member_slash_option("member", "An optional discord member to get their profile.", default=None)

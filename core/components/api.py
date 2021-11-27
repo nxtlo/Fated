@@ -25,6 +25,8 @@
 
 from __future__ import annotations
 
+import yuyo
+
 __all__: tuple[str, ...] = (
     "api",
     "api_loader",
@@ -40,6 +42,7 @@ from core.utils import cache, consts, format
 from core.utils import net as net_
 
 
+# TODO: Use a paginator here.
 @tanjun.with_str_slash_option("name", "The anime's name.", default=None)
 @tanjun.with_bool_slash_option("random", "Get a random anime.", default=True)
 @tanjun.with_str_slash_option(
@@ -71,6 +74,7 @@ async def get_anime(
         await ctx.respond(embed=anime)
 
 
+# TODO: Use a paginator here.
 @tanjun.with_str_slash_option("name", "The manga name")
 @tanjun.as_slash_command("manga", "Returns basic information about a manga.")
 async def get_manga(
@@ -99,12 +103,32 @@ async def define(
     ctx: tanjun.abc.SlashContext,
     name: str,
     net: net_.HTTPNet = tanjun.inject(type=net_.HTTPNet),
+    component_client: yuyo.ComponentClient = tanjun.inject(type=yuyo.ComponentClient)
 ) -> None:
     urban = net_.Wrapper(net)
-    definition = await urban.get_definition(ctx, name)
-    if definition:
-        await ctx.respond(embed=definition)
+    definitions = await urban.get_definition(ctx, name)
 
+    if definitions:
+        pages = (
+            (hikari.UNDEFINED, embed) for embed in definitions
+        )
+
+        paginator = yuyo.ComponentPaginator(
+            pages,
+            authors=(ctx.author,),
+            triggers=(
+                yuyo.pagination.LEFT_DOUBLE_TRIANGLE,
+                yuyo.pagination.LEFT_TRIANGLE,
+                yuyo.pagination.STOP_SQUARE,
+                yuyo.pagination.RIGHT_TRIANGLE,
+                yuyo.pagination.RIGHT_DOUBLE_TRIANGLE,
+            ),
+        )
+        next_definition = await paginator.get_next_entry()
+        assert next_definition
+        content, embed = next_definition
+        msg = await ctx.respond(content=content, embed=embed, component=paginator, ensure_result=True)
+        component_client.set_executor(msg, paginator)
 
 # Fun stuff.
 @tanjun.as_message_command("dog")

@@ -120,7 +120,7 @@ async def download_spotify_song(
         else:
             os.mkdir("__cache__")
 
-            ok = await ctx.create_initial_response("Downloading...")
+            _ = await ctx.create_initial_response("Downloading...")
             with sp.Popen(
                 [
                     "spotdl",
@@ -155,7 +155,7 @@ async def download_spotify_song(
                             sh.terminate()
                             return
                         except Exception:
-                            await ctx.respond(format.with_block(sys.exc_info()[1]))
+                            await ctx.respond(format.error(str=True))
                             return
                         finally:
                             _clean_up(path)
@@ -242,7 +242,7 @@ async def clear_prefix(
 
 @tanjun.with_str_slash_option("color", "The color hex code.")
 @tanjun.as_slash_command("colour", "Returns a view of a color by its hex.")
-async def color_fn(ctx: tanjun.abc.MessageContext, color: int) -> None:
+async def colors(ctx: tanjun.abc.MessageContext, color: int) -> None:
     embed = hikari.Embed()
     embed.set_author(name=ctx.author.username)
     image = f"https://some-random-api.ml/canvas/colorviewer?hex={color}"

@@ -33,7 +33,7 @@ import attr
 
 if typing.TYPE_CHECKING:
     import datetime
-
+    import collections.abc as collections
     import hikari
     import tanjun
 
@@ -71,7 +71,7 @@ class APIWrapper(abc.ABC):
     @abc.abstractmethod
     async def get_definition(
         self, ctx: tanjun.abc.SlashContext, name: str
-    ) -> hikari.Embed | None:
+    ) -> collections.Generator[hikari.Embed, None, None] | None:
         raise NotImplementedError
 
     @abc.abstractmethod

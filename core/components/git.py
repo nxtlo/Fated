@@ -25,17 +25,16 @@
 
 from __future__ import annotations
 
+import yuyo
+
 __all__: tuple[str, ...] = ("git", "git_loader")
 
-import asyncio
 import datetime
-import itertools
-import typing
 
 import hikari
 import tanjun
 
-from core.utils import cache, interfaces
+from core.utils import cache
 from core.utils import net as net_
 
 git_group = tanjun.slash_command_group("git", "Commands related to github.")
@@ -82,33 +81,6 @@ async def git_user(
         cache.put(name, embed).set_expiry(datetime.timedelta(hours=6))
     await ctx.respond(embed=embed)
 
-def _make_embed(repo: interfaces.GithubRepo) -> hikari.Embed:
-    embed = (
-        hikari.Embed(title=repo.name, url=repo.url, timestamp=repo.created_at)
-        .add_field("Stars", str(repo.stars), inline=True)
-        .add_field("Forks", str(repo.forks), inline=True)
-        .add_field("Is Archived", str(repo.is_archived), inline=True)
-        .add_field(
-            "Stats:",
-            f"**Last push**: {repo.last_push}\n"
-            f"**Size**: {repo.size}\n"
-            f"**Is Forked**: {repo.is_forked}\n"
-            f"**Top Language**: {repo.language}\n"
-            f"**Open Issues**: {repo.open_issues}\n"
-            f"**License**: {repo.license}\n"
-            f"**Pages**: {repo.page}",
-        )
-    )
-
-    if repo.description:
-        embed.description = repo.description
-    if (owner := repo.owner) is not None:
-        if owner.avatar_url:
-            embed.set_thumbnail(owner.avatar_url)
-        embed.set_author(name=str(owner.name), url=owner.url)
-    return embed
-
-
 @git_group.with_command
 @tanjun.with_str_slash_option("name", "The name gitub user.")
 @tanjun.as_slash_command("repo", "Get information about a github repo.")
@@ -116,7 +88,7 @@ async def git_repo(
     ctx: tanjun.abc.SlashContext,
     name: str,
     net: net_.HTTPNet = tanjun.inject(type=net_.HTTPNet),
-    bot: hikari.GatewayBot = tanjun.injected(type=hikari.GatewayBot),
+    component_client: yuyo.ComponentClient = tanjun.inject(type=yuyo.ComponentClient)
 ) -> None:
     git = net_.Wrapper(net)
 
@@ -126,55 +98,49 @@ async def git_repo(
         await ctx.respond("Nothing was found.")
         return
 
-    if repos is not None:
-
-        def pairs(i: typing.Iterable[interfaces.GithubRepo]):
-            a, b = itertools.tee(i)
-            next(b, None)
-            return zip(a, b)
-
-        future = pairs(iter(repos))
-        await ctx.defer()
-        try:
-            old = next(future)[0]
-            await ctx.edit_initial_response(
-                component=(
-                    ctx.rest.build_action_row()
-                    .add_button(hikari.ButtonStyle.SECONDARY, "prev")
-                    .set_label("Previous")
-                    .add_to_container()
-                    .add_button(hikari.ButtonStyle.DANGER, "exit")
-                    .set_label("Exit")
-                    .add_to_container()
-                    .add_button(hikari.ButtonStyle.PRIMARY, "next")
-                    .set_label("Next")
-                    .add_to_container()
-                ),
-                embed=_make_embed(old)
+    if repos:
+        pages = iter((
+            (hikari.UNDEFINED,
+            hikari.Embed(
+                title=repo.name,
+                url=repo.url,
+                timestamp=repo.created_at,
+                description=repo.description or hikari.UNDEFINED
             )
-            nxt = old
-            try:
-                with bot.stream(hikari.InteractionCreateEvent, 30) as stream:
-                    async for event in stream.filter(("interaction.user.id", ctx.author.id)):
-                        try:
-                            match event.interaction.custom_id:  # type: ignore
-                                case "next":
-                                    old = nxt
-                                    nxt = next(future)[1]
-                                    await ctx.edit_initial_response(embed=_make_embed(nxt))
-                                case "prev":
-                                    nxt = old
-                                    await ctx.edit_initial_response(embed=_make_embed(old))
-                                case _:
-                                    await ctx.delete_initial_response()
-                        except StopIteration:
-                            await ctx.respond("Reached maximum reuslts.")
-                            break
-            except asyncio.TimeoutError:
-                await ctx.edit_initial_response("Timed out.")
-                return
-        except hikari.HTTPError:
-            raise
+            .set_author(name=str(repo.owner.name) or None, url=repo.owner.url or None)
+            .set_thumbnail(repo.owner.avatar_url if repo.owner else None)
+            .add_field("Stars", str(repo.stars), inline=True)
+            .add_field("Forks", str(repo.forks), inline=True)
+            .add_field("Is Archived", str(repo.is_archived), inline=True)
+            .add_field(
+                "Stats:",
+                f"**Last push**: {repo.last_push}\n"
+                f"**Size**: {repo.size}\n"
+                f"**Is Forked**: {repo.is_forked}\n"
+                f"**Top Language**: {repo.language}\n"
+                f"**Open Issues**: {repo.open_issues}\n"
+                f"**License**: {repo.license}\n"
+                f"**Pages**: {repo.page}",
+            ),
+        )
+        for repo in repos
+    ))
+        paginator = yuyo.ComponentPaginator(
+            pages,
+            authors=(ctx.author,),
+            triggers=(
+                yuyo.pagination.LEFT_DOUBLE_TRIANGLE,
+                yuyo.pagination.LEFT_TRIANGLE,
+                yuyo.pagination.STOP_SQUARE,
+                yuyo.pagination.RIGHT_TRIANGLE,
+                yuyo.pagination.RIGHT_DOUBLE_TRIANGLE,
+            ),
+        )
+        next_repo = await paginator.get_next_entry()
+        assert next_repo
+        content, embed = next_repo
+        msg = await ctx.respond(content=content, embed=embed, component=paginator, ensure_result=True)
+        component_client.set_executor(msg, paginator)
 
 @git_group.with_command
 @tanjun.with_str_slash_option("user", "The user or org ot look up.")
