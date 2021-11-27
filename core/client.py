@@ -28,12 +28,13 @@ import logging
 import subprocess
 import traceback
 import typing
-import yuyo
+
 import aiobungie
 import click
 import hikari
 import psutil
 import tanjun
+import yuyo
 from hikari.internal import aio, ux
 
 from core.psql import pool as pool_
@@ -81,6 +82,7 @@ def _shutdown_redis() -> None:
             proc.kill()
             logging.debug("Killed redis-server")
 
+
 def _build_client(bot: hikari_traits.GatewayBotAware) -> tanjun.Client:
     pg_pool = pool_.PgxPool()
     client_session = net.HTTPNet()
@@ -91,6 +93,7 @@ def _build_client(bot: hikari_traits.GatewayBotAware) -> tanjun.Client:
             bot,
             mention_prefix=True,
             declare_global_commands=True,
+            set_global_commands=hikari.Snowflake(781336284424699906)
         )
         # pg pool
         .set_type_dependency(pool_.PoolT, pg_pool)
@@ -120,7 +123,11 @@ def _build_client(bot: hikari_traits.GatewayBotAware) -> tanjun.Client:
         .set_prefix_getter(get_prefix)
         .add_prefix(".")
     )
-
+    (
+        tanjun.InMemoryCooldownManager()
+        .set_bucket("destiny", tanjun.BucketResource.USER, 2, 4)
+        .add_to_client(client)
+    )
     client.metadata["uptime"] = datetime.datetime.now()
     return client
 
@@ -151,6 +158,7 @@ def main(ctx: click.Context) -> None:
     _enable_logging(hikari=False, tanjun=True, net=True, aiobungie=True)
     if ctx.invoked_subcommand is None:
         _build_bot().run(status=hikari.Status.DO_NOT_DISTURB)
+
 
 @main.group(short_help="Handles the db configs.", options_metavar="[options]")
 def db() -> None:

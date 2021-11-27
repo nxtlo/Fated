@@ -69,6 +69,7 @@ def iter_commands(ctx: tanjun.MessageContext) -> list[dict[tanjun.abc.Component,
         }
     return commands
 
+
 # TODO: Fix this.
 @tanjun.with_greedy_argument("command_name", converters=str, default=None)
 @tanjun.with_parser
@@ -104,10 +105,15 @@ async def help(ctx: tanjun.MessageContext, command_name: str | None) -> None:
             await ctx.respond(f"Command name {command_name} not found.")
             return
 
+
 @tanjun.with_owner_check
 @tanjun.with_str_slash_option("url", "The song name or url.")
-@tanjun.with_str_slash_option("output", "The audio output format", default="mp3", choices=("mp3", "m4a", "wav"))
-@tanjun.as_slash_command("spotify", "Downloads a song from spotify given a name or url.")
+@tanjun.with_str_slash_option(
+    "output", "The audio output format", default="mp3", choices=("mp3", "m4a", "wav")
+)
+@tanjun.as_slash_command(
+    "spotify", "Downloads a song from spotify given a name or url."
+)
 async def download_spotify_song(
     ctx: tanjun.abc.SlashContext, url: str, output: str
 ) -> None:

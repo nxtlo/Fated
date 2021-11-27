@@ -27,8 +27,8 @@ from __future__ import annotations
 
 __all__: tuple[str, ...] = ("destiny", "destiny_loader")
 
+import datetime
 import typing
-
 import aiobungie
 import asyncpg
 import hikari
@@ -36,8 +36,9 @@ import humanize
 import tanjun
 import yuyo
 
+from hikari.internal import aio
 from core.psql import pool
-from core.utils import consts, format
+from core.utils import consts, format, cache
 
 destiny_group = tanjun.slash_command_group("destiny", "Commands related to Destiny 2.")
 
@@ -45,23 +46,24 @@ _PLATFORMS: dict[str, aiobungie.MembershipType] = {
     "Steam": aiobungie.MembershipType.STEAM,
     "PSN": aiobungie.MembershipType.PSN,
     "Stadia": aiobungie.MembershipType.STADIA,
-    "XBox": aiobungie.MembershipType.XBOX
+    "XBox": aiobungie.MembershipType.XBOX,
 }
 
 _CHARACTERS: dict[str, aiobungie.Class] = {
     "Warlock": aiobungie.Class.WARLOCK,
     "Hunter": aiobungie.Class.HUNTER,
-    "Titan": aiobungie.Class.TITAN
+    "Titan": aiobungie.Class.TITAN,
 }
+
 
 async def _get_destiny_player(
     client: aiobungie.Client,
     name: str,
-    type: aiobungie.MembershipType = aiobungie.MembershipType.ALL
+    type: aiobungie.MembershipType = aiobungie.MembershipType.ALL,
 ) -> aiobungie.crate.DestinyUser:
     try:
         player = await client.fetch_player(name, type)
-        assert player is not None
+        assert player
         # The sequence always holds one player.
         # If they're not found means there's no player with the given name.
         return player[0]
@@ -71,8 +73,44 @@ async def _get_destiny_player(
             "Make sure you include the full name looks like this `Fate#123`"
         ) from None
 
+def _build_inventory_item_embed(entity: aiobungie.crate.InventoryEntity) -> hikari.Embed:
+
+    item_tier = None
+    try:
+        item_tier = entity.tier
+    except ValueError:
+        pass
+
+    embed = (
+        hikari.Embed(title=entity.name, colour=consts.COLOR['invis'], description=entity.description)
+        .add_field(
+            "About",
+            f"Hash: {entity.hash}\n"
+            f"Index: {entity.index}\n"
+            f"About: {entity.about}\n"
+            f"Can equip: {entity.is_equippable}\n"
+            f"Lore hash: {entity.lore_hash}"
+        )
+        .add_field(
+            "Metadata",
+            f"Type: {str(entity.type)} - Sub type: {str(entity.sub_type)}\n"
+            f"Damage type: {entity.damage}\n"
+            f"Ammo type: {entity.ammo_type or 'N/A'}\n"
+            f"Class type: {entity.item_class or 'N/A'}\n"
+            f"Tier: {item_tier} - Tier name: {entity.tier_name}"
+        )
+    )
+    if entity.has_icon:
+        embed.set_thumbnail(str(entity.icon))
+
+    # This is a bug in aiobungie o:
+    if entity.banner and entity.banner.url != "https://www.bungie.netImage <UNDEFINED>":
+        embed.set_image(entity.banner.url)
+    return embed
+
+
 async def _sync_player(
-    ctx: tanjun.abc.SlashContext, 
+    ctx: tanjun.abc.SlashContext,
     client: aiobungie.Client,
     pool: pool.PoolT,
     /,
@@ -89,26 +127,38 @@ async def _sync_player(
     try:
         await pool.execute(
             "INSERT INTO destiny(ctx_id, bungie_id, name, code, memtype) VALUES($1, $2, $3, $4, $5)",
-            ctx.author.id, player.id, player.name, player.code, int(player.type)
+            ctx.author.id,
+            player.id,
+            player.name,
+            player.code,
+            int(player.type),
         )
     except asyncpg.exceptions.UniqueViolationError:
         await ctx.respond("You're already synced.")
         return
 
-    await ctx.respond(f"Synced `{player.unique_name}` | `{player.id}`, `/destiny profile` to view your profile")
+    await ctx.respond(
+        f"Synced `{player.unique_name}` | `{player.id}`, `/destiny profile` to view your profile"
+    )
+
 
 @destiny_group.with_command
-@tanjun.with_str_slash_option("name", "The unique bungie name. Looks like this `Fate#123`")
-@tanjun.with_str_slash_option("type", "The membership type.", choices=consts.iter(_PLATFORMS))
+@tanjun.with_str_slash_option(
+    "name", "The unique bungie name. Looks like this `Fate#123`"
+)
+@tanjun.with_str_slash_option(
+    "type", "The membership type.", choices=consts.iter(_PLATFORMS)
+)
 @tanjun.as_slash_command("sync", "Sync your destiny membership with this bot.")
 async def sync(
     ctx: tanjun.abc.SlashContext,
     name: str,
     type: str,
     pool: pool.PoolT = tanjun.injected(type=pool.PoolT),
-    client: aiobungie.Client = tanjun.injected(type=aiobungie.Client)
+    client: aiobungie.Client = tanjun.injected(type=aiobungie.Client),
 ) -> None:
     await _sync_player(ctx, client, pool, name=name, type=type)
+
 
 @destiny_group.with_command
 @tanjun.as_slash_command("desync", "Desync your destiny membership with this bot.")
@@ -116,7 +166,11 @@ async def desync(
     ctx: tanjun.abc.SlashContext,
     pool: pool.PoolT = tanjun.injected(type=pool.PoolT),
 ) -> None:
-    if (member := await pool.fetchval("SELECT ctx_id FROM destiny WHERE ctx_id = $1", ctx.author.id)) is not None:
+    if (
+        member := await pool.fetchval(
+            "SELECT ctx_id FROM destiny WHERE ctx_id = $1", ctx.author.id
+        )
+    ) is not None:
         print(member)
         try:
             await pool.execute("DELETE FROM destiny WHERE ctx_id = $1", member)
@@ -127,11 +181,21 @@ async def desync(
         await ctx.respond("You're not already synced.")
         return
 
+
+@tanjun.with_cooldown("destiny")
 @destiny_group.with_command
-@tanjun.with_member_slash_option("member", "An optional discord member to get their characters.", default=None)
-@tanjun.with_str_slash_option("platform", "The membership type to return", choices=consts.iter(_PLATFORMS))
-@tanjun.with_str_slash_option("id", "An optional player id to search for.", default=None)
-@tanjun.as_slash_command("character", "Information about a member's Destiny characters.")
+@tanjun.with_member_slash_option(
+    "member", "An optional discord member to get their characters.", default=None
+)
+@tanjun.with_str_slash_option(
+    "platform", "The membership type to return", choices=consts.iter(_PLATFORMS)
+)
+@tanjun.with_str_slash_option(
+    "id", "An optional player id to search for.", default=None
+)
+@tanjun.as_slash_command(
+    "character", "Information about a member's Destiny characters."
+)
 async def characters(
     ctx: tanjun.abc.SlashContext,
     platform: str,
@@ -139,27 +203,32 @@ async def characters(
     id: str | None,
     client: aiobungie.Client = tanjun.injected(type=aiobungie.Client),
     pool: pool.PoolT = tanjun.injected(type=pool.PoolT),
-    component_client: yuyo.ComponentClient = tanjun.inject(type=yuyo.ComponentClient)
+    component_client: yuyo.ComponentClient = tanjun.inject(type=yuyo.ComponentClient),
 ) -> None:
     author = member or ctx.author
     if member and id:
         await ctx.respond("Can't specify a member and an id at the same time.")
         return
 
-    id = id or await pool.fetchval("SELECT bungie_id FROM destiny WHERE ctx_id = $1", author.id)
+    id = id or await pool.fetchval(
+        "SELECT bungie_id FROM destiny WHERE ctx_id = $1", author.id
+    )
     if id:
         try:
-            char_resp = await client.fetch_profile(int(id), _PLATFORMS[platform], aiobungie.ComponentType.CHARACTERS)
+            char_resp = await client.fetch_profile(
+                int(id), _PLATFORMS[platform], aiobungie.ComponentType.CHARACTERS
+            )
         except Exception as e:
             await ctx.respond(embed=hikari.Embed(description=format.with_block(e)))
             return
 
         if char_mapper := char_resp.characters:
             iterator = tuple(c for c in char_mapper.values())
-            pages = iter((
+            pages = iter(
                 (
-                    hikari.UNDEFINED,
-                    hikari.Embed(title=str(char.class_type))
+                    (
+                        hikari.UNDEFINED,
+                        hikari.Embed(title=str(char.class_type), colour=consts.COLOR['invis'])
                         .set_image(char.emblem.url)
                         .set_thumbnail(char.emblem_icon.url)
                         .set_author(name=str(char.id), url=char.url)
@@ -172,16 +241,19 @@ async def characters(
                             f"Played Time: {char.total_played_time}\n"
                             f"Last played: {char.last_played}\n"
                             f"Title hash: {char.title_hash if char.title_hash else 'N/A'}\n"
-                            f"Member ID: {char.member_id}\nMember Type: {char.member_type}\n"
+                            f"Member ID: {char.member_id}\nMember Type: {char.member_type}\n",
                         )
                         .add_field(
                             "Stats",
-                            "\n".join([f'{key}: {val}' for key, val in char.stats.items()])
+                            "\n".join(
+                                [f"{key}: {val}" for key, val in char.stats.items()]
+                            ),
                         ),
                         # We dont need char_id since its in the object itself.
+                    )
+                    for char in iterator
                 )
-                for char in iterator
-            ))
+            )
             paginator = yuyo.ComponentPaginator(
                 pages,
                 authors=(author,),
@@ -196,24 +268,35 @@ async def characters(
             next_char = await paginator.get_next_entry()
             assert next_char
             content, embed = next_char
-            msg = await ctx.respond(content=content, embed=embed, component=paginator, ensure_result=True)
+            msg = await ctx.respond(
+                content=content, embed=embed, component=paginator, ensure_result=True
+            )
             component_client.set_executor(msg, paginator)
 
+
 @destiny_group.with_command
-@tanjun.with_member_slash_option("member", "An optional discord member to get their profile.", default=None)
-@tanjun.with_str_slash_option("name", "An optional player name to search for.", default=None)
+@tanjun.with_member_slash_option(
+    "member", "An optional discord member to get their profile.", default=None
+)
+@tanjun.with_str_slash_option(
+    "name", "An optional player name to search for.", default=None
+)
 @tanjun.as_slash_command("profile", "Information about a member's destiny membership.")
 async def profiles(
     ctx: tanjun.abc.SlashContext,
     name: str | None,
-    member: hikari.Member,
+    member: hikari.InteractionMember,
     client: aiobungie.Client = tanjun.injected(type=aiobungie.Client),
-    pool: pool.PoolT = tanjun.injected(type=pool.PoolT)
+    pool: pool.PoolT = tanjun.injected(type=pool.PoolT),
 ) -> None:
 
-    member = member or ctx.author
-    if (raw_stored_player := await pool.fetchrow("SELECT * FROM destiny WHERE ctx_id = $1", member.id)) is not None:
-        stored_player: dict[str, typing.Any] = raw_stored_player # type: ignore
+    member = member or ctx.member
+    if (
+        raw_stored_player := await pool.fetchrow(
+            "SELECT * FROM destiny WHERE ctx_id = $1", member.id
+        )
+    ) is not None:
+        stored_player: dict[str, typing.Any] = raw_stored_player  # type: ignore
 
         if name is not None:
             player_name = name
@@ -221,18 +304,21 @@ async def profiles(
             player_name: str = f"{stored_player['name']}#{stored_player['code']}"
 
         try:
-            player = await _get_destiny_player(client, player_name, aiobungie.MembershipType.ALL)
+            player = await _get_destiny_player(
+                client, player_name, aiobungie.MembershipType.ALL
+            )
         except aiobungie.NotFound as exc:
             await ctx.respond(f"{exc}")
             return
 
-        colour = consts.COLOR['invis']
+        colour = consts.COLOR["invis"]
         if ctx.member and (role_colour := ctx.member.get_top_role()):
             colour = role_colour.colour
         embed = hikari.Embed(colour=colour)
         (
-            embed
-            .set_author(name=player.last_seen_name, icon=str(player.icon), url=player.link)
+            embed.set_author(
+                name=player.last_seen_name, icon=str(player.icon), url=player.link
+            )
             .set_thumbnail(str(player.icon))
             .add_field(
                 "About",
@@ -241,17 +327,15 @@ async def profiles(
                 f"Last seen name: {player.last_seen_name}\n"
                 f"Code: {player.code}\n"
                 f"Public profile: {player.is_public}\n"
-                f"Types: {', '.join(str(t) for t in player.types)}"
+                f"Types: {', '.join(str(t) for t in player.types)}",
             )
         )
         await ctx.respond(embed=embed)
 
+
 @destiny_group.with_command
 @tanjun.with_str_slash_option(
-    "query",
-    "The clan name or id.",
-    converters=(str, int),
-    default=4389205
+    "query", "The clan name or id.", converters=(str, int), default=4389205
 )
 @tanjun.as_slash_command("clan", "Searches for Destiny clans by their name.")
 async def get_clan(
@@ -271,7 +355,7 @@ async def get_clan(
         await ctx.respond(f"{e}")
         return None
 
-    embed = hikari.Embed(description=f'{clan.about}')
+    embed = hikari.Embed(description=f"{clan.about}", colour=consts.COLOR['invis'])
     (
         embed.set_author(name=clan.name, url=clan.url, icon=str(clan.avatar))
         .set_thumbnail(str(clan.avatar))
@@ -308,6 +392,102 @@ async def get_clan(
         )
     await ctx.respond(embed=embed)
 
+@destiny_group.with_command
+@tanjun.with_int_slash_option("item_hash", "The item hash to get.")
+@tanjun.as_slash_command("item", "Fetch a Bungie inventory item by its hash.")
+async def item_definition_command(
+    ctx: tanjun.SlashContext,
+    item_hash: int,
+    client: aiobungie.Client = tanjun.inject(type=aiobungie.Client),
+    cache_: cache.Memory[int, hikari.Embed] = tanjun.inject(type=cache.Memory)
+) -> None:
+    if cached_item := cache_.get(item_hash):
+        await ctx.respond(embed=cached_item)
+        return
+
+    try:
+        entity = await client.fetch_inventory_item(item_hash)
+    except Exception:
+        await ctx.respond(embed=hikari.Embed(description=format.error(str=True)))
+
+    embed = _build_inventory_item_embed(entity)
+    cache_.put(item_hash, embed).set_expiry(datetime.timedelta(hours=8))
+    await ctx.respond(embed=embed)
+
+@tanjun.with_cooldown("destiny")
+@destiny_group.with_command
+@tanjun.with_member_slash_option(
+    "member", "An optional discord member to get their characters.", default=None
+)
+@tanjun.with_str_slash_option(
+    "platform", "The membership type to return", choices=consts.iter(_PLATFORMS)
+)
+@tanjun.with_str_slash_option(
+    "id", "An optional player id to search for.", default=None
+)
+@tanjun.as_slash_command("equipments", "A view of a player's current equipped items.")
+async def char_equipments(
+    ctx: tanjun.SlashContext,
+    member: hikari.InteractionMember | None,
+    id: int | None,
+    platform: str,
+    client: aiobungie.Client = tanjun.inject(type=aiobungie.Client),
+    pool: pool.PgxPool = tanjun.inject(type=pool.PoolT),
+    component_client: yuyo.ComponentClient = tanjun.inject(type=yuyo.ComponentClient),
+) -> None:
+
+    author = member or ctx.author
+    if member and id:
+        await ctx.respond("Can't specify a member and an id at the same time.")
+        return
+
+    id = id or await pool.fetchval(
+        "SELECT bungie_id FROM destiny WHERE ctx_id = $1", author.id
+    )
+    if id:
+        try:
+            equips_resp = await client.fetch_profile(
+                int(id), _PLATFORMS[platform], aiobungie.ComponentType.CHARACTER_EQUIPMENT
+            )
+        except Exception as e:
+            await ctx.respond(embed=hikari.Embed(description=format.with_block(e)))
+            return
+
+        if equipments := equips_resp.character_equipments:
+            # pending: list[aiobungie.crate.InventoryEntity] = []
+            for _, equipment in equipments.items():
+                tasks = await aio.all_of(*[i.fetch_self() for i in equipment])
+
+            assert tasks
+            pages = (
+                (
+                    hikari.UNDEFINED,
+                    _build_inventory_item_embed(item)
+                )
+                for item in tasks
+            )
+
+            paginator = yuyo.ComponentPaginator(
+                pages,
+                authors=(author,),
+                triggers=(
+                    yuyo.pagination.LEFT_DOUBLE_TRIANGLE,
+                    yuyo.pagination.LEFT_TRIANGLE,
+                    yuyo.pagination.STOP_SQUARE,
+                    yuyo.pagination.RIGHT_TRIANGLE,
+                    yuyo.pagination.RIGHT_DOUBLE_TRIANGLE,
+                ),
+            )
+            next_ = await paginator.get_next_entry()
+            assert next_
+            content, embed = next_
+            msg = await ctx.respond(
+                content=content, embed=embed, component=paginator, ensure_result=True
+            )
+            component_client.set_executor(msg, paginator)
+
 destiny = tanjun.Component(name="Destiny/Bungie", strict=True).load_from_scope()
-destiny.metadata['about'] = f"Component that's related to Destiny2 and [Bungie's API]({aiobungie.__url__})"
+destiny.metadata[
+    "about"
+] = f"Component that's related to Destiny2 and [Bungie's API]({aiobungie.__url__})"
 destiny_loader = destiny.make_loader()

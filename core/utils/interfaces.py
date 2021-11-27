@@ -32,8 +32,9 @@ import typing
 import attr
 
 if typing.TYPE_CHECKING:
-    import datetime
     import collections.abc as collections
+    import datetime
+
     import hikari
     import tanjun
 

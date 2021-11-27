@@ -46,9 +46,7 @@ import hikari
 import humanize
 import multidict
 import yarl
-
 from aiobungie.internal import time
-
 from hikari import _about as about
 from hikari.internal import net
 from hikari.internal.time import (
@@ -59,8 +57,9 @@ from yuyo import backoff
 from . import consts, format, interfaces, traits
 
 if typing.TYPE_CHECKING:
-    import types
     import collections.abc as collections
+    import types
+
     import tanjun.abc
     from hikari.internal import data_binding
     _GETTER_TYPE = typing.TypeVar("_GETTER_TYPE", covariant=True)

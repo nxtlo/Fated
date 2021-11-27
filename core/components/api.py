@@ -103,15 +103,13 @@ async def define(
     ctx: tanjun.abc.SlashContext,
     name: str,
     net: net_.HTTPNet = tanjun.inject(type=net_.HTTPNet),
-    component_client: yuyo.ComponentClient = tanjun.inject(type=yuyo.ComponentClient)
+    component_client: yuyo.ComponentClient = tanjun.inject(type=yuyo.ComponentClient),
 ) -> None:
     urban = net_.Wrapper(net)
     definitions = await urban.get_definition(ctx, name)
 
     if definitions:
-        pages = (
-            (hikari.UNDEFINED, embed) for embed in definitions
-        )
+        pages = ((hikari.UNDEFINED, embed) for embed in definitions)
 
         paginator = yuyo.ComponentPaginator(
             pages,
@@ -127,8 +125,11 @@ async def define(
         next_definition = await paginator.get_next_entry()
         assert next_definition
         content, embed = next_definition
-        msg = await ctx.respond(content=content, embed=embed, component=paginator, ensure_result=True)
+        msg = await ctx.respond(
+            content=content, embed=embed, component=paginator, ensure_result=True
+        )
         component_client.set_executor(msg, paginator)
+
 
 # Fun stuff.
 @tanjun.as_message_command("dog")

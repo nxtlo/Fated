@@ -43,10 +43,11 @@ import yuyo
 from tanjun import abc
 
 from core.psql import pool as pool_
-from core.utils import cache, format, net as net_
+from core.utils import cache, format
+from core.utils import net as net_
 
 if typing.TYPE_CHECKING:
-	from core.utils import traits
+    from core.utils import traits
 
 STDOUT: typing.Final[hikari.Snowflakeish] = hikari.Snowflake(789614938247266305)
 
