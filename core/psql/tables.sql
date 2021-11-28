@@ -29,6 +29,15 @@ CREATE TABLE IF NOT EXISTS destiny (
     memtype SMALLINT
 );
 
+CREATE TABLE IF NOT EXISTS mutes (
+    member_id BIGINT PRIMARY KEY NOT NULL,
+    guild_id BIGINT,
+    author_id BIGINT NOT NULL,
+    muted_at FLOAT NOT NULL,
+    why TEXT,
+    duration BIGINT
+);
+
 /* We don't need this since we're using redis for the prefixes. */
 
 /*CREATE TABLE IF NOT EXISTS guilds (

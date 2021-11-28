@@ -38,18 +38,18 @@ import typing
 
 import hikari
 import humanize as hz
-import psutil
 import tanjun
 import yuyo
 from aiobungie.internal import time as time_
 
-from core.utils import format, traits
+from core.utils import format, traits, consts
 
+_LOGGER: typing.Final[logging.Logger] = logging.getLogger("hikari.fated.component")
 prefix_group = tanjun.slash_command_group("prefix", "Handle the bot prefix configs.")
 
 
 async def on_ready(_: hikari.ShardReadyEvent) -> None:
-    logging.info("Bot ready.")
+    _LOGGER.info("Bot ready.")
 
 
 def _clean_up(path: pathlib.Path) -> None:
@@ -68,7 +68,6 @@ def iter_commands(ctx: tanjun.MessageContext) -> list[dict[tanjun.abc.Component,
             if command.component.name == c.name
         }
     return commands
-
 
 # TODO: Fix this.
 @tanjun.with_greedy_argument("command_name", converters=str, default=None)
@@ -274,10 +273,6 @@ async def about_command(
     from hikari._about import __version__ as hikari_version
     from tanjun import __version__ as tanjun_version
 
-    procs = psutil.Process()
-    mem_usage = (procs.memory_full_info().uss / 1024) ** 2
-    cpu_usage = procs.cpu_percent() / psutil.cpu_count()
-
     if ctx.cache:
         cache = ctx.cache
         bot = cache.get_me()
@@ -295,6 +290,7 @@ async def about_command(
     embed.add_field(
         "Cache",
         f"**Members**: {len(cache.get_members_view())}\n"
+        f"**Users**: {len(cache.get_users_view())}"
         f"**Available guilds**: {len(cache.get_available_guilds_view())}\n"
         f"**Channels**: {len(cache.get_guild_channels_view())}\n"
         f"**Emojis**: {len(cache.get_emojis_view())}\n"
@@ -303,10 +299,8 @@ async def about_command(
         inline=False,
     )
     embed.add_field(
-        "Meta",
-        f"{create}\n{uptime_}\n"
-        f"**Memory usage**: {mem_usage:.2f}MIB\n"
-        f"**CPU usage**: {cpu_usage:.2f}%",
+        "Bot",
+        f"{create}\n{uptime_}\n",
         inline=False,
     )
     if bot.avatar_url:
@@ -322,7 +316,46 @@ async def about_command(
     )
     await ctx.respond(embed=embed)
 
+@tanjun.with_member_slash_option("member", "The discord member.", default=None)
+@tanjun.as_slash_command("member", "Gets you information about a discord member.")
+async def member_view(ctx: tanjun.SlashContext, member: hikari.InteractionMember) -> None:
 
+    assert ctx.guild_id is not None
+    try:
+        guild = await ctx.rest.fetch_guild(ctx.guild_id)
+    except Exception:
+        _LOGGER.exception(f"Couldn't fetch guild for {ctx.guild_id}")
+        guild = ctx.get_guild()
+    assert guild is not None
+
+    member = member or ctx.member
+    assert member is not None
+    embed = hikari.Embed(title=member.id)
+
+    if member.avatar_url:
+        embed.set_thumbnail(member.avatar_url)
+
+    if member.banner_url:
+        embed.set_image(member.banner_url)
+    
+    colour = member.accent_colour or consts.COLOR['invis']
+    embed.colour = colour
+
+    info = [
+        f'Nickname: {member.nickname or "N/A"}',
+        f"Joined discord at: {tanjun.from_datetime(member.created_at, style='R')}",
+        f"Joined guild at: {tanjun.from_datetime(member.joined_at, style='R')}",
+        f"Is bot: {member.is_bot}\nIs system: {member.is_system}"
+    ]
+    embed.add_field("Information", '\n'.join(info))
+
+    roles = [
+        f'{role.mention}: {role.id}' for role in member.get_roles() if not 'everyone' in role.name
+    ]
+    embed.add_field("Roles", '\n'.join(roles))
+
+    await ctx.respond(embed=embed)
+    
 @tanjun.with_member_slash_option("member", "The discord member", default=None)
 @tanjun.as_slash_command("avatar", "Returns the avatar of a discord member or yours.")
 async def avatar_view(ctx: tanjun.SlashContext, /, member: hikari.Member) -> None:

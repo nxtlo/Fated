@@ -35,94 +35,26 @@ import textwrap
 import traceback
 import typing
 
-import aiobungie
+import humanize
 import asyncpg
 import hikari
 import tanjun
 import yuyo
-from tanjun import abc
+
 
 from core.psql import pool as pool_
-from core.utils import cache, format
-from core.utils import net as net_
-
-if typing.TYPE_CHECKING:
-    from core.utils import traits
+from core.utils import cache, format, consts
 
 STDOUT: typing.Final[hikari.Snowflakeish] = hikari.Snowflake(789614938247266305)
-
-
-@tanjun.with_owner_check
-@tanjun.as_message_command_group("cache")
-async def cacher(
-    ctx: tanjun.MessageContext,
-) -> None:
-    # This will always not respond.
-    assert not ctx.has_responded
-
-
-@cacher.with_command
-@tanjun.with_greedy_argument("value")
-@tanjun.with_argument("key")
-@tanjun.with_parser
-@tanjun.as_message_command("put")
-async def put(
-    ctx: tanjun.MessageContext,
-    key: typing.Any,
-    value: typing.Any,
-    cache_: cache.Memory[typing.Any, typing.Any] = tanjun.inject(type=cache.Memory),
-) -> None:
-    cache_.put(key, value)
-    await ctx.respond(f"Cached {key} to {value}")
-
-
-@cacher.with_command
-@tanjun.with_greedy_argument("key")
-@tanjun.with_parser
-@tanjun.as_message_command("get")
-async def get(
-    ctx: tanjun.MessageContext,
-    key: typing.Any,
-    cache_: cache.Memory[typing.Any, typing.Any] = tanjun.inject(type=cache.Memory),
-) -> None:
-    await ctx.respond(cache_.get(key, "NOT_FOUND"))
-
-
-@cacher.with_command
-@tanjun.with_greedy_argument("key")
-@tanjun.with_parser
-@tanjun.as_message_command("del")
-async def remove(
-    ctx: tanjun.MessageContext,
-    key: typing.Any,
-    cache_: cache.Memory[typing.Any, typing.Any] = tanjun.inject(type=cache.Memory),
-) -> None:
-    try:
-        del cache_[key]
-        await ctx.respond("Ok")
-    except KeyError:
-        await ctx.respond("Key not found in cache.")
-        return
-
-
-@cacher.with_command
-@tanjun.as_message_command("items")
-async def cache_items(
-    ctx: tanjun.MessageContext,
-    cache_: cache.Memory[typing.Any, typing.Any] = tanjun.inject(type=cache.Memory),
-) -> None:
-    await ctx.respond(format.with_block(cache_.view()))
-
-
-@cacher.with_command
-@tanjun.as_message_command("clear")
-async def cache_clear(
-    ctx: tanjun.MessageContext,
-    cache_: cache.Memory[typing.Any, typing.Any] = tanjun.inject(type=cache.Memory),
-) -> None:
-    cache_.clear()
-    await ctx.respond(format.with_block(cache_.view()))
-
+DURATIONS: dict[str, int] = {
+    "Seconds": 1,
+    "Minutes": 60,
+    "Hours": 3600,
+    "Days": 86400,
+    "Months": 2629800,
+    "Weeks": 604800,
+    "Years": 31557600
+}
 
 @tanjun.with_owner_check
 @tanjun.as_message_command("reload")
@@ -131,26 +63,65 @@ async def reload(ctx: tanjun.MessageContext) -> None:
     await ctx.respond(f"Reloaded modules")
 
 
+async def sleep_for(
+    timer: datetime.timedelta,
+    ctx: tanjun.SlashContext,
+    member: hikari.InteractionMember,
+    pool: pool_.PgxPool
+) -> None:
+    await asyncio.sleep(timer.total_seconds())
+    await pool.execute("DELETE FROM mutes WHERE member_id = $1", member.id)
+    await ctx.respond(f"{member.mention} has been unmuted.")
+
+@tanjun.with_author_permission_check(hikari.Permissions.MUTE_MEMBERS)
+@tanjun.with_member_slash_option("member", "The member to mute.")
+@tanjun.with_str_slash_option("unit", "The duration unit to be muted.", choices=consts.iter(DURATIONS))
+@tanjun.with_float_slash_option("duration", "The time duration to be muted")
+@tanjun.with_str_slash_option("reason", "A reason given for why the member was muted.", default="UNDEFINED")
+@tanjun.as_slash_command("mute", "Mute someone given a duration.")
+async def mute(
+    ctx: tanjun.SlashContext,
+    member: hikari.InteractionMember,
+    unit: str,
+    duration: float,
+    reason: str,
+    pool: pool_.PgxPool = tanjun.inject(type=pool_.PoolT)
+) -> None:
+    assert ctx.guild_id is not None
+    try:
+        total_time = DURATIONS[unit] * duration
+        await pool.execute(
+            "INSERT INTO mutes(member_id, guild_id, author_id, muted_at, duration, why) "
+            "VALUES($1, $2, $3, $4, $5, $6)",
+            member.id,
+            ctx.guild_id,
+            ctx.author.id,
+            datetime.datetime.today().timestamp(),
+            total_time,
+            reason
+        )
+    except asyncpg.exceptions.UniqueViolationError:
+        unlocked_at = float(await pool.fetchval("SELECT muted_at FROM mutes WHERE member_id = $1", member.id))
+        date = humanize.naturaldelta(datetime.datetime.now() - datetime.datetime.fromtimestamp(unlocked_at))
+        await ctx.respond(f"This member is already been muted for {date}.")
+        return
+    else:
+        d = datetime.timedelta(seconds=total_time)
+        await ctx.respond(
+            f"Member {member.user.username} has been muted for {format.friendly_date(d, minimum_unit='SECONDS')}"
+        )
+        asyncio.create_task(sleep_for(d, ctx, member, pool))
+
 @tanjun.with_owner_check(halt_execution=True)
 @tanjun.with_greedy_argument("query", converters=str)
 @tanjun.with_parser
 @tanjun.as_message_command("sql")
 async def run_sql(
-    ctx: abc.MessageContext,
+    ctx: tanjun.MessageContext,
     query: str,
     pool: pool_.PoolT = tanjun.injected(type=pool_.PoolT),
 ) -> None:
-    """Run sql code to the database pool.
-
-    Parameters:
-        query : `str`
-            The sql query. This also can be used with code blocks like this.
-            ```sql
-                SELECT * FROM public.tables
-                    WHERE THIS LIKE THAT
-                LIMIT 1
-            ```
-    """
+    """Run sql code to the database pool."""
 
     query = format.parse_code(code=query)
     print(query)
@@ -207,7 +178,7 @@ async def kick(
         await guild.kick(member.id, reason=reason)
     to_respond = [f"Member {member.username}#{member.discriminator} has been kicked"]
     if reason:
-        to_respond.append(f" For {reason}.")
+        to_respond += f" For {reason}."
     await ctx.respond("".join(to_respond))
 
 
@@ -253,7 +224,7 @@ async def ban(
         await guild.ban(member.id, reason=reason)
     to_respond = [f"Member {member.username}#{member.discriminator} has been banned"]
     if reason:
-        to_respond.append(f" for {reason}.")
+        to_respond += f" for {reason}."
     await ctx.respond("".join(to_respond))
 
 
@@ -290,15 +261,21 @@ async def fetch_guild(
         # Other errors. break.
         else:
             embed = hikari.Embed(title=guild.name, description=guild.id)
+            if ctx.cache:
+                guild_snowflakes = set(ctx.cache.get_available_guilds_view().keys())
+                users_snowflakes = set(ctx.cache.get_users_view().keys())
             if guild.icon_url:
                 embed.set_thumbnail(guild.icon_url)
             (
                 embed.add_field(
                     "Information",
                     f"Members: {len(guild.get_members())}\n"
-                    f"Created at: {guild.created_at}\n",
+                    f"Created at: {tanjun.from_datetime(guild.created_at, style='R')}\n"
+                    f"Cached: {guild.id in guild_snowflakes or False}"
                 ).add_field(
-                    "Owner", f"Name: {guild_owner.username}\n" f"ID: {guild_owner.id}"
+                    "Owner", f"Name: {guild_owner.username}\n"
+                    f"ID: {guild_owner.id}\n"
+                    f"Cached: {ctx.author.id in users_snowflakes or False}"
                 )
             )
             await ctx.respond(embed=embed)
@@ -330,20 +307,14 @@ async def eval_command(
     body: str,
     /,
     bot: hikari.GatewayBot = tanjun.inject(type=hikari.GatewayBot),
-    aiobungie_: aiobungie.traits.ClientBase = tanjun.inject(type=aiobungie.Client),
-    net: traits.NetRunner = tanjun.inject(type=net_.HTTPNet),
-    pool: traits.PoolRunner = tanjun.inject(type=pool_.PoolT),
 ) -> None:
     """Evaluates python code"""
     env = {
         "ctx": ctx,
         "bot": bot,
-        "aiobungie": aiobungie_,
         "hikari": hikari,
         "tanjun": tanjun,
         "asyncio": asyncio,
-        "pool": pool,
-        "net": net,
         "source": inspect.getsource,
     }
 
@@ -419,6 +390,77 @@ async def eval_command(
         await ctx.message.add_reaction("\u2049")
     else:
         await ctx.message.add_reaction("\u2705")
+
+@tanjun.with_owner_check
+@tanjun.as_message_command_group("cache")
+async def cacher(
+    ctx: tanjun.MessageContext,
+) -> None:
+    # This will always not respond.
+    assert not ctx.has_responded
+
+
+@cacher.with_command
+@tanjun.with_greedy_argument("value")
+@tanjun.with_argument("key")
+@tanjun.with_parser
+@tanjun.as_message_command("put")
+async def put(
+    ctx: tanjun.MessageContext,
+    key: typing.Any,
+    value: typing.Any,
+    cache_: cache.Memory[typing.Any, typing.Any] = tanjun.inject(type=cache.Memory),
+) -> None:
+    cache_.put(key, value)
+    await ctx.respond(f"Cached {key} to {value}")
+
+
+@cacher.with_command
+@tanjun.with_greedy_argument("key")
+@tanjun.with_parser
+@tanjun.as_message_command("get")
+async def get(
+    ctx: tanjun.MessageContext,
+    key: typing.Any,
+    cache_: cache.Memory[typing.Any, typing.Any] = tanjun.inject(type=cache.Memory),
+) -> None:
+    await ctx.respond(cache_.get(key, "NOT_FOUND"))
+
+
+@cacher.with_command
+@tanjun.with_greedy_argument("key")
+@tanjun.with_parser
+@tanjun.as_message_command("del")
+async def remove(
+    ctx: tanjun.MessageContext,
+    key: typing.Any,
+    cache_: cache.Memory[typing.Any, typing.Any] = tanjun.inject(type=cache.Memory),
+) -> None:
+    try:
+        del cache_[key]
+        await ctx.respond("Ok")
+    except KeyError:
+        await ctx.respond("Key not found in cache.")
+        return
+
+
+@cacher.with_command
+@tanjun.as_message_command("items")
+async def cache_items(
+    ctx: tanjun.MessageContext,
+    cache_: cache.Memory[typing.Any, typing.Any] = tanjun.inject(type=cache.Memory),
+) -> None:
+    await ctx.respond(format.with_block(cache_.view()))
+
+
+@cacher.with_command
+@tanjun.as_message_command("clear")
+async def cache_clear(
+    ctx: tanjun.MessageContext,
+    cache_: cache.Memory[typing.Any, typing.Any] = tanjun.inject(type=cache.Memory),
+) -> None:
+    cache_.clear()
+    await ctx.respond(format.with_block(cache_.view()))
 
 
 async def when_join_guilds(event: hikari.GuildJoinEvent) -> None:
