@@ -35,15 +35,14 @@ import textwrap
 import traceback
 import typing
 
-import humanize
 import asyncpg
 import hikari
+import humanize
 import tanjun
 import yuyo
 
-
 from core.psql import pool as pool_
-from core.utils import cache, format, consts
+from core.utils import cache, consts, format
 
 STDOUT: typing.Final[hikari.Snowflakeish] = hikari.Snowflake(789614938247266305)
 DURATIONS: dict[str, int] = {
@@ -53,8 +52,9 @@ DURATIONS: dict[str, int] = {
     "Days": 86400,
     "Months": 2629800,
     "Weeks": 604800,
-    "Years": 31557600
+    "Years": 31557600,
 }
+
 
 @tanjun.with_owner_check
 @tanjun.as_message_command("reload")
@@ -67,17 +67,22 @@ async def sleep_for(
     timer: datetime.timedelta,
     ctx: tanjun.SlashContext,
     member: hikari.InteractionMember,
-    pool: pool_.PgxPool
+    pool: pool_.PgxPool,
 ) -> None:
     await asyncio.sleep(timer.total_seconds())
     await pool.execute("DELETE FROM mutes WHERE member_id = $1", member.id)
     await ctx.respond(f"{member.mention} has been unmuted.")
 
+
 @tanjun.with_author_permission_check(hikari.Permissions.MUTE_MEMBERS)
 @tanjun.with_member_slash_option("member", "The member to mute.")
-@tanjun.with_str_slash_option("unit", "The duration unit to be muted.", choices=consts.iter(DURATIONS))
+@tanjun.with_str_slash_option(
+    "unit", "The duration unit to be muted.", choices=consts.iter(DURATIONS)
+)
 @tanjun.with_float_slash_option("duration", "The time duration to be muted")
-@tanjun.with_str_slash_option("reason", "A reason given for why the member was muted.", default="UNDEFINED")
+@tanjun.with_str_slash_option(
+    "reason", "A reason given for why the member was muted.", default="UNDEFINED"
+)
 @tanjun.as_slash_command("mute", "Mute someone given a duration.")
 async def mute(
     ctx: tanjun.SlashContext,
@@ -85,7 +90,7 @@ async def mute(
     unit: str,
     duration: float,
     reason: str,
-    pool: pool_.PgxPool = tanjun.inject(type=pool_.PoolT)
+    pool: pool_.PgxPool = tanjun.inject(type=pool_.PoolT),
 ) -> None:
     assert ctx.guild_id is not None
     try:
@@ -98,11 +103,17 @@ async def mute(
             ctx.author.id,
             datetime.datetime.today().timestamp(),
             total_time,
-            reason
+            reason,
         )
     except asyncpg.exceptions.UniqueViolationError:
-        unlocked_at = float(await pool.fetchval("SELECT muted_at FROM mutes WHERE member_id = $1", member.id))
-        date = humanize.naturaldelta(datetime.datetime.now() - datetime.datetime.fromtimestamp(unlocked_at))
+        unlocked_at = float(
+            await pool.fetchval(
+                "SELECT muted_at FROM mutes WHERE member_id = $1", member.id
+            )
+        )
+        date = humanize.naturaldelta(
+            datetime.datetime.now() - datetime.datetime.fromtimestamp(unlocked_at)
+        )
         await ctx.respond(f"This member is already been muted for {date}.")
         return
     else:
@@ -111,6 +122,7 @@ async def mute(
             f"Member {member.user.username} has been muted for {format.friendly_date(d, minimum_unit='SECONDS')}"
         )
         asyncio.create_task(sleep_for(d, ctx, member, pool))
+
 
 @tanjun.with_owner_check(halt_execution=True)
 @tanjun.with_greedy_argument("query", converters=str)
@@ -271,11 +283,12 @@ async def fetch_guild(
                     "Information",
                     f"Members: {len(guild.get_members())}\n"
                     f"Created at: {tanjun.from_datetime(guild.created_at, style='R')}\n"
-                    f"Cached: {guild.id in guild_snowflakes or False}"
+                    f"Cached: {guild.id in guild_snowflakes or False}",
                 ).add_field(
-                    "Owner", f"Name: {guild_owner.username}\n"
+                    "Owner",
+                    f"Name: {guild_owner.username}\n"
                     f"ID: {guild_owner.id}\n"
-                    f"Cached: {ctx.author.id in users_snowflakes or False}"
+                    f"Cached: {ctx.author.id in users_snowflakes or False}",
                 )
             )
             await ctx.respond(embed=embed)
@@ -391,6 +404,7 @@ async def eval_command(
     else:
         await ctx.message.add_reaction("\u2705")
 
+
 @tanjun.with_owner_check
 @tanjun.as_message_command_group("cache")
 async def cacher(
@@ -475,7 +489,7 @@ async def when_join_guilds(event: hikari.GuildJoinEvent) -> None:
         embed.set_thumbnail(guild.icon_url)
     (
         embed.add_field("Member count", str(len(guild.get_members())))
-        .add_field("Created at", str(guild.created_at))
+        .add_field("Created at", tanjun.from_datetime(guild.created_at, style="R"))
         .add_field("Owner", f"Name: {guild_owner.username}\n" f"ID: {guild_owner.id}")
     )
     channel = typing.cast(
@@ -494,8 +508,7 @@ async def when_leave_guilds(event: hikari.GuildLeaveEvent) -> None:
             title=f"{guild.name} | {guild.id}",
             description="Left a guild.",
             timestamp=datetime.datetime.utcnow().astimezone(datetime.timezone.utc),
-        )
-        embed.add_field("Created at", str(guild.created_at))
+        ).add_field("Created at", tanjun.from_datetime(guild.created_at, style="R"))
         await channel.send(embed=embed)
         return
     await channel.send(f"Left from `UNDEFINED` guild {event.guild_id}")

@@ -21,27 +21,30 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-"""Commands related to Bungie's API to test aiobungie."""
+"""Commands refrences aiobungie."""
 
 from __future__ import annotations
 
 __all__: tuple[str, ...] = ("destiny", "destiny_loader")
 
+import collections.abc as collections
 import datetime
 import typing
+
 import aiobungie
 import asyncpg
 import hikari
 import humanize
 import tanjun
 import yuyo
-
 from hikari.internal import aio
+
 from core.psql import pool
-from core.utils import consts, format, cache
+from core.utils import cache, consts, format
 
 destiny_group = tanjun.slash_command_group("destiny", "Commands related to Destiny 2.")
 
+# Consts usually used as slash options key -> val.
 _PLATFORMS: dict[str, aiobungie.MembershipType] = {
     "Steam": aiobungie.MembershipType.STEAM,
     "PSN": aiobungie.MembershipType.PSN,
@@ -54,6 +57,40 @@ _CHARACTERS: dict[str, aiobungie.Class] = {
     "Hunter": aiobungie.Class.HUNTER,
     "Titan": aiobungie.Class.TITAN,
 }
+
+_ACTIVITIES: dict[str, tuple[str | None, aiobungie.FireteamActivity]] = {
+    "Any": (None, aiobungie.FireteamActivity.ANY),
+    "VoG": (
+        "https://www.bungie.net/img/destiny_content/pgcr/vault_of_glass.jpg",
+        aiobungie.FireteamActivity.RAID_VOG,
+    ),
+    "DSC": (
+        "https://www.bungie.net/img/destiny_content/pgcr/europa-raid-deep-stone-crypt.jpg",
+        aiobungie.FireteamActivity.RAID_DSC,
+    ),
+    "Nightfall": (
+        "https://www.bungie.net/img/theme/destiny/bgs/stats/banner_strikes_1.jpg",
+        aiobungie.FireteamActivity.NIGHTFALL,
+    ),
+    "Dungeon": (
+        "https://www.bungie.net/common/destiny2_content/icons/082c3d5e7a44343114b5d056c3006e4b.png",
+        aiobungie.FireteamActivity.DUNGEON,
+    ),
+    "Crucible": (None, aiobungie.FireteamActivity.CRUCIBLE),
+    "Expunge": (
+        "https://www.bungie.net/img/destiny_content/pgcr/season_14_expunge_tartarus.jpg",
+        aiobungie.FireteamActivity.S14_EXPUNGE,
+    ),
+}
+
+# Default timeout for paginators.
+TIMEOUT: typing.Final[datetime.timedelta] = datetime.timedelta(seconds=120)
+
+_slots: collections.Callable[[aiobungie.crate.Fireteam], str] = (
+    lambda fireteam: "Full"
+    if fireteam.available_player_slots == 0
+    else f"{fireteam.available_player_slots}/{fireteam.player_slot_count}"
+)
 
 
 async def _get_destiny_player(
@@ -73,7 +110,10 @@ async def _get_destiny_player(
             "Make sure you include the full name looks like this `Fate#123`"
         ) from None
 
-def _build_inventory_item_embed(entity: aiobungie.crate.InventoryEntity) -> hikari.Embed:
+
+def _build_inventory_item_embed(
+    entity: aiobungie.crate.InventoryEntity,
+) -> hikari.Embed:
 
     item_tier = None
     try:
@@ -82,14 +122,18 @@ def _build_inventory_item_embed(entity: aiobungie.crate.InventoryEntity) -> hika
         pass
 
     embed = (
-        hikari.Embed(title=entity.name, colour=consts.COLOR['invis'], description=entity.description)
+        hikari.Embed(
+            title=entity.name,
+            colour=consts.COLOR["invis"],
+            description=entity.description,
+        )
         .add_field(
             "About",
             f"Hash: {entity.hash}\n"
             f"Index: {entity.index}\n"
             f"About: {entity.about}\n"
             f"Can equip: {entity.is_equippable}\n"
-            f"Lore hash: {entity.lore_hash}"
+            f"Lore hash: {entity.lore_hash}",
         )
         .add_field(
             "Metadata",
@@ -97,7 +141,7 @@ def _build_inventory_item_embed(entity: aiobungie.crate.InventoryEntity) -> hika
             f"Damage type: {entity.damage}\n"
             f"Ammo type: {entity.ammo_type or 'N/A'}\n"
             f"Class type: {entity.item_class or 'N/A'}\n"
-            f"Tier: {item_tier} - Tier name: {entity.tier_name}"
+            f"Tier: {item_tier} - Tier name: {entity.tier_name}",
         )
     )
     if entity.has_icon:
@@ -141,6 +185,17 @@ async def _sync_player(
         f"Synced `{player.unique_name}` | `{player.id}`, `/destiny profile` to view your profile"
     )
 
+@tanjun.as_message_command("d2_api")
+async def check_api(ctx: tanjun.MessageContext, client: aiobungie.Client = tanjun.inject(type=aiobungie.Client)) -> None:
+    try:
+        resp = await client.rest.static_request("GET", "Settings")
+    except Exception:
+        raise
+    if resp['environment'] == "live":
+        status = "API is up."
+    else:
+        status = "API is down."
+    await ctx.respond(status)
 
 @destiny_group.with_command
 @tanjun.with_str_slash_option(
@@ -191,7 +246,7 @@ async def desync(
     "platform", "The membership type to return", choices=consts.iter(_PLATFORMS)
 )
 @tanjun.with_str_slash_option(
-    "id", "An optional player id to search for.", default=None
+    "id_or_name", "An optional player id or full name to search for.", default=None
 )
 @tanjun.as_slash_command(
     "character", "Information about a member's Destiny characters."
@@ -200,78 +255,94 @@ async def characters(
     ctx: tanjun.abc.SlashContext,
     platform: str,
     member: hikari.InteractionMember | None,
-    id: str | None,
+    id_or_name: str | int | None,
     client: aiobungie.Client = tanjun.injected(type=aiobungie.Client),
     pool: pool.PoolT = tanjun.injected(type=pool.PoolT),
     component_client: yuyo.ComponentClient = tanjun.inject(type=yuyo.ComponentClient),
 ) -> None:
     author = member or ctx.author
-    if member and id:
+    if member and id_or_name:
         await ctx.respond("Can't specify a member and an id at the same time.")
         return
 
-    id = id or await pool.fetchval(
+    if isinstance(id_or_name, str) and '#' in id_or_name:
+        # We fetch the player by their name and get their id.
+        player = await _get_destiny_player(client, id_or_name)
+        id_or_name = player.id 
+
+    id = id_or_name or await pool.fetchval(
         "SELECT bungie_id FROM destiny WHERE ctx_id = $1", author.id
     )
-    if id:
-        try:
-            char_resp = await client.fetch_profile(
-                int(id), _PLATFORMS[platform], aiobungie.ComponentType.CHARACTERS
-            )
-        except Exception as e:
-            await ctx.respond(embed=hikari.Embed(description=format.with_block(e)))
-            return
 
-        if char_mapper := char_resp.characters:
-            iterator = tuple(c for c in char_mapper.values())
-            pages = iter(
+    try:
+        char_resp = await client.fetch_profile(
+            int(id), _PLATFORMS[platform], aiobungie.ComponentType.CHARACTERS
+        )
+
+    # TODO: include error messages in aiobungie.
+    except aiobungie.ResponseError as exc:
+        await ctx.respond(
+            "Invalid platform selected. Check the player's actual platform they're on.",
+            embed=hikari.Embed(description=str(exc.args))
+        )
+        return
+
+    if char_mapper := char_resp.characters:
+        iterator = tuple(c for c in char_mapper.values())
+        pages = iter(
+            (
                 (
-                    (
-                        hikari.UNDEFINED,
-                        hikari.Embed(title=str(char.class_type), colour=consts.COLOR['invis'])
-                        .set_image(char.emblem.url)
-                        .set_thumbnail(char.emblem_icon.url)
-                        .set_author(name=str(char.id), url=char.url)
-                        .add_field(
-                            "Information",
-                            f"Power: {char.light}\n"
-                            f"Class: {char.class_type}\n"
-                            f"Gender: {char.gender}\n"
-                            f"Race: {char.race}\n"
-                            f"Played Time: {char.total_played_time}\n"
-                            f"Last played: {char.last_played}\n"
-                            f"Title hash: {char.title_hash if char.title_hash else 'N/A'}\n"
-                            f"Member ID: {char.member_id}\nMember Type: {char.member_type}\n",
-                        )
-                        .add_field(
-                            "Stats",
-                            "\n".join(
-                                [f"{key}: {val}" for key, val in char.stats.items()]
-                            ),
-                        ),
-                        # We dont need char_id since its in the object itself.
+                    hikari.UNDEFINED,
+                    hikari.Embed(
+                        title=str(char.class_type), colour=consts.COLOR["invis"]
                     )
-                    for char in iterator
+                    .set_image(char.emblem.url)
+                    .set_thumbnail(char.emblem_icon.url)
+                    .set_author(name=str(char.id), url=char.url)
+                    .add_field(
+                        "Information",
+                        f"Power: {char.light}\n"
+                        f"Class: {char.class_type}\n"
+                        f"Gender: {char.gender}\n"
+                        f"Race: {char.race}\n"
+                        f"Played Time: {char.total_played_time}\n"
+                        f"Last played: {char.last_played}\n"
+                        f"Title hash: {char.title_hash if char.title_hash else 'N/A'}\n"
+                        f"Member ID: {char.member_id}\nMember Type: {char.member_type}\n",
+                    )
+                    .add_field(
+                        "Stats",
+                        "\n".join(
+                            [
+                                f"{key}: {val} {'⭐' if val >= 90 and key.name != 'LIGHT_POWER' else ''}"
+                                for key, val in char.stats.items()
+                            ]
+                        ),
+                    ),
+                    # We dont need char_id since its in the object itself.
                 )
+                for char in iterator
             )
-            paginator = yuyo.ComponentPaginator(
-                pages,
-                authors=(author,),
-                triggers=(
-                    yuyo.pagination.LEFT_DOUBLE_TRIANGLE,
-                    yuyo.pagination.LEFT_TRIANGLE,
-                    yuyo.pagination.STOP_SQUARE,
-                    yuyo.pagination.RIGHT_TRIANGLE,
-                    yuyo.pagination.RIGHT_DOUBLE_TRIANGLE,
-                ),
-            )
-            next_char = await paginator.get_next_entry()
-            assert next_char
-            content, embed = next_char
-            msg = await ctx.respond(
-                content=content, embed=embed, component=paginator, ensure_result=True
-            )
-            component_client.set_executor(msg, paginator)
+        )
+        paginator = yuyo.ComponentPaginator(
+            pages,
+            authors=(author,),
+            triggers=(
+                yuyo.pagination.LEFT_DOUBLE_TRIANGLE,
+                yuyo.pagination.LEFT_TRIANGLE,
+                yuyo.pagination.STOP_SQUARE,
+                yuyo.pagination.RIGHT_TRIANGLE,
+                yuyo.pagination.RIGHT_DOUBLE_TRIANGLE,
+            ),
+            timeout=TIMEOUT,
+        )
+        next_char = await paginator.get_next_entry()
+        assert next_char
+        content, embed = next_char
+        msg = await ctx.respond(
+            content=content, embed=embed, component=paginator, ensure_result=True
+        )
+        component_client.set_executor(msg, paginator)
 
 
 @destiny_group.with_command
@@ -355,7 +426,7 @@ async def get_clan(
         await ctx.respond(f"{e}")
         return None
 
-    embed = hikari.Embed(description=f"{clan.about}", colour=consts.COLOR['invis'])
+    embed = hikari.Embed(description=f"{clan.about}", colour=consts.COLOR["invis"])
     (
         embed.set_author(name=clan.name, url=clan.url, icon=str(clan.avatar))
         .set_thumbnail(str(clan.avatar))
@@ -392,6 +463,7 @@ async def get_clan(
         )
     await ctx.respond(embed=embed)
 
+
 @destiny_group.with_command
 @tanjun.with_int_slash_option("item_hash", "The item hash to get.")
 @tanjun.as_slash_command("item", "Fetch a Bungie inventory item by its hash.")
@@ -399,7 +471,7 @@ async def item_definition_command(
     ctx: tanjun.SlashContext,
     item_hash: int,
     client: aiobungie.Client = tanjun.inject(type=aiobungie.Client),
-    cache_: cache.Memory[int, hikari.Embed] = tanjun.inject(type=cache.Memory)
+    cache_: cache.Memory[int, hikari.Embed] = tanjun.inject(type=cache.Memory),
 ) -> None:
     if cached_item := cache_.get(item_hash):
         await ctx.respond(embed=cached_item)
@@ -414,6 +486,7 @@ async def item_definition_command(
     cache_.put(item_hash, embed).set_expiry(datetime.timedelta(hours=8))
     await ctx.respond(embed=embed)
 
+
 @tanjun.with_cooldown("destiny")
 @destiny_group.with_command
 @tanjun.with_member_slash_option(
@@ -425,7 +498,7 @@ async def item_definition_command(
 @tanjun.with_str_slash_option(
     "id", "An optional player id to search for.", default=None
 )
-@tanjun.as_slash_command("equipments", "A view of a player's current equipped items.")
+@tanjun.as_slash_command("equipment", "A view of a player's current equipped items.")
 async def char_equipments(
     ctx: tanjun.SlashContext,
     member: hikari.InteractionMember | None,
@@ -447,24 +520,22 @@ async def char_equipments(
     if id:
         try:
             equips_resp = await client.fetch_profile(
-                int(id), _PLATFORMS[platform], aiobungie.ComponentType.CHARACTER_EQUIPMENT
+                int(id),
+                _PLATFORMS[platform],
+                aiobungie.ComponentType.CHARACTER_EQUIPMENT,
             )
         except Exception as e:
             await ctx.respond(embed=hikari.Embed(description=format.with_block(e)))
             return
 
-        if equipments := equips_resp.character_equipments:
+        if equipment := equips_resp.character_equipments:
             # pending: list[aiobungie.crate.InventoryEntity] = []
-            for _, equipment in equipments.items():
+            for _, equipment in equipment.items():
                 tasks = await aio.all_of(*[i.fetch_self() for i in equipment])
 
             assert tasks
             pages = (
-                (
-                    hikari.UNDEFINED,
-                    _build_inventory_item_embed(item)
-                )
-                for item in tasks
+                (hikari.UNDEFINED, _build_inventory_item_embed(item)) for item in tasks
             )
 
             paginator = yuyo.ComponentPaginator(
@@ -477,6 +548,7 @@ async def char_equipments(
                     yuyo.pagination.RIGHT_TRIANGLE,
                     yuyo.pagination.RIGHT_DOUBLE_TRIANGLE,
                 ),
+                timeout=TIMEOUT,
             )
             next_ = await paginator.get_next_entry()
             assert next_
@@ -485,6 +557,87 @@ async def char_equipments(
                 content=content, embed=embed, component=paginator, ensure_result=True
             )
             component_client.set_executor(msg, paginator)
+
+@destiny_group.with_command
+@tanjun.with_str_slash_option(
+    "activity", "The activity to look for.", choices=consts.iter(_ACTIVITIES)
+)
+@tanjun.with_str_slash_option(
+    "platform",
+    "Specify a platform to filter the results.",
+    default=aiobungie.FireteamPlatform.ANY,
+    choices=consts.iter(_PLATFORMS),
+)
+@tanjun.as_slash_command("lfg", "Look for fireteams to play with at bungie.net LFGs")
+async def lfg_command(
+    ctx: tanjun.SlashContext,
+    activity: str,
+    platform: str,
+    client: aiobungie.Client = tanjun.inject(type=aiobungie.Client),
+    component_client: yuyo.ComponentClient = tanjun.inject(type=yuyo.ComponentClient),
+) -> None:
+
+    # Different platforms from the normal ones.
+    match platform:
+        case "Steam":
+            platform_ = aiobungie.FireteamPlatform.STEAM
+        case "XBox":
+            platform_ = aiobungie.FireteamPlatform.XBOX_LIVE
+        case "Psn":
+            platform_ = aiobungie.FireteamPlatform.PSN_NETWORK
+        case _:
+            platform_ = aiobungie.FireteamPlatform.ANY
+
+    try:
+        fireteams = await client.fetch_fireteams(
+            _ACTIVITIES[activity][1], platform=platform_
+        )
+    except aiobungie.InternalServerError as exc:
+        await ctx.respond(exc.long_message)
+        return
+
+    if not fireteams:
+        await ctx.respond("No results found.")
+        return
+
+    pages = (
+        (
+            hikari.UNDEFINED,
+            hikari.Embed(
+                title=fireteam.title,
+                url=fireteam.url,
+                timestamp=fireteam.date_created.astimezone(datetime.timezone.utc),
+            )
+            .set_thumbnail(_ACTIVITIES[activity][0])
+            .add_field(
+                "Information",
+                f"ID: {fireteam.id}\n"
+                f"Platform: {fireteam.platform}\n"
+                f"Activity: {fireteam.activity_type}\n"
+                f"Available slots: {_slots(fireteam)}",
+            ),
+        )
+        for fireteam in fireteams
+    )
+    paginator = yuyo.ComponentPaginator(
+        pages,
+        authors=(ctx.author,),
+        triggers=(
+            yuyo.pagination.LEFT_DOUBLE_TRIANGLE,
+            yuyo.pagination.LEFT_TRIANGLE,
+            yuyo.pagination.STOP_SQUARE,
+            yuyo.pagination.RIGHT_TRIANGLE,
+            yuyo.pagination.RIGHT_DOUBLE_TRIANGLE,
+        ),
+        timeout=TIMEOUT,
+    )
+    next_ = await paginator.get_next_entry()
+    assert next_
+    content, embed = next_
+    msg = await ctx.respond(
+        content, embed=embed, ensure_result=True, component=paginator
+    )
+    component_client.set_executor(msg, paginator)
 
 destiny = tanjun.Component(name="Destiny/Bungie", strict=True).load_from_scope()
 destiny.metadata[

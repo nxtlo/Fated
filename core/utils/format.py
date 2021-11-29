@@ -27,8 +27,8 @@ __all__: list[str] = ["parse_code", "with_block", "error", "friendly_date"]
 
 import sys
 import typing
-import humanize
 
+import humanize
 
 if typing.TYPE_CHECKING:
     import builtins
@@ -75,5 +75,8 @@ def error(
         return sys.exc_info()[1]
     return source[1]
 
-def friendly_date(date: datetime.datetime | datetime.timedelta, minimum_unit: str = "MINUTES") -> str:
+
+def friendly_date(
+    date: datetime.datetime | datetime.timedelta, minimum_unit: str = "MINUTES"
+) -> str:
     return humanize.precisedelta(date, minimum_unit=minimum_unit)

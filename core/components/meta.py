@@ -42,7 +42,7 @@ import tanjun
 import yuyo
 from aiobungie.internal import time as time_
 
-from core.utils import format, traits, consts
+from core.utils import consts, format, traits
 
 _LOGGER: typing.Final[logging.Logger] = logging.getLogger("hikari.fated.component")
 prefix_group = tanjun.slash_command_group("prefix", "Handle the bot prefix configs.")
@@ -56,53 +56,6 @@ def _clean_up(path: pathlib.Path) -> None:
     if path.exists():
         shutil.rmtree(path)
     return None
-
-
-def iter_commands(ctx: tanjun.MessageContext) -> list[dict[tanjun.abc.Component, str]]:
-    commands: list[dict[tanjun.abc.Component, str]] = []
-    for command in ctx.client.iter_message_commands():
-        assert command.component is not None
-        commands += {
-            c: "|".join(command.names)
-            for c in ctx.client.components
-            if command.component.name == c.name
-        }
-    return commands
-
-# TODO: Fix this.
-@tanjun.with_greedy_argument("command_name", converters=str, default=None)
-@tanjun.with_parser
-@tanjun.as_message_command("help")
-async def help(ctx: tanjun.MessageContext, command_name: str | None) -> None:
-    embed = hikari.Embed()
-    if command_name is None:
-        for commands in iter_commands(ctx):
-            for commands_ in [(k, v) for k, v in commands.items()]:
-                component, command = commands_
-            embed.add_field(
-                component.name,
-                f"{component.metadata['about']}\n" f"**Commands**: {command}\n",
-                inline=True,
-            )
-        await ctx.respond(embed=embed)
-        return
-
-    else:
-        for command in ctx.client.iter_commands():
-            if isinstance(command, tanjun.MessageCommand):
-                name = command.names
-            else:
-                name = typing.cast(tanjun.SlashCommand, command).name
-            if name == command_name:
-                embed.title = f"{command.component.name} | {name}"
-                embed.description = command.metadata.get("about", hikari.UNDEFINED)
-        try:
-            await ctx.respond(embed=embed)
-            return
-        # Content is empty.
-        except hikari.BadRequestError:
-            await ctx.respond(f"Command name {command_name} not found.")
-            return
 
 
 @tanjun.with_owner_check
@@ -290,7 +243,7 @@ async def about_command(
     embed.add_field(
         "Cache",
         f"**Members**: {len(cache.get_members_view())}\n"
-        f"**Users**: {len(cache.get_users_view())}"
+        f"**Users**: {len(cache.get_users_view())}\n"
         f"**Available guilds**: {len(cache.get_available_guilds_view())}\n"
         f"**Channels**: {len(cache.get_guild_channels_view())}\n"
         f"**Emojis**: {len(cache.get_emojis_view())}\n"
@@ -316,9 +269,12 @@ async def about_command(
     )
     await ctx.respond(embed=embed)
 
+
 @tanjun.with_member_slash_option("member", "The discord member.", default=None)
 @tanjun.as_slash_command("member", "Gets you information about a discord member.")
-async def member_view(ctx: tanjun.SlashContext, member: hikari.InteractionMember) -> None:
+async def member_view(
+    ctx: tanjun.SlashContext, member: hikari.InteractionMember
+) -> None:
 
     assert ctx.guild_id is not None
     try:
@@ -337,25 +293,28 @@ async def member_view(ctx: tanjun.SlashContext, member: hikari.InteractionMember
 
     if member.banner_url:
         embed.set_image(member.banner_url)
-    
-    colour = member.accent_colour or consts.COLOR['invis']
+
+    colour = member.accent_colour or consts.COLOR["invis"]
     embed.colour = colour
 
     info = [
         f'Nickname: {member.nickname or "N/A"}',
         f"Joined discord at: {tanjun.from_datetime(member.created_at, style='R')}",
         f"Joined guild at: {tanjun.from_datetime(member.joined_at, style='R')}",
-        f"Is bot: {member.is_bot}\nIs system: {member.is_system}"
+        f"Is bot: {member.is_bot}\nIs system: {member.is_system}",
     ]
-    embed.add_field("Information", '\n'.join(info))
+    embed.add_field("Information", "\n".join(info))
 
     roles = [
-        f'{role.mention}: {role.id}' for role in member.get_roles() if not 'everyone' in role.name
+        f"{role.mention}: {role.id}"
+        for role in member.get_roles()
+        if not "everyone" in role.name
     ]
-    embed.add_field("Roles", '\n'.join(roles))
+    embed.add_field("Roles", "\n".join(roles))
 
     await ctx.respond(embed=embed)
-    
+
+
 @tanjun.with_member_slash_option("member", "The discord member", default=None)
 @tanjun.as_slash_command("avatar", "Returns the avatar of a discord member or yours.")
 async def avatar_view(ctx: tanjun.SlashContext, /, member: hikari.Member) -> None:
