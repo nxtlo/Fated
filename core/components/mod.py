@@ -404,7 +404,8 @@ async def eval_command(
     else:
         await ctx.message.add_reaction("\u2705")
 
-
+# Originally, These commands are used to manage and test the cache
+# not for actually caching stuff.
 @tanjun.with_owner_check
 @tanjun.as_message_command_group("cache")
 async def cacher(
@@ -474,7 +475,7 @@ async def cache_clear(
     cache_: cache.Memory[typing.Any, typing.Any] = tanjun.inject(type=cache.Memory),
 ) -> None:
     cache_.clear()
-    await ctx.respond(format.with_block(cache_.view()))
+    await ctx.respond(cache_.view())
 
 
 async def when_join_guilds(event: hikari.GuildJoinEvent) -> None:

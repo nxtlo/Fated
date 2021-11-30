@@ -75,7 +75,6 @@ def _build_bot() -> hikari.impl.GatewayBot:
     _build_client(bot)
     return bot
 
-
 def _shutdown_redis() -> None:
     for proc in psutil.process_iter():
         if proc.name == "redis-server":
@@ -119,6 +118,7 @@ def _build_client(bot: hikari_traits.GatewayBotAware) -> tanjun.Client:
         .add_client_callback(tanjun.ClientCallbackNames.CLOSING, yuyo_client.close)
         # Components.
         .load_modules("core.components")
+        .set_human_only(True)
         # Prefix stuff.
         .set_prefix_getter(get_prefix)
         .add_prefix(".")

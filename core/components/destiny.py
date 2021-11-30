@@ -191,10 +191,10 @@ async def check_api(ctx: tanjun.MessageContext, client: aiobungie.Client = tanju
         resp = await client.rest.static_request("GET", "Settings")
     except Exception:
         raise
-    if resp['environment'] == "live":
-        status = "API is up."
+    if resp['systems']['Destiny2']['enabled']:
+        status = "Destiny2 API is up."
     else:
-        status = "API is down."
+        status = "Destiny2 API is down."
     await ctx.respond(status)
 
 @destiny_group.with_command
@@ -281,9 +281,10 @@ async def characters(
 
     # TODO: include error messages in aiobungie.
     except aiobungie.ResponseError as exc:
+        info: dict[str, str] = exc.args[1]
         await ctx.respond(
             "Invalid platform selected. Check the player's actual platform they're on.",
-            embed=hikari.Embed(description=str(exc.args))
+            embed=hikari.Embed(description=f"{info['Message']} : {info['MessageData']}")
         )
         return
 

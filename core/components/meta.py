@@ -51,12 +51,10 @@ prefix_group = tanjun.slash_command_group("prefix", "Handle the bot prefix confi
 async def on_ready(_: hikari.ShardReadyEvent) -> None:
     _LOGGER.info("Bot ready.")
 
-
 def _clean_up(path: pathlib.Path) -> None:
     if path.exists():
         shutil.rmtree(path)
     return None
-
 
 @tanjun.with_owner_check
 @tanjun.with_str_slash_option("url", "The song name or url.")
@@ -324,17 +322,8 @@ async def avatar_view(ctx: tanjun.SlashContext, /, member: hikari.Member) -> Non
     embed = hikari.Embed(title=member.username).set_image(avatar)
     await ctx.respond(embed=embed)
 
-
-async def on_message_create(
-    event: hikari.GuildMessageCreateEvent,
-) -> None:
-    if event.is_bot or not event.is_human or event.message.content is None:
-        return
-
-
 meta = (
     tanjun.Component(name="Meta", strict=True)
-    .add_listener(hikari.GuildMessageCreateEvent, on_message_create)
     .add_listener(hikari.ShardReadyEvent, on_ready)
 ).load_from_scope()
 meta.metadata["about"] = "Component for misc and random commands."

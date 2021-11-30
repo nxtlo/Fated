@@ -30,9 +30,9 @@ import copy
 import datetime
 import logging
 import typing
+import inspect
 
 import aioredis
-from hikari.internal import cache as hikari_cache
 from hikari.internal import collections as hikari_collections
 
 from . import traits
@@ -42,8 +42,8 @@ _LOG: typing.Final[logging.Logger] = logging.getLogger(__name__)
 logging.basicConfig(level=logging.DEBUG)
 
 # Memory types.
-MKeyT = typing.TypeVar("MKeyT")
-MValueT = typing.TypeVar("MValueT")
+MKT = typing.TypeVar("MKT")
+MVT = typing.TypeVar("MVT")
 
 # Hash types.
 HashT = traits.HashT
@@ -164,12 +164,11 @@ class Hash(
     def clone(self) -> Hash[HashT, FieldT, ValueT]:
         return copy.deepcopy(self)
 
-
-class Memory(hikari_collections.FreezableDict[MKeyT, MValueT]):
-    """A very basic in memory cache that we may use it for APIs, embeds, etc."""
+class Memory(hikari_collections.ExtendedMutableMapping[MKT, MVT]):
+    """A standard basic in memory cache that we may use it for APIs, embeds, etc."""
 
     __slots__ = ("_map", "expire_after", "on_expire")
-    _map: hikari_collections.ExtendedMutableMapping[MKeyT, MValueT]
+    _map: hikari_collections.ExtendedMutableMapping[MKT, MVT]
 
     def __init__(
         self,
@@ -183,58 +182,70 @@ class Memory(hikari_collections.FreezableDict[MKeyT, MValueT]):
             # By default we only need to cache stuff
             # for 12 hours.
             expire_after = datetime.timedelta(hours=12)
-        self._map = hikari_collections.TimedCacheMap[MKeyT, MValueT](
+        self._map = hikari_collections.TimedCacheMap[MKT, MVT](
             expiry=expire_after, on_expire=on_expire
         )
+        self._map._garbage_collect()  # type: ignore
 
     def clear(self) -> None:
         self._map.clear()
         self.expire_after = None
         self.on_expire = None
 
-    def clone(self) -> hikari_collections.ExtendedMutableMapping[MKeyT, MValueT]:
+    def copy(self) -> hikari_collections.ExtendedMutableMapping[MKT, MVT]:
         return self._map.copy()
+
+    # Need this to cache the memory pointers.
+    def memory(self, key: MKT) -> str:
+        return hex(id(self._map[key]))
+
+    clone = copy
+    """An alias to `Memory.copy()"""
+
+    def freeze(self) -> collections.MutableMapping[MKT, MVT]:
+        return self._map.freeze()
 
     def view(self) -> str:
         return self.__repr__()
 
-    def values(self) -> collections.ValuesView[MValueT]:
+    def values(self) -> collections.ValuesView[MVT]:
         return self._map.values()
 
-    def keys(self) -> collections.KeysView[MKeyT]:
+    def keys(self) -> collections.KeysView[MKT]:
         return self._map.keys()
 
-    def put(self, key: MKeyT, value: MValueT) -> Memory[MKeyT, MValueT]:
-        self._map[key] = value
+    def put(self, key: MKT, value: MVT) -> Memory[MKT, MVT]:
+        self.__setitem__(key, value)
         return self
 
-    def set_expiry(self, date: datetime.timedelta) -> datetime.timedelta:
+    def set_expiry(self, date: datetime.timedelta) -> Memory[MKT, MVT]:
         self.expire_after = date
-        return date
+        return self
 
     def set_on_expire(self, obj: collections.Callable[..., T]) -> T:
         self.on_expire = obj
+        obj.__doc__ = (
+            f'{type(obj).__name__}({inspect.getargs(obj.__code__)}) -> {obj.__annotations__.get("return")}'
+        )
         return typing.cast(T, obj)
 
     def __repr__(self) -> str:
-        empty_cache = hikari_cache.EmptyCacheView()
-        if self._map is not None:
-            rpr = "\n".join(f"MemoryCache {k!r}={v!r}" for k, v in self._map.items())
-        else:
-            rpr = empty_cache.__repr__()
-        return rpr
+        docs = inspect.getdoc(self.on_expire)
+        return "\n".join(
+            f"MemoryCache({k}={v!r}, expires_at={self.expire_after}, on_expire={docs})" for k, v in self._map.items()
+        )
 
-    def __getitem__(self, k: MKeyT) -> MValueT:
-        return self._map[k]
-
-    def __iter__(self) -> collections.Iterator[MKeyT]:
+    def __iter__(self) -> collections.Iterator[MKT]:
         return self._map.__iter__()
 
-    def __setitem__(self, k: MKeyT, v: MValueT) -> None:
-        self._map[k] = v
+    def __getitem__(self, k: MKT) -> MVT:
+        return self._map.__getitem__(k)
 
-    def __delitem__(self, v: MKeyT) -> None:
-        del self._map[v]
+    def __setitem__(self, k: MKT, v: MVT) -> None:
+        self._map.__setitem__(k, v)
+
+    def __delitem__(self, v: MKT) -> None:
+        self._map.__delitem__(v)
 
     def __len__(self) -> int:
         return self._map.__len__()

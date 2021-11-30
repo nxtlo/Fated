@@ -65,24 +65,31 @@ class HashRunner(
 
     async def remove(self, hash: HashT) -> bool | None:
         """Removes a hash."""
+        raise NotImplementedError
 
     async def len(self, hash: HashT) -> int:
         """Returns the length of the hash."""
+        raise NotImplementedError
 
     async def all(self, hash: HashT) -> typing.MutableSequence[HashView[ValueT]] | None:
         """Returns all values from a hash."""
+        raise NotImplementedError
 
     async def delete(self, hash: HashT, field: FieldT) -> None:
         """Deletes a field from the provided hash."""
+        raise NotImplementedError
 
     async def exists(self, hash: HashT, field: FieldT) -> bool:
         """Returns True if the field exists in the hash."""
+        raise NotImplementedError
 
     async def get(self, hash: HashT, field: FieldT) -> ValueT:
         """Returns the value associated with field in the hash stored at key."""
+        raise NotImplementedError
 
     def clone(self) -> HashRunner[HashT, FieldT, ValueT]:
         """Returns a deep clone of this hash."""
+        raise NotImplementedError
 
 
 @typing.runtime_checkable
@@ -110,6 +117,7 @@ class PoolRunner(fast.FastProtocolChecking, typing.Protocol):
         `Self`
             The pool.
         """
+        raise NotImplementedError
 
     async def execute(
         self, sql: str, /, *args: typing.Any, timeout: float | None = None
@@ -160,6 +168,7 @@ class NetRunner(fast.FastProtocolChecking, typing.Protocol):
 
     async def acquire(self) -> aiohttp.ClientSession:
         """Acquires the session if its closed or set to `hikari.UNDEFINED`"""
+        raise NotImplementedError
 
     async def close(self) -> None:
         """Closes the http session."""
@@ -202,3 +211,4 @@ class NetRunner(fast.FastProtocolChecking, typing.Protocol):
     @staticmethod
     async def error_handle(response: aiohttp.ClientResponse, /) -> typing.NoReturn:
         """Handling the request errors."""
+        raise NotImplementedError
