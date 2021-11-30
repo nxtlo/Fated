@@ -4,5 +4,5 @@ git+https://github.com/FasterSpeeding/Yuyo@master
 git+https://github.com/nxtlo/aiobungie@task/profile-components
 asyncpg==0.25.0
 aioredis==2.0.0
-humanize==3.12.0
+humanize==3.13.1
 spotdl==3.9.0
