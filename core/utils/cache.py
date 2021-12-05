@@ -172,20 +172,25 @@ class Memory(hikari_collections.ExtendedMutableMapping[MKT, MVT]):
 
     def __init__(
         self,
-        expire_after: datetime.timedelta | None = None,
+        expire_after: datetime.timedelta | float | None = None,
         *,
         on_expire: collections.Callable[..., typing.Any] | None = None,
     ) -> None:
+
+        if isinstance(expire_after, float):
+            expire_after = datetime.timedelta(seconds=expire_after)
+
         self.expire_after = expire_after
         self.on_expire = on_expire
+
         if not expire_after:
             # By default we only need to cache stuff
             # for 12 hours.
             expire_after = datetime.timedelta(hours=12)
+
         self._map = hikari_collections.TimedCacheMap[MKT, MVT](
             expiry=expire_after, on_expire=on_expire
         )
-        self._map._garbage_collect()  # type: ignore
 
     def clear(self) -> None:
         self._map.clear()

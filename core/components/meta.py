@@ -312,7 +312,6 @@ async def member_view(
 
     await ctx.respond(embed=embed)
 
-
 @tanjun.with_member_slash_option("member", "The discord member", default=None)
 @tanjun.as_slash_command("avatar", "Returns the avatar of a discord member or yours.")
 async def avatar_view(ctx: tanjun.SlashContext, /, member: hikari.Member) -> None:
