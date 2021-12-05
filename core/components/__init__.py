@@ -24,15 +24,15 @@
 from __future__ import annotations
 
 __all__: tuple[str, ...] = (
-    "api_loader",
-    "destiny_loader",
-    "git_loader",
-    "meta_loader",
-    "mod_loader",
+    "api",
+    "destiny",
+    "git",
+    "meta",
+    "mod"
 )
 
-from .api import api_loader
-from .destiny import destiny_loader
-from .git import git_loader
-from .meta import meta_loader
-from .mod import mod_loader
+from .api import api
+from .destiny import destiny
+from .git import git
+from .meta import meta
+from .mod import mod

@@ -29,7 +29,6 @@ import yuyo
 
 __all__: tuple[str, ...] = (
     "api",
-    "api_loader",
 )
 
 import datetime
@@ -281,6 +280,4 @@ async def run_net(
             pass
 
 
-api = tanjun.Component(name="APIs", strict=True).load_from_scope()
-api.metadata["about"] = "Component that makes API calls to different APIs."
-api_loader = api.make_loader()
+api = tanjun.Component(name="APIs", strict=True).load_from_scope().make_loader()

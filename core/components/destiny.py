@@ -25,9 +25,8 @@
 
 from __future__ import annotations
 
-__all__: tuple[str, ...] = ("destiny", "destiny_loader")
+__all__: tuple[str, ...] = ("destiny",)
 
-import collections.abc as collections
 import datetime
 import typing
 
@@ -41,6 +40,9 @@ from hikari.internal import aio
 
 from core.psql import pool
 from core.utils import cache, consts, format
+
+if typing.TYPE_CHECKING:
+    import collections.abc as collections
 
 destiny_group = tanjun.slash_command_group("destiny", "Commands related to Destiny 2.")
 
@@ -84,7 +86,7 @@ _ACTIVITIES: dict[str, tuple[str | None, aiobungie.FireteamActivity]] = {
 }
 
 # Default timeout for paginators.
-TIMEOUT: typing.Final[datetime.timedelta] = datetime.timedelta(seconds=120)
+TIMEOUT: typing.Final[datetime.timedelta] = datetime.timedelta(seconds=90)
 
 _slots: collections.Callable[[aiobungie.crate.Fireteam], str] = (
     lambda fireteam: "Full"
@@ -640,8 +642,4 @@ async def lfg_command(
     )
     component_client.set_executor(msg, paginator)
 
-destiny = tanjun.Component(name="Destiny/Bungie", strict=True).load_from_scope()
-destiny.metadata[
-    "about"
-] = f"Component that's related to Destiny2 and [Bungie's API]({aiobungie.__url__})"
-destiny_loader = destiny.make_loader()
+destiny = tanjun.Component(name="Destiny/Bungie", strict=True).load_from_scope().make_loader()

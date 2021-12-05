@@ -25,19 +25,19 @@
 
 from __future__ import annotations
 
-__all__: tuple[str, ...] = ("meta", "meta_loader")
+__all__: tuple[str, ...] = ("meta",)
 
 import datetime
 import logging
 import os
 import pathlib
 import shutil
-import subprocess as sp
+import subprocess
 import sys
 import typing
 
 import hikari
-import humanize as hz
+import humanize
 import tanjun
 import yuyo
 from aiobungie.internal import time as time_
@@ -77,7 +77,7 @@ async def download_spotify_song(
             os.mkdir("__cache__")
 
             _ = await ctx.create_initial_response("Downloading...")
-            with sp.Popen(
+            with subprocess.Popen(
                 [
                     "spotdl",
                     url,
@@ -87,8 +87,8 @@ async def download_spotify_song(
                     output,
                 ],
                 shell=False,
-                stderr=sp.PIPE,
-                stdin=sp.PIPE,
+                stderr=subprocess.PIPE,
+                stdin=subprocess.PIPE,
             ) as sh:
                 _, nil = sh.communicate()
                 if nil:
@@ -210,7 +210,7 @@ async def colors(ctx: tanjun.abc.MessageContext, color: int) -> None:
 @tanjun.as_message_command("uptime")
 async def uptime(ctx: tanjun.abc.MessageContext) -> None:
     await ctx.respond(
-        f"Been up for {hz.precisedelta(ctx.client.metadata['uptime'] - datetime.datetime.now(), minimum_unit='MINUTES')}"
+        f"Been up for {humanize.precisedelta(ctx.client.metadata['uptime'] - datetime.datetime.now(), minimum_unit='MINUTES')}"
     )
 
 
@@ -233,8 +233,8 @@ async def about_command(
         description="Information about the bot",
         url="https://github.com/nxtlo/Fated",
     )
-    create = f"**Creation date**: {hz.precisedelta(time_.clean_date(str(bot.created_at)[:-6]), minimum_unit='MINUTES')}"
-    uptime_ = f"**Uptime**: {hz.precisedelta(ctx.client.metadata['uptime'] - datetime.datetime.now(), minimum_unit='MINUTES')}"
+    create = f"**Creation date**: {humanize.precisedelta(time_.clean_date(str(bot.created_at)[:-6]), minimum_unit='MINUTES')}"
+    uptime_ = f"**Uptime**: {humanize.precisedelta(ctx.client.metadata['uptime'] - datetime.datetime.now(), minimum_unit='MINUTES')}"
 
     embed.set_author(name=str(bot.id))
 
@@ -324,6 +324,6 @@ async def avatar_view(ctx: tanjun.SlashContext, /, member: hikari.Member) -> Non
 meta = (
     tanjun.Component(name="Meta", strict=True)
     .add_listener(hikari.ShardReadyEvent, on_ready)
-).load_from_scope()
-meta.metadata["about"] = "Component for misc and random commands."
-meta_loader = meta.make_loader()
+    .load_from_scope()
+    .make_loader()
+)

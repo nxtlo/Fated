@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import yuyo
 
-__all__: tuple[str, ...] = ("git", "git_loader")
+__all__: tuple[str, ...] = ("git",)
 
 import datetime
 
@@ -179,6 +179,4 @@ async def get_release(
         return None
 
 
-git = tanjun.Component(name="Git", strict=True).load_from_scope()
-git.metadata["about"] = "Component related to Github's API."
-git_loader = git.make_loader()
+git = tanjun.Component(name="Git", strict=True).load_from_scope().make_loader()
