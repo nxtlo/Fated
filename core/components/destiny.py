@@ -116,6 +116,7 @@ async def _get_destiny_player(
 def _build_inventory_item_embed(
     entity: aiobungie.crate.InventoryEntity,
 ) -> hikari.Embed:
+    sets = f"https://data.destinysets.com/i/InventoryItem:{entity.hash}"
 
     item_tier = None
     try:
@@ -126,6 +127,7 @@ def _build_inventory_item_embed(
     embed = (
         hikari.Embed(
             title=entity.name,
+            url=sets,
             colour=consts.COLOR["invis"],
             description=entity.description,
         )
@@ -532,9 +534,8 @@ async def char_equipments(
             return
 
         if equipment := equips_resp.character_equipments:
-            # pending: list[aiobungie.crate.InventoryEntity] = []
             for _, equipment in equipment.items():
-                tasks = await aio.all_of(*[i.fetch_self() for i in equipment])
+                tasks = await aio.all_of(*(i.fetch_self() for i in equipment))
 
             assert tasks
             pages = (

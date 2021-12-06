@@ -86,24 +86,24 @@ async def _set_channel_perms(
     try:
         async with ctx.rest.trigger_typing(ctx.channel_id):
             channels = await ctx.rest.fetch_guild_channels(ctx.guild_id)
-            for channel in channels:
-                try:
-                    await channel.edit_overwrite(
-                        role_id,
-                        target_type=hikari.PermissionOverwriteType.ROLE,
-                        deny=(
-                            hikari.Permissions.SEND_MESSAGES
-                            | hikari.Permissions.SEND_MESSAGES_IN_THREADS
-                            | hikari.Permissions.SPEAK
-                            | hikari.Permissions.ADD_REACTIONS
-                            | hikari.Permissions.CONNECT
-                            | hikari.Permissions.CREATE_PUBLIC_THREADS
-                            | hikari.Permissions.CREATE_PRIVATE_THREADS
-                        )
+            try:
+                await asyncio.gather(
+                    *(channel.edit_overwrite(
+                    role_id,
+                    target_type=hikari.PermissionOverwriteType.ROLE,
+                    deny=(
+                        hikari.Permissions.SEND_MESSAGES
+                        | hikari.Permissions.SEND_MESSAGES_IN_THREADS
+                        | hikari.Permissions.SPEAK
+                        | hikari.Permissions.ADD_REACTIONS
+                        | hikari.Permissions.CONNECT
+                        | hikari.Permissions.CREATE_PUBLIC_THREADS
+                        | hikari.Permissions.CREATE_PRIVATE_THREADS
                     )
-                except hikari.ForbiddenError:
-                    await ctx.respond("I don't have permissions to edit channels.")
-                    return
+                ) for channel in channels))
+            except hikari.ForbiddenError:
+                await ctx.respond("I don't have permissions to edit channels.")
+                return
     except hikari.HikariError:
         await ctx.respond("Couldn't change channels permissions.")
         raise
@@ -640,26 +640,10 @@ async def when_leave_guilds(event: hikari.GuildLeaveEvent) -> None:
         return
     await event.app.rest.create_message(STDOUT, f"Left from `UNDEFINED` guild {event.guild_id}")
 
-async def on_forbidden_error(
-    event: hikari.ExceptionEvent[hikari.GuildMessageCreateEvent]
-) -> None:
-    if isinstance(event.exception, hikari.ForbiddenError):
-        if (shard := event.shard) and (uid := await shard.get_user_id()):
-            user = await event.app.rest.fetch_user(uid)
-            await event.app.rest.create_message(
-                STDOUT,
-                f"User {user.id}:{user.username} was Forbidden in Shard {shard}: "
-                f"{format.error(str=True)}"
-            )
-            return
-        await event.app.rest.create_message(
-                STDOUT, f"{shard} Was Forbidden: {format.error(str=True)}"
-        )
 mod = (
     tanjun.Component(name="Moderation", strict=True)
     .add_listener(hikari.GuildJoinEvent, when_join_guilds)
     .add_listener(hikari.GuildLeaveEvent, when_leave_guilds)
-    .add_listener(hikari.ExceptionEvent[hikari.GuildMessageCreateEvent], on_forbidden_error)
     .load_from_scope()
     .make_loader()
 )
