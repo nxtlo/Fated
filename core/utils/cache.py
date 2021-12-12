@@ -164,6 +164,7 @@ class Hash(
     def clone(self) -> Hash[HashT, FieldT, ValueT]:
         return copy.deepcopy(self)
 
+
 class Memory(hikari_collections.ExtendedMutableMapping[MKT, MVT]):
     """A standard basic in memory cache that we may use it for APIs, embeds, etc."""
 
@@ -229,15 +230,14 @@ class Memory(hikari_collections.ExtendedMutableMapping[MKT, MVT]):
 
     def set_on_expire(self, obj: collections.Callable[..., T]) -> T:
         self.on_expire = obj
-        obj.__doc__ = (
-            f'{type(obj).__name__}({inspect.getargs(obj.__code__)}) -> {obj.__annotations__.get("return")}'
-        )
+        obj.__doc__ = f'{type(obj).__name__}({inspect.getargs(obj.__code__)}) -> {obj.__annotations__.get("return")}'
         return typing.cast(T, obj)
 
     def __repr__(self) -> str:
         docs = inspect.getdoc(self.on_expire)
         return "\n".join(
-            f"MemoryCache({k}={v!r}, expires_at={self.expire_after}, on_expire={docs})" for k, v in self._map.items()
+            f"MemoryCache({k}={v!r}, expires_at={self.expire_after}, on_expire={docs})"
+            for k, v in self._map.items()
         )
 
     def __iter__(self) -> collections.Iterator[MKT]:

@@ -88,6 +88,8 @@ _ACTIVITIES: dict[str, tuple[str | None, aiobungie.FireteamActivity]] = {
 # Default timeout for paginators.
 TIMEOUT: typing.Final[datetime.timedelta] = datetime.timedelta(seconds=90)
 
+STAR: typing.Final[str] = '⭐'
+
 _slots: collections.Callable[[aiobungie.crate.Fireteam], str] = (
     lambda fireteam: "Full"
     if fireteam.available_player_slots == 0
@@ -100,14 +102,16 @@ async def _get_destiny_player(
     name: str,
     type: aiobungie.MembershipType = aiobungie.MembershipType.ALL,
 ) -> aiobungie.crate.DestinyUser:
+    convert_name = name.split("#")
+    name_, code = convert_name
     try:
-        player = await client.fetch_player(name, type)
+        player = await client.fetch_player(name_, int(code), type)
         assert player
         # The sequence always holds one player.
         # If they're not found means there's no player with the given name.
         return player[0]
     except IndexError:
-        raise aiobungie.NotFound(
+        raise LookupError(
             f"Didn't find player named `{name}` with type `{type}`. "
             "Make sure you include the full name looks like this `Fate#123`"
         ) from None
@@ -168,7 +172,7 @@ async def _sync_player(
 ) -> None:
     try:
         player = await _get_destiny_player(client, name, _PLATFORMS[type])
-    except aiobungie.NotFound as exc:
+    except LookupError as exc:
         await ctx.respond(exc)
         return
 
@@ -190,7 +194,10 @@ async def _sync_player(
     )
 
 @tanjun.as_message_command("d2_api")
-async def check_api(ctx: tanjun.MessageContext, client: aiobungie.Client = tanjun.inject(type=aiobungie.Client)) -> None:
+async def check_api(
+    ctx: tanjun.MessageContext,
+    client: aiobungie.Client = tanjun.inject(type=aiobungie.Client)
+) -> None:
     try:
         resp = await client.rest.static_request("GET", "Settings")
     except Exception:
@@ -230,7 +237,6 @@ async def desync(
             "SELECT ctx_id FROM destiny WHERE ctx_id = $1", ctx.author.id
         )
     ) is not None:
-        print(member)
         try:
             await pool.execute("DELETE FROM destiny WHERE ctx_id = $1", member)
         except Exception as exc:
@@ -283,12 +289,10 @@ async def characters(
             int(id), _PLATFORMS[platform], aiobungie.ComponentType.CHARACTERS
         )
 
-    # TODO: include error messages in aiobungie.
-    except aiobungie.ResponseError as exc:
-        info: dict[str, str] = exc.args[1]
+    except aiobungie.MembershipTypeError as exc:
         await ctx.respond(
             "Invalid platform selected. Check the player's actual platform they're on.",
-            embed=hikari.Embed(description=f"{info['Message']} : {info['MessageData']}")
+            embed=hikari.Embed(description=exc.message)
         )
         return
 
@@ -319,7 +323,7 @@ async def characters(
                         "Stats",
                         "\n".join(
                             [
-                                f"{key}: {val} {'⭐' if val >= 90 and key.name != 'LIGHT_POWER' else ''}"
+                                f"{key}: {val} {STAR if val >= 90 and key.name != 'LIGHT_POWER' else ''}"
                                 for key, val in char.stats.items()
                             ]
                         ),
@@ -372,7 +376,7 @@ async def profiles(
             "SELECT * FROM destiny WHERE ctx_id = $1", member.id
         )
     ) is not None:
-        stored_player: dict[str, typing.Any] = raw_stored_player  # type: ignore
+        stored_player = typing.cast(dict[str, typing.Any], raw_stored_player)
 
         if name is not None:
             player_name = name
@@ -383,7 +387,7 @@ async def profiles(
             player = await _get_destiny_player(
                 client, player_name, aiobungie.MembershipType.ALL
             )
-        except aiobungie.NotFound as exc:
+        except LookupError as exc:
             await ctx.respond(f"{exc}")
             return
 
@@ -596,8 +600,8 @@ async def lfg_command(
         fireteams = await client.fetch_fireteams(
             _ACTIVITIES[activity][1], platform=platform_
         )
-    except aiobungie.InternalServerError as exc:
-        await ctx.respond(exc.long_message)
+    except aiobungie.HTTPError as exc:
+        await ctx.respond(exc.message)
         return
 
     if not fireteams:
@@ -642,5 +646,74 @@ async def lfg_command(
         content, embed=embed, ensure_result=True, component=paginator
     )
     component_client.set_executor(msg, paginator)
+
+@destiny_group.with_command
+@tanjun.with_int_slash_option("instance", "The instance id of the activity.")
+@tanjun.as_slash_command("post", "Returns a post activity information given the activity's instance id.")
+async def post_activity_command(
+    ctx: tanjun.SlashContext,
+    instance: int,
+    client: aiobungie.Client = tanjun.inject(type=aiobungie.Client),
+    cache: cache.Memory[int, hikari.Embed] = tanjun.inject(type=cache.Memory)
+) -> None:
+
+    if cached_instance := cache.get(instance):
+        await ctx.respond(embed=cached_instance)
+        return
+
+    try:
+        post = await client.fetch_post_activity(instance)
+    except aiobungie.HTTPError as e:
+        await ctx.respond(e.message)
+        return
+
+    if post.is_private:
+        return
+
+    features: list[str] = []
+
+    if post.is_solo_flawless:
+        features.append(f"Solo Flawless: {STAR}")
+
+    elif post.is_flawless:
+        features.append(f"Flawless: {STAR}")
+
+    elif post.is_solo:
+        features.append(f"Solo: {STAR}")
+
+
+    players = '\n'.join(
+
+        [
+            # We will need the last seen name to unsure nothing in UNDEFINED.
+            f"{player.character_class}: [{player.destiny_user.last_seen_name}#{player.destiny_user.code}]"
+            f"({player.destiny_user.link}): {player.values.played_time}"
+            for player in post.players
+        ]
+    )
+
+    embed = (
+        hikari.Embed(title=post.mode)
+        .add_field(
+            "Information",
+            f"Refrence id: {post.refrence_id}\n"
+            f"Membership: {post.membership_type}\n"
+            f"Starting phase: {post.starting_phase}\n"
+            f"Date: {format.friendly_date(post.occurred_at)}"
+        )
+        .add_field(
+            "Players",
+            players
+            )
+        )
+
+    if features:
+        embed.add_field(
+            "Features",
+            '\n'.join(features)
+        )
+
+    cache.put(instance, embed)
+    await ctx.respond(embed=embed)
 
 destiny = tanjun.Component(name="Destiny/Bungie", strict=True).load_from_scope().make_loader()

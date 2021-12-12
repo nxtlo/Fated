@@ -51,10 +51,12 @@ prefix_group = tanjun.slash_command_group("prefix", "Handle the bot prefix confi
 async def on_ready(_: hikari.ShardReadyEvent) -> None:
     _LOGGER.info("Bot ready.")
 
+
 def _clean_up(path: pathlib.Path) -> None:
     if path.exists():
         shutil.rmtree(path)
     return None
+
 
 @tanjun.with_owner_check
 @tanjun.with_str_slash_option("url", "The song name or url.")
@@ -312,6 +314,7 @@ async def member_view(
 
     await ctx.respond(embed=embed)
 
+
 @tanjun.with_member_slash_option("member", "The discord member", default=None)
 @tanjun.as_slash_command("avatar", "Returns the avatar of a discord member or yours.")
 async def avatar_view(ctx: tanjun.SlashContext, /, member: hikari.Member) -> None:
@@ -320,6 +323,7 @@ async def avatar_view(ctx: tanjun.SlashContext, /, member: hikari.Member) -> Non
     avatar = member.avatar_url or member.default_avatar_url
     embed = hikari.Embed(title=member.username).set_image(avatar)
     await ctx.respond(embed=embed)
+
 
 meta = (
     tanjun.Component(name="Meta", strict=True)

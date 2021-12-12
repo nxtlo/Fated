@@ -27,9 +27,7 @@ from __future__ import annotations
 
 import yuyo
 
-__all__: tuple[str, ...] = (
-    "api",
-)
+__all__: tuple[str, ...] = ("api",)
 
 import datetime
 import typing

@@ -75,6 +75,7 @@ def _build_bot() -> hikari.impl.GatewayBot:
     _build_client(bot)
     return bot
 
+
 def _shutdown_redis() -> None:
     for proc in psutil.process_iter():
         if proc.name == "redis-server":

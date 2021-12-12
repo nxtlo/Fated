@@ -1,7 +1,7 @@
 git+https://github.com/hikari-py/hikari@master
 git+https://github.com/FasterSpeeding/Tanjun@master
 git+https://github.com/FasterSpeeding/Yuyo@master
-git+https://github.com/nxtlo/aiobungie@task/profile-components
+git+https://github.com/nxtlo/aiobungie@task/post-activities
 asyncpg==0.25.0
 aioredis==2.0.0
 humanize==3.13.1

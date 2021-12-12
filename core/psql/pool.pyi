@@ -37,10 +37,18 @@ class PgxPool(__traits.PoolRunner):
     @classmethod
     async def create_pool(cls, *, build: bool = ...) -> PgxPool: ...
     async def execute(
-        self, sql: str, /, *args: __typing.Any, timeout: __typing.Union[float, None] = ...
+        self,
+        sql: str,
+        /,
+        *args: __typing.Any,
+        timeout: __typing.Union[float, None] = ...,
     ) -> None: ...
     async def fetch(
-        self, sql: str, /, *args: __typing.Any, timeout: __typing.Union[float, None] = ...
+        self,
+        sql: str,
+        /,
+        *args: __typing.Any,
+        timeout: __typing.Union[float, None] = ...,
     ) -> list[__typing.Any]: ...
     async def fetchrow(
         self, sql: str, /, *args: __typing.Any, timeout: __typing.Any[float, None] = ...

@@ -79,6 +79,7 @@ async def sleep_for(
     await member.remove_role(mute_role)
     await ctx.respond(f"{member.mention} has been unmuted.")
 
+
 async def _set_channel_perms(
     ctx: tanjun.SlashContext, role_id: hikari.Snowflake
 ) -> None:
@@ -88,19 +89,23 @@ async def _set_channel_perms(
             channels = await ctx.rest.fetch_guild_channels(ctx.guild_id)
             try:
                 await asyncio.gather(
-                    *(channel.edit_overwrite(
-                    role_id,
-                    target_type=hikari.PermissionOverwriteType.ROLE,
-                    deny=(
-                        hikari.Permissions.SEND_MESSAGES
-                        | hikari.Permissions.SEND_MESSAGES_IN_THREADS
-                        | hikari.Permissions.SPEAK
-                        | hikari.Permissions.ADD_REACTIONS
-                        | hikari.Permissions.CONNECT
-                        | hikari.Permissions.CREATE_PUBLIC_THREADS
-                        | hikari.Permissions.CREATE_PRIVATE_THREADS
+                    *(
+                        channel.edit_overwrite(
+                            role_id,
+                            target_type=hikari.PermissionOverwriteType.ROLE,
+                            deny=(
+                                hikari.Permissions.SEND_MESSAGES
+                                | hikari.Permissions.SEND_MESSAGES_IN_THREADS
+                                | hikari.Permissions.SPEAK
+                                | hikari.Permissions.ADD_REACTIONS
+                                | hikari.Permissions.CONNECT
+                                | hikari.Permissions.CREATE_PUBLIC_THREADS
+                                | hikari.Permissions.CREATE_PRIVATE_THREADS
+                            ),
+                        )
+                        for channel in channels
                     )
-                ) for channel in channels))
+                )
             except hikari.ForbiddenError:
                 await ctx.respond("I don't have permissions to edit channels.")
                 return
@@ -108,21 +113,26 @@ async def _set_channel_perms(
         await ctx.respond("Couldn't change channels permissions.")
         raise
 
+
 async def _done(
-    ctx: tanjun.SlashContext, 
+    ctx: tanjun.SlashContext,
     role: hikari.Role,
     guild: hikari.Guild,
-    hash: traits.HashRunner[str, hikari.Snowflake, hikari.Snowflake]
+    hash: traits.HashRunner[str, hikari.Snowflake, hikari.Snowflake],
 ) -> tuple[None]:
     pendings: list[asyncio.Future[None]] = []
-    for task in (_set_channel_perms(ctx, role.id), hash.set("mutes", guild.id, role.id)):
+    for task in (
+        _set_channel_perms(ctx, role.id),
+        hash.set("mutes", guild.id, role.id),
+    ):
         pendings.append(asyncio.create_task(task))
     return await asyncio.gather(*pendings)
+
 
 async def _create_mute_role(
     ctx: tanjun.SlashContext,
     bot: hikari.GatewayBot,
-    hash: traits.HashRunner[str, hikari.Snowflake, hikari.Snowflake]
+    hash: traits.HashRunner[str, hikari.Snowflake, hikari.Snowflake],
 ) -> None:
     assert ctx.guild_id is not None
     try:
@@ -144,7 +154,8 @@ async def _create_mute_role(
                 maybe_setit = await bot.wait_for(
                     hikari.GuildMessageCreateEvent,
                     20,
-                    lambda m: m.channel_id == ctx.channel_id and m.author_id == ctx.author.id
+                    lambda m: m.channel_id == ctx.channel_id
+                    and m.author_id == ctx.author.id,
                 )
             except asyncio.TimeoutError:
                 pass
@@ -177,26 +188,32 @@ async def _create_mute_role(
             return
 
     except Exception:
-        raise RuntimeError(f"Couldn't create mute role for guild {ctx.get_guild().name}")
+        raise RuntimeError(
+            f"Couldn't create mute role for guild {ctx.get_guild().name}"
+        )
+
 
 mutes = (
     tanjun.slash_command_group("mute", "Comamnds related to muting members.")
     .add_check(tanjun.GuildCheck())
     .add_check(tanjun.AuthorPermissionCheck(hikari.Permissions.MUTE_MEMBERS))
 )
-mute_roles_group = (
-    mutes.with_command(tanjun.slash_command_group("role", "Commands to manages the mute role."))
-    .add_check(tanjun.AuthorPermissionCheck(hikari.Permissions.MANAGE_ROLES))
-)
+mute_roles_group = mutes.with_command(
+    tanjun.slash_command_group("role", "Commands to manages the mute role.")
+).add_check(tanjun.AuthorPermissionCheck(hikari.Permissions.MANAGE_ROLES))
+
 
 @mute_roles_group.with_command
 @tanjun.as_slash_command("create", "Creates the mute role.")
 async def create_mute_role(
     ctx: tanjun.SlashContext,
-    hash: traits.HashRunner[str, hikari.Snowflake, hikari.Snowflake] = tanjun.inject(type=traits.HashRunner),
-    bot: hikari.GatewayBot = tanjun.inject(type=hikari.GatewayBot)
+    hash: traits.HashRunner[str, hikari.Snowflake, hikari.Snowflake] = tanjun.inject(
+        type=traits.HashRunner
+    ),
+    bot: hikari.GatewayBot = tanjun.inject(type=hikari.GatewayBot),
 ) -> None:
     await _create_mute_role(ctx, bot, hash)
+
 
 # TODO: Check for role positions.
 @mutes.with_command
@@ -216,7 +233,9 @@ async def mute(
     duration: float,
     reason: str,
     pool: pool_.PgxPool = tanjun.inject(type=pool_.PoolT),
-    hash: traits.HashRunner[str, hikari.Snowflake, hikari.Snowflake] = tanjun.inject(type=traits.HashRunner),
+    hash: traits.HashRunner[str, hikari.Snowflake, hikari.Snowflake] = tanjun.inject(
+        type=traits.HashRunner
+    ),
 ) -> None:
     assert ctx.guild_id is not None
 
@@ -536,6 +555,7 @@ async def eval_command(
     else:
         await ctx.message.add_reaction("\u2705")
 
+
 # Originally, These commands are used to manage and test the cache
 # not for actually caching stuff.
 @tanjun.with_owner_check
@@ -638,7 +658,10 @@ async def when_leave_guilds(event: hikari.GuildLeaveEvent) -> None:
         ).add_field("Created at", tanjun.from_datetime(guild.created_at, style="R"))
         await event.app.rest.create_message(STDOUT, embed=embed)
         return
-    await event.app.rest.create_message(STDOUT, f"Left from `UNDEFINED` guild {event.guild_id}")
+    await event.app.rest.create_message(
+        STDOUT, f"Left from `UNDEFINED` guild {event.guild_id}"
+    )
+
 
 mod = (
     tanjun.Component(name="Moderation", strict=True)
