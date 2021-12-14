@@ -1,11 +1,13 @@
 # Fated
 A flexible and general purpose discord bot built with Hikari and Tanjun.
 
-## Running
-- Note that you'll need Python3.10 specifically to be able to host the bot.
-- You'll also need to edit the config example file in utils with yours.
+## Requirements
+- Python >=3.10
+- PostgreSQL >=13
 
-### Installing
-- Requirements `pip install -r requirements -r speed-requirements` + Optional `-r dev-requirements `
+You'll also need to make the user and database from psql yourself.
+
+### Running
+- Requirements `python run.py install`
 - Init the database `python run.py db init`
 - Run the bot `python run.py`

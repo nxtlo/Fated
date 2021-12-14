@@ -188,3 +188,13 @@ def format_code() -> None:
         click.echo("Ok", color=True)
     else:
         click.echo(err, err=True, color=True)
+
+@main.command(name="install", short_help="Install the requirements")
+def install_requirements() -> None:
+    with subprocess.Popen(["python", "-m", "pip", "install", "-r", "requirements.txt", "--upgrade"]
+    ) as proc:
+        ok, err = proc.communicate()
+        if ok:
+            click.echo("Installed requirements.")
+        elif err:
+            click.echo("Couldn't install requirements")
