@@ -60,7 +60,7 @@ _CHARACTERS: dict[str, aiobungie.Class] = {
     "Titan": aiobungie.Class.TITAN,
 }
 
-_ACTIVITIES: dict[str, tuple[str | None, aiobungie.FireteamActivity]] = {
+_ACTIVITIES: dict[str, tuple[str | None, aiobungie.FireteamActivity | int]] = {
     "Any": (None, aiobungie.FireteamActivity.ANY),
     "VoG": (
         "https://www.bungie.net/img/destiny_content/pgcr/vault_of_glass.jpg",
@@ -83,6 +83,16 @@ _ACTIVITIES: dict[str, tuple[str | None, aiobungie.FireteamActivity]] = {
         "https://www.bungie.net/img/destiny_content/pgcr/season_14_expunge_tartarus.jpg",
         aiobungie.FireteamActivity.S14_EXPUNGE,
     ),
+    "GoE": (
+        "https://www.bungie.net/img/destiny_content/pgcr/30th-anniversary-grasp-of-avarice.jpg",
+        # TODO: Add this to aiobungie.FireteamActivity
+        37
+    ),
+    "DoE": (
+        "https://www.bungie.net/img/destiny_content/pgcr/30th-anniversary-dares-of-eternity.jpg",
+        # TODO: Add this to aiobungie.FireteamActivity
+        36
+    )
 }
 
 # Default timeout for paginators.
@@ -102,8 +112,7 @@ async def _get_destiny_player(
     name: str,
     type: aiobungie.MembershipType = aiobungie.MembershipType.ALL,
 ) -> aiobungie.crate.DestinyUser:
-    convert_name = name.split("#")
-    name_, code = convert_name
+    name_, code = name.split("#")
     try:
         player = await client.fetch_player(name_, int(code), type)
         assert player
@@ -122,44 +131,43 @@ def _build_inventory_item_embed(
 ) -> hikari.Embed:
     sets = f"https://data.destinysets.com/i/InventoryItem:{entity.hash}"
 
-    item_tier = None
-    try:
-        item_tier = entity.tier
-    except ValueError:
-        pass
-
     embed = (
         hikari.Embed(
             title=entity.name,
             url=sets,
             colour=consts.COLOR["invis"],
-            description=entity.description,
+            description=(
+                entity.description
+                if entity.description is not aiobungie.Undefined
+                else entity.about
+            ),
         )
         .add_field(
             "About",
             f"Hash: {entity.hash}\n"
             f"Index: {entity.index}\n"
-            f"About: {entity.about}\n"
-            f"Can equip: {entity.is_equippable}\n"
             f"Lore hash: {entity.lore_hash}",
         )
         .add_field(
             "Metadata",
-            f"Type: {str(entity.type)} - Sub type: {str(entity.sub_type)}\n"
-            f"Damage type: {entity.damage}\n"
-            f"Ammo type: {entity.ammo_type or 'N/A'}\n"
-            f"Class type: {entity.item_class or 'N/A'}\n"
-            f"Tier: {item_tier} - Tier name: {entity.tier_name}",
+            f"Source: {entity.display_source}\n"
+            f"Type: {entity.type_and_tier_name}\n"
+            f"Class type: {entity.item_class or 'N/A'}"
         )
     )
+
     if entity.has_icon:
         embed.set_thumbnail(str(entity.icon))
 
-    # This is a bug in aiobungie o:
-    if entity.banner and entity.banner.url != "https://www.bungie.netImage <UNDEFINED>":
-        embed.set_image(entity.banner.url)
-    return embed
+    if entity.type is aiobungie.Item.EMBLEM:
+        if entity.secondary_icon is not aiobungie.Undefined:
+            embed.set_image(str(entity.secondary_icon))
 
+    else:
+        if entity.screenshot is not aiobungie.Undefined:
+            embed.set_image(str(entity.screenshot))
+
+    return embed
 
 async def _sync_player(
     ctx: tanjun.abc.SlashContext,
@@ -291,8 +299,8 @@ async def characters(
 
     except aiobungie.MembershipTypeError as exc:
         await ctx.respond(
-            "Invalid platform selected. Check the player's actual platform they're on.",
-            embed=hikari.Embed(description=exc.message)
+            exc.message,
+            embed=hikari.Embed(description=f'{exc!s}')
         )
         return
 

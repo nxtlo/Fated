@@ -93,7 +93,6 @@ def _build_client(bot: hikari_traits.GatewayBotAware) -> tanjun.Client:
             bot,
             mention_prefix=True,
             declare_global_commands=True,
-            set_global_commands=True,
         )
         # pg pool
         .set_type_dependency(pool_.PoolT, pg_pool)
@@ -191,7 +190,11 @@ def format_code() -> None:
 
 @main.command(name="install", short_help="Install the requirements")
 def install_requirements() -> None:
-    with subprocess.Popen(["python", "-m", "pip", "install", "-r", "requirements.txt", "--upgrade"]
+    with subprocess.Popen(
+        ["python", "-m", "pip", "install",
+        "-r", "requirements.txt", "--upgrade",
+        "--force-reinstall"
+    ]
     ) as proc:
         ok, err = proc.communicate()
         if ok:
