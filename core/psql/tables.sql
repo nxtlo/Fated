@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS destiny (
     bungie_id BIGINT NOT NULL,
     name TEXT,
     code BIGINT,
-    memtype SMALLINT
+    memtype VARCHAR(6)
 );
 
 CREATE TABLE IF NOT EXISTS mutes (

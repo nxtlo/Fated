@@ -49,9 +49,9 @@ destiny_group = tanjun.slash_command_group("destiny", "Commands related to Desti
 # Consts usually used as slash options key -> val.
 _PLATFORMS: dict[str, aiobungie.MembershipType] = {
     "Steam": aiobungie.MembershipType.STEAM,
-    "PSN": aiobungie.MembershipType.PSN,
+    "Psn": aiobungie.MembershipType.PSN,
     "Stadia": aiobungie.MembershipType.STADIA,
-    "XBox": aiobungie.MembershipType.XBOX,
+    "Xbox": aiobungie.MembershipType.XBOX,
 }
 
 _CHARACTERS: dict[str, aiobungie.Class] = {
@@ -176,10 +176,9 @@ async def _sync_player(
     /,
     *,
     name: str,
-    type: str,
 ) -> None:
     try:
-        player = await _get_destiny_player(client, name, _PLATFORMS[type])
+        player = await _get_destiny_player(client, name)
     except LookupError as exc:
         await ctx.respond(exc)
         return
@@ -191,7 +190,7 @@ async def _sync_player(
             player.id,
             player.name,
             player.code,
-            int(player.type),
+            str(player.type).title(),
         )
     except asyncpg.exceptions.UniqueViolationError:
         await ctx.respond("You're already synced.")
@@ -220,18 +219,14 @@ async def check_api(
 @tanjun.with_str_slash_option(
     "name", "The unique bungie name. Looks like this `Fate#123`"
 )
-@tanjun.with_str_slash_option(
-    "type", "The membership type.", choices=consts.iter(_PLATFORMS)
-)
 @tanjun.as_slash_command("sync", "Sync your destiny membership with this bot.")
 async def sync(
     ctx: tanjun.abc.SlashContext,
     name: str,
-    type: str,
     pool: pool.PoolT = tanjun.injected(type=pool.PoolT),
     client: aiobungie.Client = tanjun.injected(type=aiobungie.Client),
 ) -> None:
-    await _sync_player(ctx, client, pool, name=name, type=type)
+    await _sync_player(ctx, client, pool, name=name)
 
 
 @destiny_group.with_command
@@ -244,7 +239,7 @@ async def desync(
         member := await pool.fetchval(
             "SELECT ctx_id FROM destiny WHERE ctx_id = $1", ctx.author.id
         )
-    ) is not None:
+    ):
         try:
             await pool.execute("DELETE FROM destiny WHERE ctx_id = $1", member)
         except Exception as exc:
@@ -261,9 +256,6 @@ async def desync(
     "member", "An optional discord member to get their characters.", default=None
 )
 @tanjun.with_str_slash_option(
-    "platform", "The membership type to return", choices=consts.iter(_PLATFORMS)
-)
-@tanjun.with_str_slash_option(
     "id_or_name", "An optional player id or full name to search for.", default=None
 )
 @tanjun.as_slash_command(
@@ -271,26 +263,31 @@ async def desync(
 )
 async def characters(
     ctx: tanjun.abc.SlashContext,
-    platform: str,
     member: hikari.InteractionMember | None,
     id_or_name: str | int | None,
     client: aiobungie.Client = tanjun.injected(type=aiobungie.Client),
     pool: pool.PoolT = tanjun.injected(type=pool.PoolT),
     component_client: yuyo.ComponentClient = tanjun.inject(type=yuyo.ComponentClient),
 ) -> None:
-    author = member or ctx.author
-    if member and id_or_name:
-        await ctx.respond("Can't specify a member and an id at the same time.")
+
+    member = member or ctx.member
+    assert member, "This command should be ran in a Guild."
+
+    if id_or_name:
+        if isinstance(id_or_name, str) and '#' in id_or_name:
+            # We fetch the player by their name and get their id.
+            player = await _get_destiny_player(client, id_or_name)
+            id = player.id 
+            platform = str(player.type).title()
+
+    else:
+        sql = await pool.fetchrow("SELECT memtype, bungie_id FROM destiny WHERE ctx_id = $1", member.id)
+        id = sql['bungie_id']
+        platform = sql['memtype']
+
+    if not id:
+        await ctx.respond(f"Member <@!{id}> is not found, Type /destiny sync to sync your account.")
         return
-
-    if isinstance(id_or_name, str) and '#' in id_or_name:
-        # We fetch the player by their name and get their id.
-        player = await _get_destiny_player(client, id_or_name)
-        id_or_name = player.id 
-
-    id = id_or_name or await pool.fetchval(
-        "SELECT bungie_id FROM destiny WHERE ctx_id = $1", author.id
-    )
 
     try:
         char_resp = await client.fetch_profile(
@@ -343,7 +340,7 @@ async def characters(
         )
         paginator = yuyo.ComponentPaginator(
             pages,
-            authors=(author,),
+            authors=(member,),
             triggers=(
                 yuyo.pagination.LEFT_DOUBLE_TRIANGLE,
                 yuyo.pagination.LEFT_TRIANGLE,
@@ -383,17 +380,17 @@ async def profiles(
         raw_stored_player := await pool.fetchrow(
             "SELECT * FROM destiny WHERE ctx_id = $1", member.id
         )
-    ) is not None:
+    ):
         stored_player = typing.cast(dict[str, typing.Any], raw_stored_player)
 
-        if name is not None:
+        if name:
             player_name = name
         else:
             player_name: str = f"{stored_player['name']}#{stored_player['code']}"
 
         try:
             player = await _get_destiny_player(
-                client, player_name, aiobungie.MembershipType.ALL
+                client, player_name
             )
         except LookupError as exc:
             await ctx.respond(f"{exc}")
