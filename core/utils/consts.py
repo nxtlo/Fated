@@ -24,16 +24,21 @@
 
 from __future__ import annotations
 
-__all__: list[str] = ["COLOR", "API", "GENRES", "iter", "randomize"]
+__all__: list[str] = ["COLOR", "API", "GENRES", "iter", "randomize", "generate_component"]
 
 import random
 import typing
-
+import tanjun
+import yuyo
 import hikari
+
 
 ChoiceT = typing.TypeVar("ChoiceT", covariant=True)
 
 if typing.TYPE_CHECKING:
+    import datetime
+    import collections.abc as collections
+
     SequenceOf = str | typing.Sequence[ChoiceT] | None
 
 COLOR: typing.Final[dict[str, hikari.Colourish]] = {
@@ -68,24 +73,37 @@ GENRES: dict[str, int] = {
 
 _K = typing.TypeVar("_K")
 
+async def generate_component(
+    ctx: tanjun.SlashContext,
+    iterable: (
+        collections.Generator[tuple[hikari.UndefinedType, hikari.Embed], None, None]
+        | collections.Iterator[tuple[hikari.UndefinedType, hikari.Embed]]
+    ),
+    timeout: datetime.timedelta,
+    component_client: yuyo.ComponentClient
+) -> None:
+    pages = yuyo.ComponentPaginator(
+        iterable,
+        authors=(ctx.author,),
+        triggers=(
+                yuyo.pagination.LEFT_DOUBLE_TRIANGLE,
+                yuyo.pagination.LEFT_TRIANGLE,
+                yuyo.pagination.STOP_SQUARE,
+                yuyo.pagination.RIGHT_TRIANGLE,
+                yuyo.pagination.RIGHT_DOUBLE_TRIANGLE,
+            ),
+            timeout=timeout,
+        )
+    if next_ := await pages.get_next_entry():
+        content, embed = next_
+        msg = await ctx.respond(content=content, embed=embed, component=pages, ensure_result=True)
+        component_client.set_executor(msg, pages)
 
 def iter(map: dict[_K, typing.Any]) -> typing.Sequence[str | _K | typing.Any]:
     return [k for k in map.keys()]
 
 
 def randomize(seq: SequenceOf[typing.Any] | None = None) -> typing.Any:
-    """Takes a sequence and randomize it.
-
-    Parameters
-    ----------
-    seq : `SequenceOf[typing.Any]` | `None`
-        A sequence of any elements.
-
-    Returns
-    -------
-    `typing.Any`
-        Any random element from the given sequence.
-    """
     if seq is None:
         return random.choice(list(GENRES.keys()))
     return random.choice(list(seq))

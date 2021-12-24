@@ -97,7 +97,7 @@ _ACTIVITIES: dict[str, tuple[str | None, aiobungie.FireteamActivity | int]] = {
 
 # Default timeout for paginators.
 TIMEOUT: typing.Final[datetime.timedelta] = datetime.timedelta(seconds=90)
-
+D2_SETS: typing.Final[str] = "https://data.destinysets.com/i/InventoryItem:{hash}"
 STAR: typing.Final[str] = '⭐'
 
 _slots: collections.Callable[[aiobungie.crate.Fireteam], str] = (
@@ -112,7 +112,8 @@ async def _get_destiny_player(
     name: str,
     type: aiobungie.MembershipType = aiobungie.MembershipType.ALL,
 ) -> aiobungie.crate.DestinyUser:
-    name_, code = name.split("#")
+    names = name.split("#")
+    name_, code = names
     try:
         player = await client.fetch_player(name_, int(code), type)
         assert player
@@ -121,7 +122,7 @@ async def _get_destiny_player(
         return player[0]
     except IndexError:
         raise LookupError(
-            f"Didn't find player named `{name}` with type `{type}`. "
+            f"Player name `{name}` not found. "
             "Make sure you include the full name looks like this `Fate#123`"
         ) from None
 
@@ -129,7 +130,7 @@ async def _get_destiny_player(
 def _build_inventory_item_embed(
     entity: aiobungie.crate.InventoryEntity,
 ) -> hikari.Embed:
-    sets = f"https://data.destinysets.com/i/InventoryItem:{entity.hash}"
+    sets = D2_SETS.format(hash=entity.hash)
 
     embed = (
         hikari.Embed(
@@ -262,7 +263,7 @@ async def desync(
     "character", "Information about a member's Destiny characters."
 )
 async def characters(
-    ctx: tanjun.abc.SlashContext,
+    ctx: tanjun.SlashContext,
     member: hikari.InteractionMember | None,
     id_or_name: str | int | None,
     client: aiobungie.Client = tanjun.injected(type=aiobungie.Client),
@@ -276,18 +277,25 @@ async def characters(
     if id_or_name:
         if isinstance(id_or_name, str) and '#' in id_or_name:
             # We fetch the player by their name and get their id.
-            player = await _get_destiny_player(client, id_or_name)
+            try:
+                player = await _get_destiny_player(client, id_or_name)
+            except LookupError as e:
+                await ctx.respond(f'{e!s}')
+                return
             id = player.id 
             platform = str(player.type).title()
 
     else:
-        sql = await pool.fetchrow("SELECT memtype, bungie_id FROM destiny WHERE ctx_id = $1", member.id)
+        sql = typing.cast(dict[str, typing.Any] | None, await pool.fetchrow(
+            "SELECT memtype, bungie_id FROM destiny WHERE ctx_id = $1", member.id
+        )
+    )
+        if sql is None:
+            await ctx.respond(f"Member `{member.display_name}` is not found, Type /destiny sync to sync your account.")
+            return
+
         id = sql['bungie_id']
         platform = sql['memtype']
-
-    if not id:
-        await ctx.respond(f"Member <@!{id}> is not found, Type /destiny sync to sync your account.")
-        return
 
     try:
         char_resp = await client.fetch_profile(
@@ -338,26 +346,72 @@ async def characters(
                 for char in iterator
             )
         )
-        paginator = yuyo.ComponentPaginator(
-            pages,
-            authors=(member,),
-            triggers=(
-                yuyo.pagination.LEFT_DOUBLE_TRIANGLE,
-                yuyo.pagination.LEFT_TRIANGLE,
-                yuyo.pagination.STOP_SQUARE,
-                yuyo.pagination.RIGHT_TRIANGLE,
-                yuyo.pagination.RIGHT_DOUBLE_TRIANGLE,
-            ),
-            timeout=TIMEOUT,
-        )
-        next_char = await paginator.get_next_entry()
-        assert next_char
-        content, embed = next_char
-        msg = await ctx.respond(
-            content=content, embed=embed, component=paginator, ensure_result=True
-        )
-        component_client.set_executor(msg, paginator)
+        await consts.generate_component(ctx, pages, TIMEOUT, component_client)
 
+@destiny_group.with_command
+@tanjun.with_str_slash_option("name", "The player names to search for.")
+@tanjun.as_slash_command("search_players", "Search for Destiny2 players.")
+async def search_players(
+    ctx: tanjun.SlashContext,
+    name: str,
+    client: aiobungie.Client = tanjun.inject(type=aiobungie.Client),
+    component_client: yuyo.ComponentClient = tanjun.inject(type=yuyo.ComponentClient)
+) -> None:
+    results = await client.search_users(name)
+    if not results:
+        await ctx.respond("No players found.")
+        return
+    
+    iters = (
+        (
+            hikari.UNDEFINED,
+            hikari.Embed(title=player.unique_name, url=player.link)
+            .add_field(
+                "Information",
+                f"Membershiptype: {player.type}\n"
+                f"ID: {player.id}\n"
+                f"Crossave-override: {str(player.crossave_override).title()}"
+            )
+            .set_thumbnail(str(player.icon))
+        )
+        for player in results
+    )
+    await consts.generate_component(ctx, iters, TIMEOUT, component_client)
+
+@destiny_group.with_command
+@tanjun.with_str_slash_option("name", "The entity name to search for.")
+@tanjun.with_str_slash_option("definition", "The definition of the entity. Default to inventory item", default=None)
+@tanjun.as_slash_command("search_entity", "Search for Destiny 2 entity given its definition.")
+async def search_entities(
+    ctx: tanjun.SlashContext,
+    name: str,
+    definition: str | None,
+    client: aiobungie.Client = tanjun.inject(type=aiobungie.Client),
+    component_client: yuyo.ComponentClient = tanjun.inject(type=yuyo.ComponentClient)
+) -> None:
+    results = await client.search_entities(name, definition or "DestinyInventoryItemDefinition")
+
+    if not results:
+        await ctx.respond("No items found.")
+        return
+    
+    await ctx.defer()
+
+    iters = (
+        (
+            hikari.UNDEFINED,
+            hikari.Embed(title=entity.name, description=entity.description)
+            .add_field(
+                "Information",
+                f"Hash: {entity.hash}\n"
+                f"Type: {entity.entity_type}\n"
+            )
+            .set_thumbnail(str(entity.icon) if entity.has_icon else None)
+            .set_footer(text=", ".join(entity.suggested_words))
+        )
+        for entity in results
+    )
+    await consts.generate_component(ctx, iters, TIMEOUT, component_client)
 
 @destiny_group.with_command
 @tanjun.with_member_slash_option(
@@ -497,7 +551,7 @@ async def item_definition_command(
         await ctx.respond(embed=hikari.Embed(description=format.error(str=True)))
 
     embed = _build_inventory_item_embed(entity)
-    cache_.put(item_hash, embed).set_expiry(datetime.timedelta(hours=8))
+    cache_.put(item_hash, embed)
     await ctx.respond(embed=embed)
 
 
@@ -550,26 +604,7 @@ async def char_equipments(
             pages = (
                 (hikari.UNDEFINED, _build_inventory_item_embed(item)) for item in tasks
             )
-
-            paginator = yuyo.ComponentPaginator(
-                pages,
-                authors=(author,),
-                triggers=(
-                    yuyo.pagination.LEFT_DOUBLE_TRIANGLE,
-                    yuyo.pagination.LEFT_TRIANGLE,
-                    yuyo.pagination.STOP_SQUARE,
-                    yuyo.pagination.RIGHT_TRIANGLE,
-                    yuyo.pagination.RIGHT_DOUBLE_TRIANGLE,
-                ),
-                timeout=TIMEOUT,
-            )
-            next_ = await paginator.get_next_entry()
-            assert next_
-            content, embed = next_
-            msg = await ctx.respond(
-                content=content, embed=embed, component=paginator, ensure_result=True
-            )
-            component_client.set_executor(msg, paginator)
+            await consts.generate_component(ctx, pages, TIMEOUT, component_client)
 
 @destiny_group.with_command
 @tanjun.with_str_slash_option(
@@ -632,25 +667,7 @@ async def lfg_command(
         )
         for fireteam in fireteams
     )
-    paginator = yuyo.ComponentPaginator(
-        pages,
-        authors=(ctx.author,),
-        triggers=(
-            yuyo.pagination.LEFT_DOUBLE_TRIANGLE,
-            yuyo.pagination.LEFT_TRIANGLE,
-            yuyo.pagination.STOP_SQUARE,
-            yuyo.pagination.RIGHT_TRIANGLE,
-            yuyo.pagination.RIGHT_DOUBLE_TRIANGLE,
-        ),
-        timeout=TIMEOUT,
-    )
-    next_ = await paginator.get_next_entry()
-    assert next_
-    content, embed = next_
-    msg = await ctx.respond(
-        content, embed=embed, ensure_result=True, component=paginator
-    )
-    component_client.set_executor(msg, paginator)
+    await consts.generate_component(ctx, pages, TIMEOUT, component_client)
 
 @destiny_group.with_command
 @tanjun.with_int_slash_option("instance", "The instance id of the activity.")
@@ -688,13 +705,9 @@ async def post_activity_command(
 
 
     players = '\n'.join(
-
-        [
-            # We will need the last seen name to unsure nothing in UNDEFINED.
-            f"{player.character_class}: [{player.destiny_user.last_seen_name}#{player.destiny_user.code}]"
-            f"({player.destiny_user.link}): {player.values.played_time}"
-            for player in post.players
-        ]
+        # We will need the last seen name to unsure nothing in UNDEFINED.
+        [f"{player.character_class}: [{player.destiny_user.last_seen_name}#{player.destiny_user.code}]"
+        f"({player.destiny_user.link}): {player.values.played_time}" for player in post.players]
     )
 
     embed = (
@@ -706,10 +719,7 @@ async def post_activity_command(
             f"Starting phase: {post.starting_phase}\n"
             f"Date: {format.friendly_date(post.occurred_at)}"
         )
-        .add_field(
-            "Players",
-            players
-            )
+        .add_field("Players", players)
         )
 
     if features:
