@@ -1,6 +1,6 @@
 aiobungie~=0.2.5b13
 hikari[speedups]~=2.0.0.dev104
-hikari-tanjun~=2.2.1a1
+hikari-tanjun~=2.2.2a1
 hikari-yuyo~=1.0.5a1
 asyncpg~=0.25.0
 aioredis~=2.0.0
