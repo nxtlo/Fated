@@ -36,14 +36,12 @@ __all__: tuple[str, ...] = (
 
 import asyncio
 import logging
-import random as random_
 import typing
 from http import HTTPStatus as http
 
 import aiohttp
 import attr
 import hikari
-import humanize
 import multidict
 import yarl
 from aiobungie.internal import time
@@ -63,7 +61,7 @@ if typing.TYPE_CHECKING:
     import tanjun.abc
     from hikari.internal import data_binding
     _GETTER_TYPE = typing.TypeVar("_GETTER_TYPE", covariant=True)
-    DATA_TYPE = dict[str, typing.Any | int | str | hikari.UndefinedType | multidict.CIMultiDictProxy[str]]
+    DATA_TYPE = dict[str, typing.Any] | multidict.CIMultiDictProxy[str]
 
 _LOG: typing.Final[logging.Logger] = logging.getLogger("core.net")
 _LOG.setLevel(logging.DEBUG)
@@ -151,7 +149,7 @@ class HTTPNet(traits.NetRunner):
                                 f"{self.__rest._stringify_http_message(response.headers, data)} "  # type: ignore
                             )
                             if data is None:
-                                return None
+                                return
 
                             if getter is not None:
                                 try:
@@ -186,13 +184,13 @@ class HTTPNet(traits.NetRunner):
         ___: types.TracebackType | None,
     ) -> None:
         await self.close()
-        return None
+        return
 
     @staticmethod
     async def error_handle(response: aiohttp.ClientResponse, /) -> typing.NoReturn:
         raise await acquire_errors(response)
 
-class Wrapper(interfaces.APIWrapper):
+class Wrapper(interfaces.APIAware):
     """A wrapper around different apis."""
 
     __slots__ = ("_net",)
@@ -200,19 +198,60 @@ class Wrapper(interfaces.APIWrapper):
     def __init__(self, client: HTTPNet) -> None:
         self._net = client
 
-    async def get_anime(
+    @staticmethod
+    def _make_anime_embed(anime_payload: data_binding.JSONObject, date_key: str) -> hikari.Embed:
+
+        start_date: hikari.UndefinedOr[str] = hikari.UNDEFINED
+        if (raw_start_date := anime_payload.get(date_key)):
+            start_date = format.friendly_date(
+                time.clean_date(raw_start_date),
+                    minimum_unit='minutes'
+                )
+
+        end_date: hikari.UndefinedOr[str] = hikari.UNDEFINED
+        if (raw_end_date := anime_payload.get("end_date")):
+            end_date = format.friendly_date(
+                time.clean_date(raw_end_date),
+                minimum_unit='minutes'
+            )
+
+        return (
+            hikari.Embed(
+                title=anime_payload.get("title", hikari.UNDEFINED),
+                description=anime_payload.get("synopsis", hikari.UNDEFINED)
+            )
+            .set_footer(
+                text=', '.join(list(map(lambda tag: tag["name"], anime_payload.get("genres", {}))))
+            )
+            .set_author(url=anime_payload.get("url", str(hikari.UNDEFINED)))
+            .set_image(anime_payload.get("image_url", None))
+            .add_field("Episodes", anime_payload.get("episodes", hikari.UNDEFINED), inline=True)
+            .add_field("Score", anime_payload.get("score", hikari.UNDEFINED), inline=True)
+            .add_field(
+                "Aired at",
+                str(start_date),
+                inline=True
+            )
+            .add_field(
+                "Finished at",
+                str(end_date),
+                inline=True
+            )
+            .add_field("Community members", anime_payload.get("members", hikari.UNDEFINED), inline=True)
+            .add_field("Being aired", anime_payload.get("airing", hikari.UNDEFINED), inline=True)
+        )
+
+    async def fetch_anime(
         self,
-        _: tanjun.abc.SlashContext,
         name: str | None = None,
         *,
         random: bool | None = None,
         genre: str,
-    ) -> hikari.Embed | None:
-        embed = hikari.Embed(colour=consts.COLOR["invis"])
+    ) -> hikari.Embed | collections.Generator[hikari.Embed, None, None] | None:
 
         async with self._net as cli:
 
-            if random is True and name is None:
+            if random and name is None:
                 # This is True by default in case the name is None.
                 path = f"{consts.API['anime']}/genre/anime/{consts.GENRES[genre]}/1"
             else:
@@ -227,109 +266,60 @@ class Wrapper(interfaces.APIWrapper):
                 getter = "results"
                 start = "start_date"
 
-            if (
+            if not (
                 raw_anime := await cli.request(
                     "GET",
                     path,
                     getter=getter,
                 )
-            ) is not None:
-                if isinstance(raw_anime, list):
-                    if name is None and random:
-                        anime = random_.choice(raw_anime)
-                        genres: list[str] = list(
-                            map(lambda tag: tag["name"], anime["genres"])
-                        )
-                    else:
-                        try:
-                            anime = raw_anime[0]
-                        except (KeyError, TypeError):
-                            return None
+            ):
+                return
+            if isinstance(raw_anime, dict):
+                return self._make_anime_embed(raw_anime, start)
+            else:
+                assert isinstance(raw_anime, list), f"Expected a list or dict anime but got {type(raw_anime).__name__}"
+                return (self._make_anime_embed(anime, start) for anime in raw_anime)
 
-                    embed.title = anime.get("title", hikari.UNDEFINED)
-                    embed.description = anime.get("synopsis", hikari.UNDEFINED)
-                    embed.set_author(url=anime.get("url", str(hikari.UNDEFINED)))
-
-                    try:
-                        embed.set_footer(text=", ".join(genres))
-                    except UnboundLocalError:
-                        pass
-
-                    embed.set_image(anime.get("image_url", None))
-
-                    start_date: hikari.UndefinedOr[str] = hikari.UNDEFINED
-                    end_date: hikari.UndefinedOr[str] = hikari.UNDEFINED
-                    if (raw_start_date := anime.get(start)) is not None:
-                        start_date = humanize.precisedelta(
-                            time.clean_date(raw_start_date),
-                            minimum_unit='minutes'
-                        )
-
-                    if (raw_end_date := anime.get("end_date")) is not None:
-                        end_date = humanize.precisedelta(
-                            time.clean_date(raw_end_date),
-                            minimum_unit='minutes'
-                        )
-
-                    meta_data = (
-                        ("Episodes", anime.get("episodes", hikari.UNDEFINED)),
-                        ("Score", anime.get("score", hikari.UNDEFINED)),
-                        ("Aired at", start_date),
-                        ("Finished at", end_date),
-                        ("Community members", anime.get("members", hikari.UNDEFINED)),
-                        ("Being aired", anime.get("airing", hikari.UNDEFINED)),
-                    )
-                    for k, v in meta_data:
-                        embed.add_field(k, str(v), inline=True)
-            return embed
-
-    async def get_manga(
-        self, _: tanjun.abc.SlashContext, name: str, /
-    ) -> hikari.Embed | None:
-        embed = hikari.Embed(colour=consts.COLOR["invis"])
+    async def fetch_manga(
+        self, name: str, /
+    ) -> collections.Generator[hikari.Embed, None, None] | None:
 
         async with self._net as cli:
-            if (
-                raw_manga := await cli.request(
+            if not (
+                raw_mangas := await cli.request(
                     "GET",
                     f'{consts.API["anime"]}/search/manga?q={name}/Zero&page=1&limit=1',
                     getter="results",
                 )
-            ) is not None:
-                if isinstance(raw_manga, list):
-                    try:
-                        manga = raw_manga[0]
-                    except KeyError:
-                        return None
+            ):
+                return
+            assert isinstance(raw_mangas, list)
+            embeds = (
+                hikari.Embed(
+                    colour=consts.COLOR["invis"],
+                    description=manga.get("synopsis", hikari.UNDEFINED)
+                )
+                .set_author(url=manga.get("url", str(hikari.UNDEFINED)), name=manga.get("title", hikari.UNDEFINED))
+                .set_image(manga.get("image_url", None))
+                .add_field(
+                    "Published at",
+                    str(format.friendly_date(time.clean_date(manga.get("start_date", hikari.UNDEFINED)), minimum_unit='minutes'))
+                )
+                .add_field(
+                    "Finished at",
+                    str(format.friendly_date(time.clean_date(manga.get("end_date", hikari.UNDEFINED)), minimum_unit='minutes'))
+                )
+                .add_field("Chapters", manga.get("chapters", hikari.UNDEFINED))
+                .add_field("Volumes", manga.get("volumes", hikari.UNDEFINED))
+                .add_field("Type", manga.get("type", hikari.UNDEFINED))
+                .add_field("Score", manga.get("score", hikari.UNDEFINED))
+                .add_field("Community members", manga.get("members", hikari.UNDEFINED))
+                .add_field("Being published", manga.get("publishing", hikari.UNDEFINED))
+                for manga in raw_mangas
+            )
+            return embeds
 
-                    embed.description = manga.get("synopsis", hikari.UNDEFINED)
-                    embed.set_author(url=manga.get("url", str(hikari.UNDEFINED)), name=manga.get("title", hikari.UNDEFINED))
-
-                    embed.set_image(manga.get("image_url", None))
-                    start_date: hikari.UndefinedOr[str] = hikari.UNDEFINED
-                    end_date: hikari.UndefinedOr[str] = hikari.UNDEFINED
-
-                    if (raw_start_date := manga.get("start_date")) is not None:
-                        start_date = humanize.precisedelta(time.clean_date(raw_start_date), minimum_unit='minutes')
-
-                    if (raw_end_date := manga.get("end_date")) is not None:
-                        end_date = humanize.precisedelta(time.clean_date(raw_end_date), minimum_unit='minutes')
-
-                    meta_data = (
-                        ("Chapters", manga.get("chapters", hikari.UNDEFINED)),
-                        ("Volumes", manga.get("volumes", hikari.UNDEFINED)),
-                        ("Type", manga.get("type", hikari.UNDEFINED)),
-                        ("Score", manga.get("score", hikari.UNDEFINED)),
-                        ("Published at", start_date),
-                        ("Ended at", end_date),
-                        ("Community members", manga.get("members", hikari.UNDEFINED)),
-                        ("Being published", manga.get("publishing", hikari.UNDEFINED)),
-                    )
-                    for k, v in meta_data:
-                        embed.add_field(k, str(v), inline=True)
-            return embed
-
-    async def get_definition(
+    async def fetch_definitions(
         self, ctx: tanjun.abc.SlashContext, name: str
     ) -> collections.Generator[hikari.Embed, None, None] | None:
         async with self._net as cli:
@@ -342,21 +332,21 @@ class Wrapper(interfaces.APIWrapper):
 
             if not resp:
                 await ctx.respond(f"Couldn't find definition about `{name}`")
-                return None
+                return
 
             assert isinstance(resp, list)
 
-            def replace_(s: str) -> str:
+            def _replace(s: str) -> str:
                 return s.replace("]", "").replace("[", "")
 
             embeds = (
                 hikari.Embed(
                     colour=consts.COLOR["invis"],
                     title=f"Definition for {name}",
-                    description=replace_(defn.get("definition", hikari.UNDEFINED)),
+                    description=_replace(defn.get("definition", hikari.UNDEFINED)),
                     timestamp=fast_datetime(defn.get("written_on")) or None  # type: ignore
                 )
-                .add_field("Example", replace_(defn.get("example", hikari.UNDEFINED)))
+                .add_field("Example", _replace(defn.get("example", hikari.UNDEFINED)))
                 .set_footer(
                     text=f"\U0001f44d {defn.get('thumbs_up', 0)} - \U0001f44e {defn.get('thumb_down', 0)}"
                 )
@@ -394,7 +384,8 @@ class Wrapper(interfaces.APIWrapper):
         repos: typing.Sequence[interfaces.GithubRepo] = []
 
         for repo in payload['items']:
-            if(repo_license := repo.get("license")) is not None:
+            license_name = "UNDEFINED"
+            if(repo_license := repo.get("license")):
                 license_name = repo_license['name']
             repo_obj = interfaces.GithubRepo(
                 id=repo['id'],
@@ -403,7 +394,7 @@ class Wrapper(interfaces.APIWrapper):
                 url=repo['html_url'],
                 is_forked=repo['fork'],
                 created_at=time.clean_date(repo['created_at']).astimezone(),
-                last_push=humanize.precisedelta(
+                last_push=format.friendly_date(
                     time.clean_date(
                         repo['pushed_at']),
                     minimum_unit='minutes'
@@ -421,72 +412,64 @@ class Wrapper(interfaces.APIWrapper):
             repos.append(repo_obj)
         return repos
 
-    async def get_git_user(self, name: str, /) -> interfaces.GithubUser | None:
+    async def fetch_git_user(self, name: str, /) -> interfaces.GithubUser | None:
         async with self._net as cli:
             if(raw_user := await cli.request(
                 "GET",
-                yarl.URL(consts.API['git']['user']) / name)) is not None:
+                yarl.URL(consts.API['git']['user']) / name)):
                 assert isinstance(raw_user, dict)
                 return self._set_repo_owner_attrs(raw_user)
-            return None
+            return
 
-    async def get_git_repo(self, name: str) -> typing.Sequence[interfaces.GithubRepo] | None:
+    async def fetch_git_repo(self, name: str) -> collections.Sequence[interfaces.GithubRepo] | None:
         async with self._net as cli:
             if(raw_repo := await cli.request(
                 "GET",
                 consts.API['git']['repo'].format(name)
-            )) is not None:
+            )):
                 assert isinstance(raw_repo, dict)
                 return self._set_repo_attrs(raw_repo)
-            return None
+            return
+
+    def _make_git_releases(self, repo: data_binding.JSONObject, user: str, repo_name: str) -> hikari.Embed:
+        embed = hikari.Embed()
+        repo_author = self._set_repo_owner_attrs(repo['author'])
+        embed.set_author(
+            name=f'{repo["tag_name"]} | {repo["name"]}',
+            url=f'https://github.com/{user}/{repo_name}/releases/tag/{repo["tag_name"]}',
+            icon=repo_author.avatar_url
+        )
+
+        if (body := repo.get("body", hikari.UNDEFINED)) and len(str(body)) <= 4096: 
+            embed.description = format.with_block(body, lang='md')
+
+        embed.timestamp = fast_datetime(repo['published_at'])  # type: ignore
+        (
+            embed
+            .add_field(
+                "Information",
+                f"ID: {repo['id']}\n"
+                f"Prerelease: {repo['prerelease']}\n"
+                f"Drafted: {repo['draft']}\n"
+                f"Branch: {repo['target_commitish']}\n"
+                f"[Download zipball]({repo['zipball_url']})\n"
+                f"[Download tarball]({repo['tarball_url']})"
+            )
+            .add_field(
+                "Owner",
+                f"Name: [{repo_author.name}]({repo_author.url})\n"
+                f"ID: {repo_author.id}\n"
+                f"Type: {repo_author.type}"
+            )
+        )
+        return embed
 
     # Can we cache this and expire after x hours?
-    async def git_release(self, user: str, repo_name: str, release: str) -> tuple[hikari.Embed, str | None]:
-        embed = hikari.Embed()
-        err: str | None = None
+    async def git_release(self, user: str, repo_name: str, limit: int | None = None) -> collections.Generator[hikari.Embed, None, None]:
         async with self._net as cli:
-            try:
-                if (repos := await cli.request("GET", f"https://api.github.com/repos/{user}/{repo_name}/releases")):
-                    assert isinstance(repos, list)
-
-                    repo: dict[str, typing.Any]
-                    for repo in repos:
-                        if repo['tag_name'] == release:
-
-                            repo_author = self._set_repo_owner_attrs(repo['author'])
-                            embed.set_author(
-                                name=f'{repo["tag_name"]} | {repo["name"]}',
-                                url=f'https://github.com/{user}/{repo_name}/releases/tag/{repo["tag_name"]}',
-                                icon=repo_author.avatar_url
-                            )
-
-                            if (body := repo.get("body", hikari.UNDEFINED)) and len(str(body)) <= 4096: 
-                                embed.description = format.with_block(body, lang='md')
-
-                            embed.timestamp = fast_datetime(repo['published_at'])  # type: ignore
-                            (
-                                embed
-                                .add_field(
-                                    "Information",
-                                    f"ID: {repo['id']}\n"
-                                    f"Prerelease: {repo['prerelease']}\n"
-                                    f"Drafted: {repo['draft']}\n"
-                                    f"Branch: {repo['target_commitish']}\n"
-                                    f"[Download zipball]({repo['zipball_url']})\n"
-                                    f"[Download tarball]({repo['tarball_url']})"
-                                )
-                                .add_field(
-                                    "Owner",
-                                    f"Name: [{repo_author.name}]({repo_author.url})\n"
-                                    f"ID: {repo_author.id}\n"
-                                    f"Type: {repo_author.type}"
-                                )
-                            )
-            except (hikari.NotFoundError, hikari.BadRequestError) as exc_:
-                err = exc_.message
-            except Error as exc:
-                err = str(exc.data['message'])
-        return embed, err
+            repos = await cli.request("GET", f"https://api.github.com/repos/{user}/{repo_name}/releases")
+            assert isinstance(repos, list)
+        return (self._make_git_releases(repo, user, repo_name) for repo in repos[:limit])
 
 @attr.define(weakref_slot=False, repr=False, auto_exc=True)
 class Error(RuntimeError):

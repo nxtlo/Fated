@@ -29,17 +29,15 @@ import yuyo
 
 __all__: tuple[str, ...] = ("api",)
 
-import datetime
 import typing
 
 import hikari
 import tanjun
 
-from core.utils import cache, consts, format
+from core.utils import consts, format
 from core.utils import net as net_
 
 
-# TODO: Use a paginator here.
 @tanjun.with_str_slash_option("name", "The anime's name.", default=None)
 @tanjun.with_bool_slash_option("random", "Get a random anime.", default=True)
 @tanjun.with_str_slash_option(
@@ -50,82 +48,66 @@ from core.utils import net as net_
 )
 @tanjun.as_slash_command("anime", "Returns basic information about an anime.")
 async def get_anime(
-    ctx: tanjun.abc.SlashContext,
+    ctx: tanjun.SlashContext,
     name: str,
     random: bool | None,
     genre: str,
     net: net_.HTTPNet = tanjun.inject(type=net_.HTTPNet),
-    cache: cache.Memory[str, hikari.Embed] = tanjun.inject(type=cache.Memory),
+    component_client: yuyo.ComponentClient = tanjun.inject(type=yuyo.ComponentClient),
+    # cache: cache.Memory[str, hikari.Embed] = tanjun.inject(type=cache.Memory),
 ) -> None:
-    if name and (cached_anime := cache.get(name.lower())):
-        await ctx.respond(embed=cached_anime)
+    await ctx.defer()
+
+    jian = net_.Wrapper(net)
+    try:
+        anime_embed = await jian.fetch_anime(name, random=random, genre=genre)
+    except net_.Error as e:
+        await ctx.respond(e.data["message"])
         return
 
-    await ctx.defer()
-    jian = net_.Wrapper(net)
-    anime = await jian.get_anime(ctx, name, random=random, genre=genre)
-    if anime:
-        # Cache the anime if a name is not none.
-        if name:
-            cache.put(name.lower(), anime).set_expiry(datetime.timedelta(hours=6))
-        await ctx.respond(embed=anime)
+    assert anime_embed is not None
+    if not isinstance(anime_embed, typing.Generator):
+        await ctx.respond(embed=anime_embed)
+        return
+
+    await consts.generate_component(
+        ctx, ((hikari.UNDEFINED, embed) for embed in anime_embed), component_client
+    )
 
 
-# TODO: Use a paginator here.
 @tanjun.with_str_slash_option("name", "The manga name")
 @tanjun.as_slash_command("manga", "Returns basic information about a manga.")
 async def get_manga(
-    ctx: tanjun.abc.SlashContext,
+    ctx: tanjun.SlashContext,
     name: str,
     net: net_.HTTPNet = tanjun.inject(type=net_.HTTPNet),
-    cache: cache.Memory[str, hikari.Embed] = tanjun.inject(type=cache.Memory),
+    # cache: cache.Memory[str, hikari.Embed] = tanjun.inject(type=cache.Memory),
+    component_client: yuyo.ComponentClient = tanjun.inject(type=yuyo.ComponentClient),
 ) -> None:
-    if name and (cached_manga := cache.get(name.lower())):
-        await ctx.respond(embed=cached_manga)
-        return
-
     await ctx.defer()
     jian = net_.Wrapper(net)
-    manga = await jian.get_manga(ctx, name)
-    if manga:
-        if name:
-            # Cache the manga if a name is not none.
-            cache.put(name, manga).set_expiry(datetime.timedelta(minutes=1))
-        await ctx.respond(embed=manga)
+    manga_embeds = await jian.fetch_manga(name)
+    if manga_embeds:
+        await consts.generate_component(
+            ctx, ((hikari.UNDEFINED, embed) for embed in manga_embeds), component_client
+        )
 
 
 @tanjun.with_str_slash_option("name", "The name of the definition.")
 @tanjun.as_slash_command("def", "Returns a definition given a name.")
 async def define(
-    ctx: tanjun.abc.SlashContext,
+    ctx: tanjun.SlashContext,
     name: str,
     net: net_.HTTPNet = tanjun.inject(type=net_.HTTPNet),
     component_client: yuyo.ComponentClient = tanjun.inject(type=yuyo.ComponentClient),
 ) -> None:
     urban = net_.Wrapper(net)
-    definitions = await urban.get_definition(ctx, name)
+    definitions = await urban.fetch_definitions(ctx, name)
 
     if definitions:
         pages = ((hikari.UNDEFINED, embed) for embed in definitions)
 
-        paginator = yuyo.ComponentPaginator(
-            pages,
-            authors=(ctx.author,),
-            triggers=(
-                yuyo.pagination.LEFT_DOUBLE_TRIANGLE,
-                yuyo.pagination.LEFT_TRIANGLE,
-                yuyo.pagination.STOP_SQUARE,
-                yuyo.pagination.RIGHT_TRIANGLE,
-                yuyo.pagination.RIGHT_DOUBLE_TRIANGLE,
-            ),
-        )
-        next_definition = await paginator.get_next_entry()
-        assert next_definition
-        content, embed = next_definition
-        msg = await ctx.respond(
-            content=content, embed=embed, component=paginator, ensure_result=True
-        )
-        component_client.set_executor(msg, paginator)
+        await consts.generate_component(ctx, pages, component_client)
 
 
 # Fun stuff.
@@ -140,7 +122,7 @@ async def doggo(
                 "GET",
                 "https://some-random-api.ml/animal/dog",
             )
-            if resp is not None:
+            if resp:
                 assert isinstance(resp, dict)
                 embed = hikari.Embed(description=resp["fact"])
                 embed.set_image(resp["image"])
@@ -161,7 +143,7 @@ async def kittie(
                 "GET",
                 "https://some-random-api.ml/animal/cat",
             )
-            if resp is not None:
+            if resp:
                 assert isinstance(resp, dict)
                 embed = hikari.Embed(description=resp["fact"])
                 embed.set_image(resp["image"])
@@ -184,7 +166,7 @@ async def wink(
             resp = await client.request(
                 "GET", "https://some-random-api.ml/animu/wink", getter="link"
             )
-            if resp is not None:
+            if resp:
                 assert isinstance(resp, str)
                 embed = hikari.Embed(
                     description=f"{ctx.author.username} winked at {member.username if member else 'their self'} UwU!"
@@ -209,7 +191,7 @@ async def pat(
             resp = await client.request(
                 "GET", "https://some-random-api.ml/animu/pat", getter="link"
             )
-            if resp is not None:
+            if resp:
                 assert isinstance(resp, str)
                 embed = hikari.Embed(
                     description=f"{ctx.author.username} pats {member.username if member else 'their self'} UwU!"
@@ -238,7 +220,7 @@ async def jail(
                 f"https://some-random-api.ml/canvas/jail?avatar={member.avatar_url}",
                 read_bytes=True,
             )
-            if resp is not None:
+            if resp:
                 assert isinstance(resp, bytes)
                 embed = hikari.Embed(
                     description=f"{ctx.author.username} jails {member.username if member else 'their self'}"

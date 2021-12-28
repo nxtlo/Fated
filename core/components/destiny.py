@@ -21,7 +21,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-"""Commands refrences aiobungie."""
+"""Commands references aiobungie."""
 
 from __future__ import annotations
 
@@ -54,13 +54,14 @@ _PLATFORMS: dict[str, aiobungie.MembershipType] = {
     "Xbox": aiobungie.MembershipType.XBOX,
 }
 
-_CHARACTERS: dict[str, aiobungie.Class] = {
-    "Warlock": aiobungie.Class.WARLOCK,
-    "Hunter": aiobungie.Class.HUNTER,
-    "Titan": aiobungie.Class.TITAN,
-}
+# _CHARACTERS: dict[str, aiobungie.Class] = {
+#     "Warlock": aiobungie.Class.WARLOCK,
+#     "Hunter": aiobungie.Class.HUNTER,
+#     "Titan": aiobungie.Class.TITAN,
+# }
 
-_ACTIVITIES: dict[str, tuple[str | None, aiobungie.FireteamActivity | int]] = {
+# Fireteam activities for quick LFGs
+_ACTIVITIES: dict[str, tuple[str | None, aiobungie.FireteamActivity]] = {
     "Any": (None, aiobungie.FireteamActivity.ANY),
     "VoG": (
         "https://www.bungie.net/img/destiny_content/pgcr/vault_of_glass.jpg",
@@ -85,18 +86,14 @@ _ACTIVITIES: dict[str, tuple[str | None, aiobungie.FireteamActivity | int]] = {
     ),
     "GoE": (
         "https://www.bungie.net/img/destiny_content/pgcr/30th-anniversary-grasp-of-avarice.jpg",
-        # TODO: Add this to aiobungie.FireteamActivity
-        37
+        aiobungie.FireteamActivity.DUNGEON_GOA
     ),
     "DoE": (
         "https://www.bungie.net/img/destiny_content/pgcr/30th-anniversary-dares-of-eternity.jpg",
-        # TODO: Add this to aiobungie.FireteamActivity
-        36
+        aiobungie.FireteamActivity.DOE
     )
 }
 
-# Default timeout for paginators.
-TIMEOUT: typing.Final[datetime.timedelta] = datetime.timedelta(seconds=90)
 D2_SETS: typing.Final[str] = "https://data.destinysets.com/i/InventoryItem:{hash}"
 STAR: typing.Final[str] = '⭐'
 
@@ -290,7 +287,7 @@ async def characters(
             "SELECT memtype, bungie_id FROM destiny WHERE ctx_id = $1", member.id
         )
     )
-        if sql is None:
+        if not sql:
             await ctx.respond(f"Member `{member.display_name}` is not found, Type /destiny sync to sync your account.")
             return
 
@@ -346,7 +343,7 @@ async def characters(
                 for char in iterator
             )
         )
-        await consts.generate_component(ctx, pages, TIMEOUT, component_client)
+        await consts.generate_component(ctx, pages, component_client)
 
 @destiny_group.with_command
 @tanjun.with_str_slash_option("name", "The player names to search for.")
@@ -376,7 +373,7 @@ async def search_players(
         )
         for player in results
     )
-    await consts.generate_component(ctx, iters, TIMEOUT, component_client)
+    await consts.generate_component(ctx, iters, component_client)
 
 @destiny_group.with_command
 @tanjun.with_str_slash_option("name", "The entity name to search for.")
@@ -411,7 +408,7 @@ async def search_entities(
         )
         for entity in results
     )
-    await consts.generate_component(ctx, iters, TIMEOUT, component_client)
+    await consts.generate_component(ctx, iters, component_client)
 
 @destiny_group.with_command
 @tanjun.with_member_slash_option(
@@ -492,7 +489,7 @@ async def get_clan(
             clan = await client.fetch_clan(query)
     except aiobungie.NotFound as e:
         await ctx.respond(f"{e}")
-        return None
+        return
 
     embed = hikari.Embed(description=f"{clan.about}", colour=consts.COLOR["invis"])
     (
@@ -604,7 +601,7 @@ async def char_equipments(
             pages = (
                 (hikari.UNDEFINED, _build_inventory_item_embed(item)) for item in tasks
             )
-            await consts.generate_component(ctx, pages, TIMEOUT, component_client)
+            await consts.generate_component(ctx, pages, component_client)
 
 @destiny_group.with_command
 @tanjun.with_str_slash_option(
@@ -667,7 +664,7 @@ async def lfg_command(
         )
         for fireteam in fireteams
     )
-    await consts.generate_component(ctx, pages, TIMEOUT, component_client)
+    await consts.generate_component(ctx, pages, component_client)
 
 @destiny_group.with_command
 @tanjun.with_int_slash_option("instance", "The instance id of the activity.")
@@ -714,7 +711,7 @@ async def post_activity_command(
         hikari.Embed(title=post.mode)
         .add_field(
             "Information",
-            f"Refrence id: {post.refrence_id}\n"
+            f"Reference id: {post.refrence_id}\n"
             f"Membership: {post.membership_type}\n"
             f"Starting phase: {post.starting_phase}\n"
             f"Date: {format.friendly_date(post.occurred_at)}"

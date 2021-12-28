@@ -55,7 +55,7 @@ async def on_ready(_: hikari.ShardReadyEvent) -> None:
 def _clean_up(path: pathlib.Path) -> None:
     if path.exists():
         shutil.rmtree(path)
-    return None
+    return
 
 
 @tanjun.with_owner_check
@@ -97,7 +97,7 @@ async def download_spotify_song(
                     await ctx.respond(
                         f"Couldn't download the requested song: {format.with_block(nil.decode('utf-8'), lang='sh')}"
                     )
-                    return None
+                    return
 
         backoff = yuyo.backoff.Backoff(max_retries=3)
         async for _ in backoff:
@@ -132,23 +132,19 @@ async def download_spotify_song(
     hikari.Permissions.MANAGE_GUILD,
     error_message="You need to be a guild manager to execute this command",
 )
-@tanjun.with_str_slash_option("prefix", "The prefix.", converters=(str,), default=None)
+@tanjun.with_str_slash_option("prefix", "The prefix to set.")
 @tanjun.as_slash_command("set", "Change the bot prefix to a custom one.")
 async def set_prefix(
     ctx: tanjun.abc.SlashContext,
-    prefix: str | None,
+    prefix: str,
     hash: traits.HashRunner[str, hikari.Snowflake, str] = tanjun.inject(
         type=traits.HashRunner
     ),
 ) -> None:
 
-    if prefix is None:
-        await ctx.respond("You must provide a prefix.")
-        return None
-
     if len(prefix) > 5:
         await ctx.respond("Prefix length cannot be more than 5 letters.")
-        return None
+        return
 
     await ctx.defer()
     try:
@@ -157,7 +153,7 @@ async def set_prefix(
 
     except Exception as err:
         await ctx.respond(f"Couldn't change bot prefix: {err}")
-        return None
+        return
 
     await ctx.edit_initial_response(f"Prefix set to {prefix}")
 
@@ -183,11 +179,11 @@ async def clear_prefix(
 
     await ctx.defer()
     try:
-        if (found_prefix := await hash.get("prefixes", guild.id)) is not None:
+        if found_prefix := await hash.get("prefixes", guild.id):
             await hash.delete("prefixes", guild.id)
         else:
             assert ctx.has_been_deferred
-            return None
+            return
 
     except Exception as err:
         await ctx.respond(f"Couldn't clear the prefix: {err}")

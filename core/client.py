@@ -32,7 +32,6 @@ import typing
 import aiobungie
 import click
 import hikari
-import psutil
 import tanjun
 import yuyo
 from hikari.internal import aio, ux
@@ -52,9 +51,7 @@ async def get_prefix(
         type=traits.HashRunner
     ),
 ) -> str | typing.Sequence[str]:
-    if (guild := ctx.guild_id) and (
-        prefix := await hash.get("prefixes", guild)
-    ) is not None:
+    if (guild := ctx.guild_id) and (prefix := await hash.get("prefixes", guild)):
         return prefix
     return ()
 
@@ -74,13 +71,6 @@ def _build_bot() -> hikari.impl.GatewayBot:
     )
     _build_client(bot)
     return bot
-
-
-def _shutdown_redis() -> None:
-    for proc in psutil.process_iter():
-        if proc.name == "redis-server":
-            proc.kill()
-            logging.debug("Killed redis-server")
 
 
 def _build_client(bot: hikari_traits.GatewayBotAware) -> tanjun.Client:
@@ -111,7 +101,6 @@ def _build_client(bot: hikari_traits.GatewayBotAware) -> tanjun.Client:
         .add_client_callback(
             tanjun.ClientCallbackNames.CLOSING, aiobungie_client.rest.close
         )
-        .add_client_callback(tanjun.ClientCallbackNames.CLOSED, _shutdown_redis)
         # yuyo
         .set_type_dependency(yuyo.ComponentClient, yuyo_client)
         .add_client_callback(tanjun.ClientCallbackNames.STARTING, yuyo_client.open)
@@ -188,13 +177,20 @@ def format_code() -> None:
     else:
         click.echo(err, err=True, color=True)
 
+
 @main.command(name="install", short_help="Install the requirements")
 def install_requirements() -> None:
     with subprocess.Popen(
-        ["python", "-m", "pip", "install",
-        "-r", "requirements.txt", "--upgrade",
-        "--force-reinstall"
-    ]
+        [
+            "python",
+            "-m",
+            "pip",
+            "install",
+            "-r",
+            "requirements.txt",
+            "--upgrade",
+            "--force-reinstall",
+        ]
     ) as proc:
         ok, err = proc.communicate()
         if ok:

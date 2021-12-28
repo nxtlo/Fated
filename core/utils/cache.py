@@ -28,9 +28,9 @@ __all__: tuple[str, ...] = ("Memory", "Hash")
 import collections.abc as collections
 import copy
 import datetime
+import inspect
 import logging
 import typing
-import inspect
 
 import aioredis
 from hikari.internal import collections as hikari_collections
@@ -136,7 +136,7 @@ class Hash(
             _LOG.warn(
                 f"Result is {bool(cmd)}, Means hash {hash} doesn't exists. returning."
             )
-            return None
+            return
         return bool(cmd)
 
     async def len(self, hash: HashT) -> int:

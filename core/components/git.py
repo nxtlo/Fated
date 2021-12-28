@@ -34,7 +34,7 @@ import datetime
 import hikari
 import tanjun
 
-from core.utils import cache
+from core.utils import cache, consts
 from core.utils import net as net_
 
 git_group = tanjun.slash_command_group("git", "Commands related to github.")
@@ -56,7 +56,7 @@ async def git_user(
     git = net_.Wrapper(net)
     await ctx.defer()
     try:
-        user = await git.get_git_user(name)
+        user = await git.fetch_git_user(name)
     except net_.NotFound:
         await ctx.respond(f"User {name} was not found.")
         return
@@ -87,7 +87,7 @@ async def git_user(
 @tanjun.with_str_slash_option("name", "The name gitub user.")
 @tanjun.as_slash_command("repo", "Get information about a github repo.")
 async def git_repo(
-    ctx: tanjun.abc.SlashContext,
+    ctx: tanjun.SlashContext,
     name: str,
     net: net_.HTTPNet = tanjun.inject(type=net_.HTTPNet),
     component_client: yuyo.ComponentClient = tanjun.inject(type=yuyo.ComponentClient),
@@ -95,7 +95,7 @@ async def git_repo(
     git = net_.Wrapper(net)
 
     try:
-        repos = await git.get_git_repo(name)
+        repos = await git.fetch_git_repo(name)
     except net_.NotFound:
         await ctx.respond("Nothing was found.")
         return
@@ -132,51 +132,35 @@ async def git_repo(
                 for repo in repos
             )
         )
-        paginator = yuyo.ComponentPaginator(
-            pages,
-            authors=(ctx.author,),
-            triggers=(
-                yuyo.pagination.LEFT_DOUBLE_TRIANGLE,
-                yuyo.pagination.LEFT_TRIANGLE,
-                yuyo.pagination.STOP_SQUARE,
-                yuyo.pagination.RIGHT_TRIANGLE,
-                yuyo.pagination.RIGHT_DOUBLE_TRIANGLE,
-            ),
-        )
-        next_repo = await paginator.get_next_entry()
-        assert next_repo
-        content, embed = next_repo
-        msg = await ctx.respond(
-            content=content, embed=embed, component=paginator, ensure_result=True
-        )
-        component_client.set_executor(msg, paginator)
+        await consts.generate_component(ctx, pages, component_client)
 
 
 @git_group.with_command
-@tanjun.with_str_slash_option("user", "The user or org ot look up.")
+@tanjun.with_str_slash_option("user", "The user or org.")
 @tanjun.with_str_slash_option("repo", "The repo name to look up.")
-@tanjun.with_str_slash_option("release", "The release tag to get.")
+@tanjun.with_int_slash_option("limit", "Limit the returned results.", default=None)
 @tanjun.as_slash_command(
-    "release", "Fetch a github project release and returns information about it."
+    "release", "Fetch a github project releases and returns information about them."
 )
 async def get_release(
     ctx: tanjun.SlashContext,
     user: str,
     repo: str,
-    release: str,
+    limit: int | None,
     net: net_.HTTPNet = tanjun.injected(type=net_.HTTPNet),
+    component_client: yuyo.ComponentClient = tanjun.inject(type=yuyo.ComponentClient),
 ) -> None:
     git = net_.Wrapper(net)
+
     try:
-        embed, err = await git.git_release(user, repo, release)
-    except hikari.BadRequestError:
-        return None
-    if embed:
-        await ctx.respond(embed=embed)
+        embeds = await git.git_release(user, repo, limit)
+    except net_.Error as exc:
+        await ctx.respond(f"`{exc.data['message']}`")
         return
-    elif err:
-        await ctx.respond(err)
-        return None
+
+    await consts.generate_component(
+        ctx, ((hikari.UNDEFINED, embed) for embed in embeds), component_client
+    )
 
 
 git = tanjun.Component(name="Git", strict=True).load_from_scope().make_loader()

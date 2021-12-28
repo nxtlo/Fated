@@ -24,7 +24,7 @@
 
 from __future__ import annotations
 
-__all__: tuple[str, ...] = ("APIWrapper", "GithubRepo", "GithubUser", "HashView")
+__all__: tuple[str, ...] = ("APIAware", "GithubRepo", "GithubUser", "HashView")
 
 import abc
 import typing
@@ -47,41 +47,48 @@ class HashView(typing.Generic[_T]):
     value: _T = attr.field()
 
 
-class APIWrapper(abc.ABC):
+class APIAware(abc.ABC):
     """An abctract interface for our wrapper class."""
 
     __slots__ = ()
 
     @abc.abstractmethod
-    async def get_anime(
+    async def fetch_anime(
         self,
-        _: tanjun.abc.SlashContext,
         name: str | None = None,
         *,
         random: bool | None = None,
         genre: str,
-    ) -> hikari.Embed | None:
-        raise NotImplementedError
+    ) -> hikari.Embed | collections.Generator[hikari.Embed, None, None] | None:
+        ...
 
     @abc.abstractmethod
-    async def get_manga(
-        self, _: tanjun.abc.SlashContext, name: str, /
-    ) -> hikari.Embed | None:
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    async def get_definition(
-        self, ctx: tanjun.abc.SlashContext, name: str
+    async def fetch_manga(
+        self, name: str, /
     ) -> collections.Generator[hikari.Embed, None, None] | None:
-        raise NotImplementedError
+        ...
 
     @abc.abstractmethod
-    async def get_git_user(self, name: str) -> GithubUser | None:
-        raise NotImplementedError
+    async def fetch_definitions(
+        self, ctx: tanjun.SlashContext, name: str
+    ) -> collections.Generator[hikari.Embed, None, None] | None:
+        ...
 
     @abc.abstractmethod
-    async def get_git_repo(self, name: str) -> typing.Sequence[GithubRepo] | None:
-        raise NotImplementedError
+    async def fetch_git_user(self, name: str) -> GithubUser | None:
+        ...
+
+    @abc.abstractmethod
+    async def fetch_git_repo(
+        self, name: str
+    ) -> collections.Sequence[GithubRepo] | None:
+        ...
+
+    @abc.abstractmethod
+    async def git_release(
+        self, user: str, repo_name: str, limit: int | None
+    ) -> collections.Generator[hikari.Embed, None, None]:
+        ...
 
 
 @attr.define(hash=False, weakref_slot=False, kw_only=True)

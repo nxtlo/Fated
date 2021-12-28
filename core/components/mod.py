@@ -42,9 +42,7 @@ import tanjun
 import yuyo
 
 from core.psql import pool as pool_
-from core.utils import cache, consts, format
-from core.utils import traits
-
+from core.utils import cache, consts, format, traits
 
 STDOUT: typing.Final[hikari.Snowflakeish] = hikari.Snowflake(789614938247266305)
 DURATIONS: dict[str, int] = {
@@ -195,7 +193,7 @@ async def _create_mute_role(
 
 
 mutes = (
-    tanjun.slash_command_group("mute", "Comamnds related to muting members.")
+    tanjun.slash_command_group("mute", "Commands related to muting members.")
     .add_check(tanjun.GuildCheck())
     .add_check(tanjun.AuthorPermissionCheck(hikari.Permissions.MUTE_MEMBERS))
 )
@@ -303,7 +301,7 @@ async def run_sql(
         await ctx.respond(format.with_block(sys.exc_info()[1]))
         return
 
-    if result is None:
+    if not result:
         await ctx.respond("Nothing found.")
         return
 
@@ -435,12 +433,12 @@ async def fetch_guild(
                     "Information",
                     f"Members: {len(guild.get_members())}\n"
                     f"Created at: {tanjun.from_datetime(guild.created_at, style='R')}\n"
-                    f"Cached: {guild.id in guild_snowflakes or False}",
+                    f"Cached: {guild.id in guild_snowflakes or False}",  # type: ignore
                 ).add_field(
                     "Owner",
                     f"Name: {guild_owner.username}\n"
                     f"ID: {guild_owner.id}\n"
-                    f"Cached: {ctx.author.id in users_snowflakes or False}",
+                    f"Cached: {ctx.author.id in users_snowflakes or False}",  # type: ignore
                 )
             )
             await ctx.respond(embed=embed)

@@ -24,19 +24,26 @@
 
 from __future__ import annotations
 
-__all__: list[str] = ["COLOR", "API", "GENRES", "iter", "randomize", "generate_component"]
+__all__: list[str] = [
+    "COLOR",
+    "API",
+    "GENRES",
+    "iter",
+    "randomize",
+    "generate_component",
+]
 
+import datetime
 import random
 import typing
+
+import hikari
 import tanjun
 import yuyo
-import hikari
-
 
 ChoiceT = typing.TypeVar("ChoiceT", covariant=True)
 
 if typing.TYPE_CHECKING:
-    import datetime
     import collections.abc as collections
 
     SequenceOf = str | typing.Sequence[ChoiceT] | None
@@ -63,15 +70,20 @@ GENRES: dict[str, int] = {
     "Drama": 8,
     "Daemons": 6,
     "Ecchi": 9,  # :eyes:
-    "Magic": 16,
-    "Sci Fi": 24,
+    "Sci-Fi": 24,
     "Shounen": 27,
     "Harem": 35,  # :eyes:
     "Seinen": 42,
+    "Saumrai": 21,
+    "Games": 11,
+    "Psycho": 40,
+    "Superpowers": 37,
+    "Vampire": 32,
 }
 """Anime only genres."""
 
 _K = typing.TypeVar("_K")
+
 
 async def generate_component(
     ctx: tanjun.SlashContext,
@@ -79,31 +91,34 @@ async def generate_component(
         collections.Generator[tuple[hikari.UndefinedType, hikari.Embed], None, None]
         | collections.Iterator[tuple[hikari.UndefinedType, hikari.Embed]]
     ),
-    timeout: datetime.timedelta,
-    component_client: yuyo.ComponentClient
+    component_client: yuyo.ComponentClient,
+    timeout: datetime.timedelta | None = None,
 ) -> None:
     pages = yuyo.ComponentPaginator(
         iterable,
         authors=(ctx.author,),
         triggers=(
-                yuyo.pagination.LEFT_DOUBLE_TRIANGLE,
-                yuyo.pagination.LEFT_TRIANGLE,
-                yuyo.pagination.STOP_SQUARE,
-                yuyo.pagination.RIGHT_TRIANGLE,
-                yuyo.pagination.RIGHT_DOUBLE_TRIANGLE,
-            ),
-            timeout=timeout,
-        )
+            yuyo.pagination.LEFT_DOUBLE_TRIANGLE,
+            yuyo.pagination.LEFT_TRIANGLE,
+            yuyo.pagination.STOP_SQUARE,
+            yuyo.pagination.RIGHT_TRIANGLE,
+            yuyo.pagination.RIGHT_DOUBLE_TRIANGLE,
+        ),
+        timeout=timeout or datetime.timedelta(seconds=90),
+    )
     if next_ := await pages.get_next_entry():
         content, embed = next_
-        msg = await ctx.respond(content=content, embed=embed, component=pages, ensure_result=True)
+        msg = await ctx.respond(
+            content=content, embed=embed, component=pages, ensure_result=True
+        )
         component_client.set_executor(msg, pages)
+
 
 def iter(map: dict[_K, typing.Any]) -> typing.Sequence[str | _K | typing.Any]:
     return [k for k in map.keys()]
 
 
 def randomize(seq: SequenceOf[typing.Any] | None = None) -> typing.Any:
-    if seq is None:
+    if not seq:
         return random.choice(list(GENRES.keys()))
     return random.choice(list(seq))
