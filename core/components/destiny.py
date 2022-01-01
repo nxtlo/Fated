@@ -27,8 +27,10 @@ from __future__ import annotations
 
 __all__: tuple[str, ...] = ("destiny",)
 
+import asyncio
 import datetime
 import typing
+import urllib.parse
 
 import aiobungie
 import asyncpg
@@ -39,7 +41,7 @@ import yuyo
 from hikari.internal import aio
 
 from core.psql import pool
-from core.utils import cache, consts, format
+from core.utils import cache, consts, format, traits
 
 if typing.TYPE_CHECKING:
     import collections.abc as collections
@@ -197,6 +199,102 @@ async def _sync_player(
     await ctx.respond(
         f"Synced `{player.unique_name}` | `{player.id}`, `/destiny profile` to view your profile"
     )
+
+@destiny_group.with_command
+@tanjun.as_slash_command("authorize", "Authorize your bungie account with this bot.", default_to_ephemeral=True)
+async def sync_command(
+    ctx: tanjun.SlashContext,
+    cache: traits.HashRunner = tanjun.inject(type=traits.HashRunner),
+    client: aiobungie.Client = tanjun.inject(type=aiobungie.Client),
+    bot: hikari.GatewayBot = tanjun.inject(type=hikari.GatewayBot)
+) -> None:
+    url = client.rest.build_oauth2_url()
+    assert url
+
+    await ctx.respond(
+        embed=hikari.Embed(description=f"[Enter this link and send the URL after authorizing]({url})")
+    )
+
+    try:
+        code = await bot.wait_for(
+            hikari.GuildMessageCreateEvent,
+            60,
+            lambda m: m.channel_id == ctx.channel_id
+            and m.author_id == ctx.author.id
+            and m.content is not None
+        )
+    except asyncio.TimeoutError:
+        pass
+
+    else:
+        if code.content:
+            parse_code = urllib.parse.urlparse(code.content).query.removeprefix("code=")
+            await code.message.delete()
+
+            try:
+                response = await client.rest.fetch_oauth2_tokens(parse_code)
+            except aiobungie.BadRequest:
+                await ctx.respond("Invalid URL. Please run the command again and send the URL.")
+                return
+
+            try:
+                await cache.set_bungie_tokens(
+                    ctx.author.id,
+                    response
+                )
+            except Exception as exc:
+                raise RuntimeError(f"Couldn't set tokens for user {ctx.author}") from exc
+            await ctx.respond("\U0001f44d")
+
+@destiny_group.with_command
+@tanjun.as_slash_command("user", "Return authorized user information.")
+async def user_command(
+    ctx: tanjun.SlashContext,
+    cache: traits.HashRunner = tanjun.inject(type=traits.HashRunner),
+    client: aiobungie.Client = tanjun.inject(type=aiobungie.Client),
+) -> None:
+
+    try:
+        tokens = await cache.get_bungie_tokens(ctx.author.id)
+    except LookupError:
+        await ctx.respond("Youre not authorized. Type /destiny authorize to sync your account.")
+        return
+
+    access_token = str(tokens['access'])
+    try:
+        user = await client.fetch_own_bungie_user(access_token=access_token)
+    except aiobungie.Unauthorized:
+        raise
+
+    bungie = user.bungie
+
+    embed = hikari.Embed(
+        title=f'{bungie.unique_name} - {bungie.id}', description=bungie.about
+    )
+
+    connections: list[str] = []
+    if bungie.blizzard_name:
+        connections.append(f"Blizzard name: {bungie.blizzard_name}")
+    if bungie.steam_name:
+        connections.append(f"Steam name: {bungie.steam_name}")
+    if bungie.stadia_name:
+        connections.append(f"Stadia name: {bungie.stadia_name}")
+    if bungie.psn_name:
+        connections.append(f"PSN name: {bungie.psn_name}")
+
+    (
+        embed
+        .set_thumbnail(str(bungie.picture))
+        .add_field(
+            "Connections",
+            "\n".join(connections)
+        )
+        .add_field(
+            "Memberships",
+            '\n'.join([f'[{m.type}: {m.unique_name}]({m.link})' for m in user.destiny])
+        )
+    )
+    await ctx.respond(embed=embed)
 
 @tanjun.as_message_command("d2_api")
 async def check_api(

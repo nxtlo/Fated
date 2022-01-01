@@ -25,18 +25,29 @@ from __future__ import annotations
 
 __all__: tuple[str, ...] = ("Memory", "Hash")
 
-import collections.abc as collections
-import copy
+import asyncio
 import datetime
 import inspect
 import logging
+import math
+import time
 import typing
 
+import aiobungie
 import aioredis
 from hikari.internal import collections as hikari_collections
 
 from . import traits
-from .interfaces import HashView
+
+try:
+    import ujson as json  # type: ignore
+except ImportError:
+    import json
+
+if typing.TYPE_CHECKING:
+    import collections.abc as collections
+
+    from hikari import snowflakes
 
 _LOG: typing.Final[logging.Logger] = logging.getLogger(__name__)
 logging.basicConfig(level=logging.DEBUG)
@@ -45,41 +56,13 @@ logging.basicConfig(level=logging.DEBUG)
 MKT = typing.TypeVar("MKT")
 MVT = typing.TypeVar("MVT")
 
-# Hash types.
-HashT = traits.HashT
-FieldT = traits.FieldT
-ValueT = traits.ValueT
-
 T = typing.TypeVar("T")
 
 
-class Hash(
-    traits.HashRunner, typing.Generic[traits.HashT, traits.FieldT, traits.ValueT]
-):
-    # For some reason its not showing the inherited class docs.
+class Hash(traits.HashRunner):
+    """Standard Redis hash trait. This hash is used to store fast key -> value objects for our needs."""
 
-    """A Basic generic Implementation of redis hash protocol.
-
-    Example
-    -------
-    ```py
-    # `str` is the name of the hash, `hikari.Snowflake` is the key, `hikari.Member` is the value.
-    cache: HashRunner[str, hikari.SnowFlake, hikari.Member] = cache.Hash()
-    member = await rest.fetch_member(...)
-    await cache.set("members", member.id, member)
-
-    ```
-
-    Note
-    ----
-    This is meant to be a Key-Value cache for light-weight stuff for fast access,
-    Means you can't cache the whole member object in the hash.
-
-    Use The Memory cache if you want to cache a an object or impl your own marshaller.
-    You can also use Snab's sake cache instead.
-    """
-
-    __slots__: typing.Sequence[str] = ("_injector", "_password")
+    __slots__: typing.Sequence[str] = ("__connection", "_aiobungie_client", "_lock")
     from .config import Config as __Config
 
     def __init__(
@@ -88,6 +71,7 @@ class Hash(
         port: int = __Config().REDIS_PORT,
         password: str | None = __Config().REDIS_PASSWORD,
         /,
+        aiobungie_client: aiobungie.Client | None = None,
         *,
         db: str | int = 0,
         ssl: bool = False,
@@ -95,7 +79,7 @@ class Hash(
         decode_responses: bool = True,
         **kwargs: typing.Any,
     ) -> None:
-        self._injector = aioredis.Redis(
+        self.__connection = aioredis.Redis(
             host=host,
             port=port,
             password=password,  # type: ignore
@@ -106,63 +90,114 @@ class Hash(
             max_connections=max_connections,
             **kwargs,
         )
+        self._aiobungie_client = aiobungie_client
+        self._lock = asyncio.Lock()
 
-    async def __call__(
-        self, *_: typing.Any, **__: typing.Any
-    ) -> Hash[HashT, FieldT, ValueT]:
-        return self
+    async def set_prefix(self, guild_id: snowflakes.Snowflake, prefix: str) -> None:
+        await self.__connection.hset("prefixes", str(guild_id), prefix)  # type: ignore
 
-    async def __execute_command(
+    async def get_prefix(self, guild_id: snowflakes.Snowflake) -> str:
+        if prefix := await self.__connection.hget("prefixes", str(guild_id)):
+            return typing.cast(str, prefix)
+
+        raise LookupError
+
+    async def remove_prefix(self, *guild_ids: snowflakes.Snowflake) -> None:
+        await self.__connection.hdel("prefixes", *list(map(str, guild_ids)))
+
+    async def set_mute_roles(
+        self, guild_id: snowflakes.Snowflake, role_id: snowflakes.Snowflake
+    ) -> None:
+        await self.__connection.hset("mutes", str(guild_id), role_id)  # type: ignore
+
+    async def get_mute_role(
+        self, guild_id: snowflakes.Snowflake
+    ) -> snowflakes.Snowflake:
+        if role_id := await self.__connection.hget("mutes", str(guild_id)):
+            return role_id
+
+        raise LookupError
+
+    # Check whether the Bungie OAuth tokens are expired or not.
+    # If expired we refresh them.
+    async def _is_expired(self, user: snowflakes.Snowflake) -> bool:
+        expirey = await self.__loads_tokens(user)
+        return time.monotonic() >= float(expirey["expires"])
+
+    # Dump the authorized data as a string JSON object.
+    async def __dump_tokens(
         self,
-        command: str,
-        hash: HashT,
-        /,
-        *,
-        field: FieldT | str = "",  # This is actually required.
-        value: ValueT | str = "",
-    ) -> typing.Any:
-        fmt = "{} {} {} {}".format(command, hash, field, value)
-        return await self._injector.execute_command(fmt)
+        owner: snowflakes.Snowflake,
+        access_token: str,
+        refresh_token: str,
+        expires_in: float,
+    ) -> str:
+        body = json.dumps(
+            {"access": access_token, "refresh": refresh_token, "expires": expires_in}
+        )
+        await self.__connection.hset(name="tokens", key=owner, value=body)  # type: ignore
+        return body
 
-    async def set(self, hash: HashT, field: FieldT, value: ValueT) -> None:
-        return await self.__execute_command("HSET", hash, field=field, value=value)
+    # Loads the authorized data from a string JSON object to a Python dict object.
+    async def __loads_tokens(self, owner: snowflakes.Snowflake) -> dict[str, str | int]:
+        resp: snowflakes.Snowflake = await self.__connection.hget("tokens", owner)
+        if resp:
+            return json.loads(str(resp))
 
-    async def setx(self, hash: HashT, field: FieldT) -> typing.Any:
-        await self.__execute_command("HSETNX", hash, field=field)
+        raise LookupError
 
-    async def remove(self, hash: HashT) -> bool | None:
-        cmd: int = await self.__execute_command("DEL", hash)
-        if cmd != 1:
-            _LOG.warn(
-                f"Result is {bool(cmd)}, Means hash {hash} doesn't exists. returning."
-            )
-            return
-        return bool(cmd)
+    async def __refresh_token(
+        self, owner: snowflakes.Snowflake
+    ) -> aiobungie.OAuth2Response:
+        assert (
+            self._aiobungie_client is not None
+        ), "Aiobungie client should never be `None` to refresh the tokens."
 
-    async def len(self, hash: HashT) -> int:
-        return await self.__execute_command("HLEN", hash)
+        try:
+            tokens = await self.__loads_tokens(owner)
+        except LookupError:
+            raise
 
-    async def all(
-        self, hash: HashT
-    ) -> collections.MutableSequence[HashView[ValueT]] | None:
-        coro: dict[typing.Any, typing.Any] = await self.__execute_command("HVALS", hash)
-        pending = []
-        for v in coro:
-            pending.append(HashView(key=hash, value=v))
-        return pending or None
+        refresh = tokens["refresh"]
+        assert isinstance(refresh, str)
+        return await self._aiobungie_client.rest.refresh_access_token(refresh)
 
-    async def delete(self, hash: HashT, field: FieldT) -> None:
-        return await self.__execute_command("HDEL", hash, field=field)
+    async def set_bungie_tokens(
+        self, user: snowflakes.Snowflake, respons: aiobungie.OAuth2Response
+    ) -> None:
+        await self.__dump_tokens(
+            user, respons.access_token, respons.refresh_token, respons.expires_in
+        )
 
-    async def exists(self, hash: HashT, field: FieldT) -> bool:
-        send: int = await self.__execute_command("HEXISTS", hash, field=field)
-        return bool(send)
+    # This impl hikari's client creds strat.
+    async def get_bungie_tokens(
+        self, user: snowflakes.Snowflake
+    ) -> dict[str, str | int]:
+        is_expired = await self._is_expired(user)
+        if (tokens := await self.__loads_tokens(user)) and not is_expired:
+            return tokens
 
-    async def get(self, hash: HashT, field: FieldT) -> ValueT:
-        return await self.__execute_command("HGET", hash, field=field)
+        async with self._lock:
+            if (tokens := await self.__loads_tokens(user)) and not is_expired:
+                return tokens
 
-    def clone(self) -> Hash[HashT, FieldT, ValueT]:
-        return copy.deepcopy(self)
+        try:
+            response = await self.__refresh_token(user)
+        except (aiobungie.Unauthorized, LookupError):
+            raise
+
+        assert (
+            response is not None
+        ), f"Got empty response when trying to refresh tokens for {user}"
+        expiry = time.monotonic() + math.floor(response.expires_in * 0.99)
+        tokens_ = await self.__dump_tokens(
+            user, response.access_token, response.refresh_token, expiry
+        )
+        _LOG.info("Refreshed tokens for %s", user)
+        return json.loads(tokens_)
+
+    async def remove_bungie_tokens(self, user: snowflakes.Snowflake) -> None:
+        await self.__connection.hdel("tokens", str(user))
 
 
 class Memory(hikari_collections.ExtendedMutableMapping[MKT, MVT]):

@@ -68,13 +68,13 @@ async def sleep_for(
     ctx: tanjun.SlashContext,
     member: hikari.InteractionMember,
     pool: pool_.PgxPool,
-    hash: traits.HashRunner[str, hikari.Snowflake, hikari.Snowflake],
+    hash: traits.HashRunner,
 ) -> None:
     assert ctx.guild_id is not None
     while True:
         await asyncio.sleep(timer.total_seconds())
         await pool.execute("DELETE FROM mutes WHERE member_id = $1", member.id)
-        mute_role = await hash.get("mutes", ctx.guild_id)
+        mute_role = await hash.get_mute_role(ctx.guild_id)
         await member.remove_role(mute_role)
         await ctx.respond(f"{member.mention} has been unmuted.")
 
@@ -117,12 +117,12 @@ async def _done(
     ctx: tanjun.SlashContext,
     role: hikari.Role,
     guild: hikari.Guild,
-    hash: traits.HashRunner[str, hikari.Snowflake, hikari.Snowflake],
+    hash: traits.HashRunner,
 ) -> tuple[None]:
     pendings: list[asyncio.Future[None]] = []
     for task in (
         _set_channel_perms(ctx, role.id),
-        hash.set("mutes", guild.id, role.id),
+        hash.set_mute_roles(guild.id, role.id),
     ):
         pendings.append(asyncio.create_task(task))
     return await asyncio.gather(*pendings)
@@ -131,7 +131,7 @@ async def _done(
 async def _create_mute_role(
     ctx: tanjun.SlashContext,
     bot: hikari.GatewayBot,
-    hash: traits.HashRunner[str, hikari.Snowflake, hikari.Snowflake],
+    hash: traits.HashRunner,
 ) -> None:
     assert ctx.guild_id is not None
     try:
@@ -206,9 +206,7 @@ mute_roles_group = mutes.with_command(
 @tanjun.as_slash_command("create", "Creates the mute role.")
 async def create_mute_role(
     ctx: tanjun.SlashContext,
-    hash: traits.HashRunner[str, hikari.Snowflake, hikari.Snowflake] = tanjun.inject(
-        type=traits.HashRunner
-    ),
+    hash: traits.HashRunner = tanjun.inject(type=traits.HashRunner),
     bot: hikari.GatewayBot = tanjun.inject(type=hikari.GatewayBot),
 ) -> None:
     await _create_mute_role(ctx, bot, hash)
@@ -232,13 +230,13 @@ async def mute(
     duration: float,
     reason: str,
     pool: pool_.PgxPool = tanjun.inject(type=pool_.PoolT),
-    hash: traits.HashRunner[str, hikari.Snowflake, hikari.Snowflake] = tanjun.inject(
-        type=traits.HashRunner
-    ),
+    hash: traits.HashRunner = tanjun.inject(type=traits.HashRunner),
 ) -> None:
     assert ctx.guild_id is not None
 
-    if not (mute_role := await hash.get("mutes", ctx.guild_id)):
+    try:
+        mute_role = await hash.get_mute_role(ctx.guild_id)
+    except LookupError:
         await ctx.respond("No mute role found. Type `/mute role create` to create one.")
         return
 

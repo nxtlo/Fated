@@ -47,21 +47,19 @@ if typing.TYPE_CHECKING:
 
 async def get_prefix(
     ctx: tanjun.abc.MessageContext,
-    hash: traits.HashRunner[str, hikari.Snowflake, str] = tanjun.inject(
-        type=traits.HashRunner
-    ),
-) -> str | typing.Sequence[str]:
-    if (guild := ctx.guild_id) and (prefix := await hash.get("prefixes", guild)):
-        return prefix
-    return ()
+    hash: traits.HashRunner = tanjun.inject(type=traits.HashRunner),
+) -> str:
+    if ctx.guild_id:
+        try:
+            return await hash.get_prefix(ctx.guild_id)
+        except LookupError:
+            pass
+    # Probably will switch to all slash soon.
+    return "."
 
 
 def _build_bot() -> hikari.impl.GatewayBot:
-    # This is only global to pass it between
-    # The bot and the client
-    global config
     config = config_.Config()
-
     intents = hikari.Intents.ALL_GUILDS | hikari.Intents.ALL_MESSAGES
     bot = hikari.GatewayBot(
         banner=None,
@@ -69,15 +67,24 @@ def _build_bot() -> hikari.impl.GatewayBot:
         intents=intents,
         cache_settings=hikari.CacheSettings(components=config.CACHE),
     )
-    _build_client(bot)
+    _build_client(bot, config)
     return bot
 
 
-def _build_client(bot: hikari_traits.GatewayBotAware) -> tanjun.Client:
+def _build_client(
+    bot: hikari_traits.GatewayBotAware, config: config_.Config
+) -> tanjun.Client:
     pg_pool = pool_.PgxPool()
     client_session = net.HTTPNet()
-    aiobungie_client = aiobungie.Client(config.BUNGIE_TOKEN, max_retries=4)
+    aiobungie_client = aiobungie.Client(
+        config.BUNGIE_TOKEN,
+        config.BUNGIE_CLIENT_SECRET,
+        config.BUNGIE_CLIENT_ID,
+        max_retries=4,
+    )
+    redis_hash = cache.Hash(max_connections=10, aiobungie_client=aiobungie_client)
     yuyo_client = yuyo.ComponentClient.from_gateway_bot(bot, event_managed=False)
+
     client = (
         tanjun.Client.from_gateway_bot(
             bot,
@@ -91,10 +98,9 @@ def _build_client(bot: hikari_traits.GatewayBotAware) -> tanjun.Client:
         # own aiohttp client session.
         .set_type_dependency(net.HTTPNet, typing.cast(traits.NetRunner, client_session))
         # Cache. This is kinda overkill but we need the memory cache for api requests
-        # And the redis hash for stuff that are not worth running sql queries for.
-        .set_type_dependency(
-            traits.HashRunner, cache.Hash[object, object, object](max_connections=20)
-        )
+        # And the redis hash for stuff that are not worth storing in a database for the sake of speed.
+        # i.e., OAuth2 tokens
+        .set_type_dependency(traits.HashRunner, redis_hash)
         .set_type_dependency(cache.Memory, cache.Memory[object, object]())
         # aiobungie client
         .set_type_dependency(aiobungie.Client, aiobungie_client)

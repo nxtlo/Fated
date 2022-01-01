@@ -21,6 +21,12 @@ class Config:
     BUNGIE_TOKEN: typing.Final[str | None] = attr.field(default=None)
     """Bungie api key for interacting with aiobungie."""
 
+    BUNGIE_CLIENT_ID: typing.Final[int] = attr.field(default=0)
+    """Bungie Application client id for account syncing."""
+
+    BUNGIE_CLIENT_SECRET: typing.Final[str] = attr.field(default="")
+    """Bungie Application client secret for account syncing."""
+
     DB_USER: typing.Final[str] = attr.field(default="PSQL_USER")
     """Your database username."""
 

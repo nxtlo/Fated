@@ -20,7 +20,8 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-"""Runtime protocols."""
+
+"""Protocols or traits or whatever used for our impls. and also used as dependency injectors."""
 
 from __future__ import annotations
 
@@ -28,67 +29,59 @@ __all__: tuple[str, ...] = ("PoolRunner", "NetRunner", "HashRunner")
 
 import typing
 
-from hikari.internal import fast_protocol as fast
-
-# Hash types.
-HashT = typing.TypeVar("HashT")
-FieldT = typing.TypeVar("FieldT")
-ValueT = typing.TypeVar("ValueT")
+from hikari.internal import fast_protocol as fast  # too long >:
 
 if typing.TYPE_CHECKING:
+    import aiobungie
     import aiohttp
     import asyncpg
-    import hikari
     import yarl
+    from hikari import files, snowflakes
     from hikari.internal import data_binding
-
-    from .interfaces import HashView
 
     _GETTER_TYPE = typing.TypeVar("_GETTER_TYPE", covariant=True)
 
 
 @typing.runtime_checkable
-class HashRunner(
-    typing.Generic[HashT, FieldT, ValueT], fast.FastProtocolChecking, typing.Protocol
-):
-    """A Basic generic Implementation of redis hash protocol."""
+class HashRunner(fast.FastProtocolChecking, typing.Protocol):
+    """Standard Redis hash trait. This hash is used to store fast key -> value objects for our needs."""
 
     __slots__ = ()
 
-    async def set(self, hash: HashT, field: FieldT, value: ValueT) -> None:
-        """Creates a new hash with field name and a value."""
+    async def set_prefix(self, guild_id: snowflakes.Snowflake, prefix: str) -> None:
+        """Sets a guild prefix given a guild snowflake."""
 
-    async def setx(self, hash: HashT, field: FieldT) -> None:
-        """A method that's similar to `Hash.set`
-        but will not replace the value if one is already exists.
-        """
-
-    async def remove(self, hash: HashT) -> bool | None:
-        """Removes a hash."""
+    async def get_prefix(self, guild_id: snowflakes.Snowflake) -> str:
+        """Returns the cached prefix for a guild."""
         raise NotImplementedError
 
-    async def len(self, hash: HashT) -> int:
-        """Returns the length of the hash."""
+    async def set_mute_roles(
+        self, guild_id: snowflakes.Snowflake, role_id: snowflakes.Snowflake
+    ) -> None:
+        """Sets the mute role for the guild id."""
+
+    async def get_mute_role(
+        self, guild_id: snowflakes.Snowflake
+    ) -> snowflakes.Snowflake:
+        """Return the cached mute role id. Raised LookupError if not found."""
         raise NotImplementedError
 
-    async def all(self, hash: HashT) -> typing.MutableSequence[HashView[ValueT]] | None:
-        """Returns all values from a hash."""
+    async def remove_prefix(self, guild_id: snowflakes.Snowflake) -> None:
+        """Removes a prefix for a guild."""
+
+    async def set_bungie_tokens(
+        self, user: snowflakes.Snowflake, respons: aiobungie.OAuth2Response
+    ) -> None:
+        """Cache a hikari snowflake to the returned OAuth2 response object tokens."""
+
+    async def get_bungie_tokens(
+        self, user: snowflakes.Snowflake
+    ) -> dict[str, str | int]:
+        """Gets loaded dict object of the user snowflake tokens."""
         raise NotImplementedError
 
-    async def delete(self, hash: HashT, field: FieldT) -> None:
-        """Deletes a field from the provided hash."""
-        raise NotImplementedError
-
-    async def exists(self, hash: HashT, field: FieldT) -> bool:
-        """Returns True if the field exists in the hash."""
-        raise NotImplementedError
-
-    async def get(self, hash: HashT, field: FieldT) -> ValueT:
-        """Returns the value associated with field in the hash stored at key."""
-        raise NotImplementedError
-
-    def clone(self) -> HashRunner[HashT, FieldT, ValueT]:
-        """Returns a deep clone of this hash."""
+    async def remove_bungie_tokens(self, user: snowflakes.Snowflake) -> None:
+        """Removes the snowflake user's cached OAuth tokens."""
         raise NotImplementedError
 
 
@@ -180,20 +173,14 @@ class NetRunner(fast.FastProtocolChecking, typing.Protocol):
         getter: typing.Any | _GETTER_TYPE | None = None,
         read_bytes: bool = False,
         **kwargs: typing.Any,
-    ) -> data_binding.JSONArray | data_binding.JSONObject | hikari.Resourceish | _GETTER_TYPE | None:
-        """Perform an http request
+    ) -> data_binding.JSONArray | data_binding.JSONObject | files.Resourceish | _GETTER_TYPE | None:
+        """Perform an HTTP request.
 
         Parameters
         ----------
         method : `str`
             The http request method.
             This can be `GET`. `POST`. `PUT`. `DELETE`. etc.
-
-        Note
-        ----
-        if you're performing any request
-        that requires Auth you'll need to pass headers
-        to the kwargs like this `headers={'X-API-KEY': ...}`
 
         url : `str` | `yarl.URL`
             The api url. This also can be used as a `yarl.URL(...)` object.

@@ -137,9 +137,7 @@ async def download_spotify_song(
 async def set_prefix(
     ctx: tanjun.abc.SlashContext,
     prefix: str,
-    hash: traits.HashRunner[str, hikari.Snowflake, str] = tanjun.inject(
-        type=traits.HashRunner
-    ),
+    hash: traits.HashRunner = tanjun.inject(type=traits.HashRunner),
 ) -> None:
 
     if len(prefix) > 5:
@@ -149,7 +147,7 @@ async def set_prefix(
     await ctx.defer()
     try:
         guild_id = ctx.guild_id or (await ctx.fetch_guild()).id
-        await hash.set("prefixes", guild_id, prefix)
+        await hash.set_prefix(guild_id, prefix)
 
     except Exception as err:
         await ctx.respond(f"Couldn't change bot prefix: {err}")
@@ -167,30 +165,24 @@ async def set_prefix(
 @tanjun.as_slash_command("clear", "Clear the bot prefix to a custom one.")
 async def clear_prefix(
     ctx: tanjun.abc.SlashContext,
-    hash: traits.HashRunner[str, hikari.Snowflake, str] = tanjun.inject(
-        type=traits.HashRunner
-    ),
+    hash: traits.HashRunner = tanjun.inject(type=traits.HashRunner),
 ) -> None:
 
     if ctx.cache:
         guild = ctx.get_guild()
     else:
-        guild = await (ctx.fetch_guild())
+        guild = await ctx.fetch_guild()
 
     await ctx.defer()
-    try:
-        if found_prefix := await hash.get("prefixes", guild.id):
-            await hash.delete("prefixes", guild.id)
-        else:
-            assert ctx.has_been_deferred
-            return
 
+    try:
+        await hash.remove_prefix(guild.id)
     except Exception as err:
-        await ctx.respond(f"Couldn't clear the prefix: {err}")
+        await ctx.respond(f"Couldn't clear the prefix: {err!s}")
         return
 
     await ctx.edit_initial_response(
-        f"Cleared `{found_prefix}` prefix. You can still use the main prefix which's `?`"
+        f"Cleared prefix. You can still use the main prefix which's `.`"
     )
 
 
