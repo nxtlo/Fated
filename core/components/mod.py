@@ -284,7 +284,6 @@ async def run_sql(
     """Run sql code to the database pool."""
 
     query = format.parse_code(code=query)
-    print(query)
     result: None | list[asyncpg.Record] = None
 
     try:
@@ -498,14 +497,14 @@ async def eval_command(
     def paginate(text: str) -> list[str]:
         """Simple generator that paginates text."""
         last = 0
-        pages: set[str] = set()
+        pages: list[str] = []
         for curr in range(0, len(text)):
             if curr % 1980 == 0:
-                pages.add(text[last:curr])
+                pages.append(text[last:curr])
                 last = curr
                 appd_index = curr
         if appd_index != len(text) - 1:
-            pages.add(text[last:curr])
+            pages.append(text[last:curr])
         return list(filter(lambda a: a != "", pages))
 
     try:

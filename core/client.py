@@ -195,7 +195,6 @@ def install_requirements() -> None:
             "-r",
             "requirements.txt",
             "--upgrade",
-            "--force-reinstall",
         ]
     ) as proc:
         ok, err = proc.communicate()

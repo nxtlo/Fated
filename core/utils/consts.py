@@ -41,12 +41,9 @@ import hikari
 import tanjun
 import yuyo
 
-ChoiceT = typing.TypeVar("ChoiceT", covariant=True)
-
 if typing.TYPE_CHECKING:
     import collections.abc as collections
-
-    SequenceOf = str | typing.Sequence[ChoiceT] | None
+    T = typing.TypeVar("T", covariant=True)
 
 COLOR: typing.Final[dict[str, hikari.Colourish]] = {
     "invis": hikari.Colour(0x36393F),
@@ -82,9 +79,6 @@ GENRES: dict[str, int] = {
 }
 """Anime only genres."""
 
-_K = typing.TypeVar("_K")
-
-
 async def generate_component(
     ctx: tanjun.SlashContext,
     iterable: (
@@ -114,11 +108,11 @@ async def generate_component(
         component_client.set_executor(msg, pages)
 
 
-def iter(map: dict[_K, typing.Any]) -> typing.Sequence[str | _K | typing.Any]:
+def iter(map: collections.Mapping[str, typing.Any]) -> collections.Sequence[typing.Any]:
     return [k for k in map.keys()]
 
 
-def randomize(seq: SequenceOf[typing.Any] | None = None) -> typing.Any:
+def randomize(seq: collections.Sequence[T] | None = None) -> T | str:
     if not seq:
         return random.choice(list(GENRES.keys()))
     return random.choice(list(seq))

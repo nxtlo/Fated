@@ -41,7 +41,7 @@ git_group = tanjun.slash_command_group("git", "Commands related to github.")
 
 
 @git_group.with_command
-@tanjun.with_str_slash_option("name", "The name gitub user.")
+@tanjun.with_str_slash_option("name", "The name gitub user name.")
 @tanjun.as_slash_command("user", "Get information about a github user.")
 async def git_user(
     ctx: tanjun.abc.SlashContext,
@@ -84,8 +84,8 @@ async def git_user(
 
 
 @git_group.with_command
-@tanjun.with_str_slash_option("name", "The name gitub user.")
-@tanjun.as_slash_command("repo", "Get information about a github repo.")
+@tanjun.with_str_slash_option("name", "The repo name to search for.")
+@tanjun.as_slash_command("repo", "Search for Github repos.")
 async def git_repo(
     ctx: tanjun.SlashContext,
     name: str,

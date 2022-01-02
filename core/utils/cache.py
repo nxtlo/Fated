@@ -35,6 +35,7 @@ import typing
 
 import aiobungie
 import aioredis
+
 from hikari.internal import collections as hikari_collections
 
 from . import traits
@@ -186,9 +187,6 @@ class Hash(traits.HashRunner):
         except (aiobungie.Unauthorized, LookupError):
             raise
 
-        assert (
-            response is not None
-        ), f"Got empty response when trying to refresh tokens for {user}"
         expiry = time.monotonic() + math.floor(response.expires_in * 0.99)
         tokens_ = await self.__dump_tokens(
             user, response.access_token, response.refresh_token, expiry
@@ -201,7 +199,11 @@ class Hash(traits.HashRunner):
 
 
 class Memory(hikari_collections.ExtendedMutableMapping[MKT, MVT]):
-    """A standard basic in memory cache that we may use it for APIs, embeds, etc."""
+    """A standard basic in memory cache that we may use it for APIs, embeds, etc.
+
+    This cache will pop entires after 12 hours by default if new entries
+    are inserted into the cache. This can be modified by changing `expire_after`
+    """
 
     __slots__ = ("_map", "expire_after", "on_expire")
     _map: hikari_collections.ExtendedMutableMapping[MKT, MVT]
@@ -236,18 +238,18 @@ class Memory(hikari_collections.ExtendedMutableMapping[MKT, MVT]):
     def copy(self) -> hikari_collections.ExtendedMutableMapping[MKT, MVT]:
         return self._map.copy()
 
-    # Need this to cache the memory pointers.
-    def memory(self, key: MKT) -> str:
-        return hex(id(self._map[key]))
-
     clone = copy
     """An alias to `Memory.copy()"""
+
+    # gotta go lowlevel.
+    def memory_ptr(self, key: MKT) -> str:
+        return hex(id(self._map[key]))
 
     def freeze(self) -> collections.MutableMapping[MKT, MVT]:
         return self._map.freeze()
 
     def view(self) -> str:
-        return self.__repr__()
+        return repr(self)
 
     def values(self) -> collections.ValuesView[MVT]:
         return self._map.values()
@@ -256,7 +258,7 @@ class Memory(hikari_collections.ExtendedMutableMapping[MKT, MVT]):
         return self._map.keys()
 
     def put(self, key: MKT, value: MVT) -> Memory[MKT, MVT]:
-        self.__setitem__(key, value)
+        self._map[key] = value
         return self
 
     def set_expiry(self, date: datetime.timedelta) -> Memory[MKT, MVT]:
@@ -269,6 +271,9 @@ class Memory(hikari_collections.ExtendedMutableMapping[MKT, MVT]):
         return typing.cast(T, obj)
 
     def __repr__(self) -> str:
+        if not self._map:
+            return "`EmptyCache`"
+
         docs = inspect.getdoc(self.on_expire)
         return "\n".join(
             f"MemoryCache({k}={v!r}, expires_at={self.expire_after}, on_expire={docs})"
@@ -276,16 +281,16 @@ class Memory(hikari_collections.ExtendedMutableMapping[MKT, MVT]):
         )
 
     def __iter__(self) -> collections.Iterator[MKT]:
-        return self._map.__iter__()
+        return iter(self._map)
 
     def __getitem__(self, k: MKT) -> MVT:
-        return self._map.__getitem__(k)
+        return self._map[k]
 
     def __setitem__(self, k: MKT, v: MVT) -> None:
-        self._map.__setitem__(k, v)
+        self._map[k] = v
 
-    def __delitem__(self, v: MKT) -> None:
-        self._map.__delitem__(v)
+    def __delitem__(self, k: MKT) -> None:
+        del self._map[k]
 
     def __len__(self) -> int:
-        return self._map.__len__()
+        return len(self._map)

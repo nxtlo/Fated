@@ -25,31 +25,32 @@
 
 from __future__ import annotations
 
-import datetime
 
 __all__: tuple[str, ...] = (
     "HTTPNet",
     "Wrapper",
-    "Error",
-    "NotFound"
 )
 
 import asyncio
 import logging
 import typing
-from http import HTTPStatus as http
+import http
+import datetime
 
 import aiohttp
-import attr
+import attrs
 import hikari
 import multidict
 import yarl
+
 from aiobungie.internal import time
+
 from hikari import _about as about
 from hikari.internal import net
 from hikari.internal.time import (
     fast_iso8601_datetime_string_to_datetime as fast_datetime,
 )
+
 from yuyo import backoff
 
 from . import consts, format, interfaces, traits
@@ -58,8 +59,9 @@ if typing.TYPE_CHECKING:
     import collections.abc as collections
     import types
 
-    import tanjun.abc
+    import tanjun
     from hikari.internal import data_binding
+
     _GETTER_TYPE = typing.TypeVar("_GETTER_TYPE", covariant=True)
     DATA_TYPE = dict[str, typing.Any] | multidict.CIMultiDictProxy[str]
 
@@ -67,7 +69,7 @@ _LOG: typing.Final[logging.Logger] = logging.getLogger("core.net")
 _LOG.setLevel(logging.DEBUG)
 
 class HTTPNet(traits.NetRunner):
-    """A client to make http requests with."""
+    """A client to make HTTP requests with."""
 
     __slots__: typing.Sequence[str] = ("_session", "_lock")
     __rest = hikari.impl.RESTClientImpl
@@ -139,7 +141,7 @@ class HTTPNet(traits.NetRunner):
                     async with self._session.request(  # type: ignore
                         method, yarl.URL(url) if type(url) is yarl.URL else url, **kwargs
                     ) as response:
-                        if http.MULTIPLE_CHOICES > response.status >= http.OK:
+                        if http.HTTPStatus.MULTIPLE_CHOICES > response.status >= http.HTTPStatus.OK:
                             if read_bytes:
                                 return await response.read()
 
@@ -320,7 +322,7 @@ class Wrapper(interfaces.APIAware):
             return embeds
 
     async def fetch_definitions(
-        self, ctx: tanjun.abc.SlashContext, name: str
+        self, ctx: tanjun.SlashContext, name: str
     ) -> collections.Generator[hikari.Embed, None, None] | None:
         async with self._net as cli:
 
@@ -471,37 +473,36 @@ class Wrapper(interfaces.APIAware):
             assert isinstance(repos, list)
         return (self._make_git_releases(repo, user, repo_name) for repo in repos[:limit])
 
-@attr.define(weakref_slot=False, repr=False, auto_exc=True)
+@attrs.define(weakref_slot=False, repr=False, auto_exc=True)
 class Error(RuntimeError):
     """Main error class."""
-    data: DATA_TYPE = attr.field()
+    data: DATA_TYPE
 
-@attr.define(weakref_slot=False, repr=False, auto_exc=True)
+@attrs.define(weakref_slot=False, repr=False, auto_exc=True)
 class Unauthorized(Error):
-    data: DATA_TYPE = attr.field()
+    data: DATA_TYPE
 
-@attr.define(weakref_slot=False, repr=False, auto_exc=True)
+@attrs.define(weakref_slot=False, repr=False, auto_exc=True)
 class NotFound(Error):
-    data: DATA_TYPE = attr.field()
+    data: DATA_TYPE
 
-@attr.define(weakref_slot=False, repr=False, auto_exc=True)
+@attrs.define(weakref_slot=False, repr=False, auto_exc=True)
 class RateLimited(Error):
-    data: DATA_TYPE = attr.field()
-    retry_after: float = attr.field()
-    message: hikari.UndefinedOr[str] = attr.field()
+    data: DATA_TYPE
+    retry_after: float
+    message: hikari.UndefinedOr[str]
 
-@attr.define(weakref_slot=False, repr=False, auto_exc=True)
+@attrs.define(weakref_slot=False, repr=False, auto_exc=True)
 class BadRequest(Error):
-    data: DATA_TYPE = attr.field()
+    data: DATA_TYPE
 
-
-@attr.define(weakref_slot=False, repr=False, auto_exc=True)
+@attrs.define(weakref_slot=False, repr=False, auto_exc=True)
 class Forbidden(Error):
-    data: DATA_TYPE = attr.field()
+    data: DATA_TYPE
 
-@attr.define(weakref_slot=False, repr=False, auto_exc=True)
+@attrs.define(weakref_slot=False, repr=False, auto_exc=True)
 class InternalError(Error):
-    data: DATA_TYPE = attr.field()
+    data: DATA_TYPE
 
 async def acquire_errors(response: aiohttp.ClientResponse, /) -> Error:
     if response.content_type != "application/json":
@@ -516,26 +517,24 @@ async def acquire_errors(response: aiohttp.ClientResponse, /) -> Error:
         "url": str(response.real_url)
     }
 
-    # Black doesn'n know what match is.
-
     # fmt: off
     match response.status:
-        case http.NOT_FOUND:
+        case http.HTTPStatus.NOT_FOUND:
             return NotFound(real_data)
-        case http.BAD_REQUEST:
+        case http.HTTPStatus.BAD_REQUEST:
             return BadRequest(real_data)
-        case http.FORBIDDEN:
+        case http.HTTPStatus.FORBIDDEN:
             return Forbidden(real_data)
-        case http.TOO_MANY_REQUESTS:
+        case http.HTTPStatus.TOO_MANY_REQUESTS:
             retry_after = response.headers.get("retry-after", 3.0)
             message = response.headers.get("message", hikari.UNDEFINED)
             return RateLimited(real_data, message=message, retry_after=float(retry_after))
-        case http.UNAUTHORIZED:
+        case http.HTTPStatus.UNAUTHORIZED:
             return Unauthorized(real_data)
         case _:
             pass
 
-    status = http(response.status)
+    status = http.HTTPStatus(response.status)
     _: object
     match status:
         case (500, 502, 504):  # noqa: E211

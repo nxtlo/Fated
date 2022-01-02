@@ -20,16 +20,16 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-"""Interfaces for our api wrappers."""
+
+"""Interfaces/ABCs for multiple impls."""
 
 from __future__ import annotations
 
-__all__: tuple[str, ...] = ("APIAware", "GithubRepo", "GithubUser", "HashView")
+__all__: tuple[str, ...] = ("APIAware", "GithubRepo", "GithubUser")
 
 import abc
 import typing
-
-import attr
+import dataclasses
 
 if typing.TYPE_CHECKING:
     import collections.abc as collections
@@ -37,14 +37,6 @@ if typing.TYPE_CHECKING:
 
     import hikari
     import tanjun
-
-_T = typing.TypeVar("_T")
-
-
-@attr.mutable(weakref_slot=False, hash=False, repr=True)
-class HashView(typing.Generic[_T]):
-    key: _T = attr.field()
-    value: _T = attr.field()
 
 
 class APIAware(abc.ABC):
@@ -91,68 +83,38 @@ class APIAware(abc.ABC):
         ...
 
 
-@attr.define(hash=False, weakref_slot=False, kw_only=True)
+@dataclasses.dataclass(kw_only=True, slots=True, repr=False)
 class GithubRepo:
-
-    owner: GithubUser | None = attr.field(repr=True)
-
-    id: int = attr.field()
-
-    name: str = attr.field()
-
-    description: str | None = attr.field()
-
-    is_forked: bool = attr.field()
-
-    url: str = attr.field()
-
-    is_archived: bool = attr.field()
-
-    forks: int = attr.field()
-
-    open_issues: int = attr.field()
-
+    owner: GithubUser | None = dataclasses.field(repr=True)
+    id: int
+    name: str
+    description: str | None
+    is_forked: bool
+    url: str
+    is_archived: bool
+    forks: int
+    open_issues: int
     # We only need the License name
-    license: str | None = attr.field()
+    license: str | None
+    size: int
+    created_at: datetime.datetime
+    last_push: str
+    page: str | None
+    stars: int
+    language: str | hikari.UndefinedType
 
-    size: int = attr.field()
-
-    created_at: datetime.datetime = attr.field()
-
-    last_push: str = attr.field()
-
-    page: str | None = attr.field()
-
-    stars: int = attr.field()
-
-    language: str | hikari.UndefinedType = attr.field()
-
-
-@attr.define(hash=False, weakref_slot=False, kw_only=True, repr=False)
+@dataclasses.dataclass(kw_only=True, repr=False, slots=True)
 class GithubUser:
-
-    name: hikari.UndefinedOr[str] = attr.field(repr=True)
-
-    id: int = attr.field(repr=True, hash=True)
-
-    avatar_url: typing.Optional[str] = attr.field()
-
-    url: str = attr.field()
-
-    type: str = attr.field()
-
-    email: typing.Optional[str] = attr.field()
-
-    location: typing.Optional[str] | None = attr.field()
-
-    public_repors: int | hikari.UndefinedType = attr.field()
-
-    bio: hikari.UndefinedOr[str] | None = attr.field()
-
-    followers: int | hikari.UndefinedType = attr.field()
-
-    following: int | hikari.UndefinedType = attr.field()
-
-    created_at: datetime.datetime | None = attr.field()
-
-    repos_url: str = attr.field()
+    name: hikari.UndefinedOr[str] = dataclasses.field(repr=True)
+    id: int = dataclasses.field(repr=True, hash=True)
+    avatar_url: typing.Optional[str]
+    url: str
+    type: str
+    email: typing.Optional[str]
+    location: typing.Optional[str] | None
+    public_repors: int | hikari.UndefinedType
+    bio: hikari.UndefinedOr[str] | None
+    followers: int | hikari.UndefinedType
+    following: int | hikari.UndefinedType
+    created_at: datetime.datetime | None
+    repos_url: str

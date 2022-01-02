@@ -38,7 +38,6 @@ import hikari
 import humanize
 import tanjun
 import yuyo
-from hikari.internal import aio
 
 from core.psql import pool
 from core.utils import cache, consts, format, traits
@@ -169,59 +168,37 @@ def _build_inventory_item_embed(
 
     return embed
 
-async def _sync_player(
-    ctx: tanjun.abc.SlashContext,
-    client: aiobungie.Client,
-    pool: pool.PoolT,
-    /,
-    *,
-    name: str,
-) -> None:
-    try:
-        player = await _get_destiny_player(client, name)
-    except LookupError as exc:
-        await ctx.respond(exc)
-        return
-
-    try:
-        await pool.execute(
-            "INSERT INTO destiny(ctx_id, bungie_id, name, code, memtype) VALUES($1, $2, $3, $4, $5)",
-            ctx.author.id,
-            player.id,
-            player.name,
-            player.code,
-            str(player.type).title(),
-        )
-    except asyncpg.exceptions.UniqueViolationError:
-        await ctx.respond("You're already synced.")
-        return
-
-    await ctx.respond(
-        f"Synced `{player.unique_name}` | `{player.id}`, `/destiny profile` to view your profile"
-    )
-
 @destiny_group.with_command
-@tanjun.as_slash_command("authorize", "Authorize your bungie account with this bot.", default_to_ephemeral=True)
+@tanjun.as_slash_command("sync", "Sync your Bungie account with this bot.", default_to_ephemeral=True)
 async def sync_command(
     ctx: tanjun.SlashContext,
     cache: traits.HashRunner = tanjun.inject(type=traits.HashRunner),
     client: aiobungie.Client = tanjun.inject(type=aiobungie.Client),
-    bot: hikari.GatewayBot = tanjun.inject(type=hikari.GatewayBot)
+    bot: hikari.GatewayBot = tanjun.inject(type=hikari.GatewayBot),
+    pool: pool.PoolT = tanjun.injected(type=pool.PoolT),
 ) -> None:
     url = client.rest.build_oauth2_url()
     assert url
 
     await ctx.respond(
-        embed=hikari.Embed(description=f"[Enter this link and send the URL after authorizing]({url})")
+        embed=hikari.Embed(
+            title="How to sync your account.",
+            description=(
+                f"1) Visit this link {url}\n"
+                "2) Login with your Bungie account and accept to authorize.\n"
+                "3) After accepting you'll get redirected to Bungie's website. "
+                "Simply copy the website URL link and send it here."
+            )
+        )
     )
 
     try:
         code = await bot.wait_for(
             hikari.GuildMessageCreateEvent,
-            60,
+            90,
             lambda m: m.channel_id == ctx.channel_id
             and m.author_id == ctx.author.id
-            and m.content is not None
+            and m.content is not None and 'code=' in m.content
         )
     except asyncio.TimeoutError:
         pass
@@ -237,6 +214,24 @@ async def sync_command(
                 await ctx.respond("Invalid URL. Please run the command again and send the URL.")
                 return
 
+            # We try to store a Destiny membership.
+            try:
+                membership = (await client.fetch_own_bungie_user(access_token=response.access_token)).destiny[0]
+            except IndexError:
+                pass
+
+            try:
+                await pool.execute(
+                    "INSERT INTO destiny(ctx_id, bungie_id, name, code, memtype) VALUES($1, $2, $3, $4, $5)",
+                    ctx.author.id,
+                    membership.id,
+                    membership.name,
+                    membership.code,
+                    str(membership.type).title(),
+                )
+            except asyncpg.exceptions.UniqueViolationError:
+                pass
+
             try:
                 await cache.set_bungie_tokens(
                     ctx.author.id,
@@ -245,6 +240,31 @@ async def sync_command(
             except Exception as exc:
                 raise RuntimeError(f"Couldn't set tokens for user {ctx.author}") from exc
             await ctx.respond("\U0001f44d")
+
+@destiny_group.with_command
+@tanjun.as_slash_command("desync", "Desync your destiny membership with this bot.")
+async def desync(
+    ctx: tanjun.abc.SlashContext,
+    pool: pool.PoolT = tanjun.injected(type=pool.PoolT),
+    cache: traits.HashRunner = tanjun.inject(type=traits.HashRunner)
+) -> None:
+
+    # Redis will remove if the tokens exists and fallback if not
+    await cache.remove_bungie_tokens(ctx.author.id)
+
+    if (
+        member := await pool.fetchval(
+            "SELECT ctx_id FROM destiny WHERE ctx_id = $1", ctx.author.id
+        )
+    ):
+        try:
+            await pool.execute("DELETE FROM destiny WHERE ctx_id = $1", member)
+        except Exception as exc:
+            raise RuntimeError(f"Couldn't desync member {repr(ctx.author)}") from exc
+        await ctx.respond("Successfully desynced your membership.")
+    else:
+        await ctx.respond("You're not already synced.")
+        return
 
 @destiny_group.with_command
 @tanjun.as_slash_command("user", "Return authorized user information.")
@@ -296,56 +316,8 @@ async def user_command(
     )
     await ctx.respond(embed=embed)
 
-@tanjun.as_message_command("d2_api")
-async def check_api(
-    ctx: tanjun.MessageContext,
-    client: aiobungie.Client = tanjun.inject(type=aiobungie.Client)
-) -> None:
-    try:
-        resp = await client.rest.static_request("GET", "Settings")
-    except Exception:
-        raise
-    if resp['systems']['Destiny2']['enabled']:
-        status = "Destiny2 API is up."
-    else:
-        status = "Destiny2 API is down."
-    await ctx.respond(status)
-
-@destiny_group.with_command
-@tanjun.with_str_slash_option(
-    "name", "The unique bungie name. Looks like this `Fate#123`"
-)
-@tanjun.as_slash_command("sync", "Sync your destiny membership with this bot.")
-async def sync(
-    ctx: tanjun.abc.SlashContext,
-    name: str,
-    pool: pool.PoolT = tanjun.injected(type=pool.PoolT),
-    client: aiobungie.Client = tanjun.injected(type=aiobungie.Client),
-) -> None:
-    await _sync_player(ctx, client, pool, name=name)
-
-
-@destiny_group.with_command
-@tanjun.as_slash_command("desync", "Desync your destiny membership with this bot.")
-async def desync(
-    ctx: tanjun.abc.SlashContext,
-    pool: pool.PoolT = tanjun.injected(type=pool.PoolT),
-) -> None:
-    if (
-        member := await pool.fetchval(
-            "SELECT ctx_id FROM destiny WHERE ctx_id = $1", ctx.author.id
-        )
-    ):
-        try:
-            await pool.execute("DELETE FROM destiny WHERE ctx_id = $1", member)
-        except Exception as exc:
-            raise RuntimeError(f"Couldn't desync member {repr(ctx.author)}") from exc
-        await ctx.respond("Successfully desynced your membership.")
-    else:
-        await ctx.respond("You're not already synced.")
-        return
-
-
+# I don't want to force authorizing so we also allow to search for players
+# either with their name or id.
 @tanjun.with_cooldown("destiny")
 @destiny_group.with_command
 @tanjun.with_member_slash_option(
@@ -508,64 +480,6 @@ async def search_entities(
     )
     await consts.generate_component(ctx, iters, component_client)
 
-@destiny_group.with_command
-@tanjun.with_member_slash_option(
-    "member", "An optional discord member to get their profile.", default=None
-)
-@tanjun.with_str_slash_option(
-    "name", "An optional player name to search for.", default=None
-)
-@tanjun.as_slash_command("profile", "Information about a member's destiny membership.")
-async def profiles(
-    ctx: tanjun.abc.SlashContext,
-    name: str | None,
-    member: hikari.InteractionMember,
-    client: aiobungie.Client = tanjun.injected(type=aiobungie.Client),
-    pool: pool.PoolT = tanjun.injected(type=pool.PoolT),
-) -> None:
-
-    member = member or ctx.member
-    if (
-        raw_stored_player := await pool.fetchrow(
-            "SELECT * FROM destiny WHERE ctx_id = $1", member.id
-        )
-    ):
-        stored_player = typing.cast(dict[str, typing.Any], raw_stored_player)
-
-        if name:
-            player_name = name
-        else:
-            player_name: str = f"{stored_player['name']}#{stored_player['code']}"
-
-        try:
-            player = await _get_destiny_player(
-                client, player_name
-            )
-        except LookupError as exc:
-            await ctx.respond(f"{exc}")
-            return
-
-        colour = consts.COLOR["invis"]
-        if ctx.member and (role_colour := ctx.member.get_top_role()):
-            colour = role_colour.colour
-        embed = hikari.Embed(colour=colour)
-        (
-            embed.set_author(
-                name=player.last_seen_name, icon=str(player.icon), url=player.link
-            )
-            .set_thumbnail(str(player.icon))
-            .add_field(
-                "About",
-                f"ID: {player.id}\n"
-                f"Full name: {player.unique_name}\n"
-                f"Last seen name: {player.last_seen_name}\n"
-                f"Code: {player.code}\n"
-                f"Public profile: {player.is_public}\n"
-                f"Types: {', '.join(str(t) for t in player.types)}",
-            )
-        )
-        await ctx.respond(embed=embed)
-
 
 @destiny_group.with_command
 @tanjun.with_str_slash_option(
@@ -586,7 +500,7 @@ async def get_clan(
         else:
             clan = await client.fetch_clan(query)
     except aiobungie.NotFound as e:
-        await ctx.respond(f"{e}")
+        await ctx.respond(f"{e.message}")
         return
 
     embed = hikari.Embed(description=f"{clan.about}", colour=consts.COLOR["invis"])
@@ -649,58 +563,6 @@ async def item_definition_command(
     cache_.put(item_hash, embed)
     await ctx.respond(embed=embed)
 
-
-@tanjun.with_cooldown("destiny")
-@destiny_group.with_command
-@tanjun.with_member_slash_option(
-    "member", "An optional discord member to get their characters.", default=None
-)
-@tanjun.with_str_slash_option(
-    "platform", "The membership type to return", choices=consts.iter(_PLATFORMS)
-)
-@tanjun.with_str_slash_option(
-    "id", "An optional player id to search for.", default=None
-)
-@tanjun.as_slash_command("equipment", "A view of a player's current equipped items.")
-async def char_equipments(
-    ctx: tanjun.SlashContext,
-    member: hikari.InteractionMember | None,
-    id: int | None,
-    platform: str,
-    client: aiobungie.Client = tanjun.inject(type=aiobungie.Client),
-    pool: pool.PgxPool = tanjun.inject(type=pool.PoolT),
-    component_client: yuyo.ComponentClient = tanjun.inject(type=yuyo.ComponentClient),
-) -> None:
-
-    author = member or ctx.author
-    if member and id:
-        await ctx.respond("Can't specify a member and an id at the same time.")
-        return
-
-    id = id or await pool.fetchval(
-        "SELECT bungie_id FROM destiny WHERE ctx_id = $1", author.id
-    )
-    if id:
-        try:
-            equips_resp = await client.fetch_profile(
-                int(id),
-                _PLATFORMS[platform],
-                aiobungie.ComponentType.CHARACTER_EQUIPMENT,
-            )
-        except Exception as e:
-            await ctx.respond(embed=hikari.Embed(description=format.with_block(e)))
-            return
-
-        if equipment := equips_resp.character_equipments:
-            for _, equipment in equipment.items():
-                tasks = await aio.all_of(*(i.fetch_self() for i in equipment))
-
-            assert tasks
-            pages = (
-                (hikari.UNDEFINED, _build_inventory_item_embed(item)) for item in tasks
-            )
-            await consts.generate_component(ctx, pages, component_client)
-
 @destiny_group.with_command
 @tanjun.with_str_slash_option(
     "activity", "The activity to look for.", choices=consts.iter(_ACTIVITIES)
@@ -733,7 +595,7 @@ async def lfg_command(
 
     try:
         fireteams = await client.fetch_fireteams(
-            _ACTIVITIES[activity][1], platform=platform_
+            _ACTIVITIES[activity][1], platform=platform_, date_range=1
         )
     except aiobungie.HTTPError as exc:
         await ctx.respond(exc.message)
