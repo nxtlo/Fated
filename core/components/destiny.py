@@ -346,19 +346,15 @@ async def friend_list_command(
             "\n".join(
                 [
                     f"{check_status(friend.online_status)} `{friend.unique_name}` - `{friend.id}`"
-                    for friend in friend_list_[:15] if friend_list_
+                    for friend in friend_list_[:15]
             ]
         )
     )
     filtered_length = list(filter(lambda f: f.online_status is aiobungie.Presence.ONLINE, friend_list))
 
-    embed = (
-        hikari.Embed(title=f"({len(filtered_length)}/{len(friend_list)}) Online.")
-        .add_field(
-            "Friends",
-            build_friends(friend_list)
-        )
-    )
+    embed = hikari.Embed(title=f"({len(filtered_length)}/{len(friend_list)}) Online.")
+    if friend_list:
+        embed.add_field("Friends",build_friends(friend_list))
 
     requests = await client.fetch_friend_requests(access)
     if incoming := requests.incoming:

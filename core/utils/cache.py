@@ -137,7 +137,7 @@ class Hash(traits.HashRunner):
                 "access": access_token,
                 "refresh": refresh_token,
                 "expires": expires_in,
-                "date": datetime.datetime.now(),
+                "date": f'{datetime.datetime.now()!s}',
             }
         )
         await self.__connection.hset(name="tokens", key=owner, value=body)  # type: ignore
