@@ -60,7 +60,7 @@ T = typing.TypeVar("T")
 
 
 class Hash(traits.HashRunner):
-    """Standard Redis hash trait. This hash is used to store fast key -> value objects for our needs."""
+    """A Redis hash. This is used to store fast key -> value objects for our needs."""
 
     __slots__: typing.Sequence[str] = ("__connection", "_aiobungie_client", "_lock")
     from .config import Config as __Config
