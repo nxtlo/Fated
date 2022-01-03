@@ -134,7 +134,12 @@ class Hash(traits.HashRunner):
         expires_in: float,
     ) -> str:
         body = json.dumps(
-            {"access": access_token, "refresh": refresh_token, "expires": expires_in}
+            {
+                "access": access_token,
+                "refresh": refresh_token,
+                "expires": expires_in,
+                "date": datetime.datetime.now()
+            }
         )
         await self.__connection.hset(name="tokens", key=owner, value=body)  # type: ignore
         return body
@@ -159,9 +164,16 @@ class Hash(traits.HashRunner):
         except LookupError:
             raise
 
+        
         refresh = tokens["refresh"]
         assert isinstance(refresh, str)
-        return await self._aiobungie_client.rest.refresh_access_token(refresh)
+
+        try:
+            response = await self._aiobungie_client.rest.refresh_access_token(refresh)
+            _LOG.info("Refreshed tokens for %s Last refresh was %s", owner, tokens['date'])
+        except aiobungie.BadRequest as err:
+            raise RuntimeError(f"Couldn't refresh tokens for {owner}.") from err
+        return response
 
     async def set_bungie_tokens(
         self, user: snowflakes.Snowflake, respons: aiobungie.OAuth2Response
@@ -191,7 +203,6 @@ class Hash(traits.HashRunner):
         tokens_ = await self.__dump_tokens(
             user, response.access_token, response.refresh_token, expiry
         )
-        _LOG.info("Refreshed tokens for %s", user)
         return json.loads(tokens_)
 
     async def remove_bungie_tokens(self, user: snowflakes.Snowflake) -> None:

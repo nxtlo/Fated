@@ -172,7 +172,7 @@ def _build_inventory_item_embed(
 @tanjun.as_slash_command("sync", "Sync your Bungie account with this bot.", default_to_ephemeral=True)
 async def sync_command(
     ctx: tanjun.SlashContext,
-    cache: traits.HashRunner = tanjun.inject(type=traits.HashRunner),
+    redis: traits.HashRunner = tanjun.inject(type=traits.HashRunner),
     client: aiobungie.Client = tanjun.inject(type=aiobungie.Client),
     bot: hikari.GatewayBot = tanjun.inject(type=hikari.GatewayBot),
     pool: pool.PoolT = tanjun.injected(type=pool.PoolT),
@@ -233,7 +233,7 @@ async def sync_command(
                 pass
 
             try:
-                await cache.set_bungie_tokens(
+                await redis.set_bungie_tokens(
                     ctx.author.id,
                     response
                 )
@@ -246,11 +246,11 @@ async def sync_command(
 async def desync(
     ctx: tanjun.abc.SlashContext,
     pool: pool.PoolT = tanjun.injected(type=pool.PoolT),
-    cache: traits.HashRunner = tanjun.inject(type=traits.HashRunner)
+    redis: traits.HashRunner = tanjun.inject(type=traits.HashRunner)
 ) -> None:
 
     # Redis will remove if the tokens exists and fallback if not
-    await cache.remove_bungie_tokens(ctx.author.id)
+    await redis.remove_bungie_tokens(ctx.author.id)
 
     if (
         member := await pool.fetchval(
@@ -270,14 +270,14 @@ async def desync(
 @tanjun.as_slash_command("user", "Return authorized user information.")
 async def user_command(
     ctx: tanjun.SlashContext,
-    cache: traits.HashRunner = tanjun.inject(type=traits.HashRunner),
+    redis: traits.HashRunner = tanjun.inject(type=traits.HashRunner),
     client: aiobungie.Client = tanjun.inject(type=aiobungie.Client),
 ) -> None:
 
     try:
-        tokens = await cache.get_bungie_tokens(ctx.author.id)
+        tokens = await redis.get_bungie_tokens(ctx.author.id)
     except LookupError:
-        await ctx.respond("Youre not authorized. Type /destiny authorize to sync your account.")
+        await ctx.respond("Youre not authorized. Type /destiny sync to sync your account.")
         return
 
     access_token = str(tokens['access'])
@@ -314,6 +314,64 @@ async def user_command(
             '\n'.join([f'[{m.type}: {m.unique_name}]({m.link})' for m in user.destiny])
         )
     )
+    await ctx.respond(embed=embed)
+
+@destiny_group.with_command
+@tanjun.as_slash_command("friend_list", "View your Bungie friend list")
+async def friend_list_command(
+    ctx: tanjun.SlashContext,
+    redis: traits.HashRunner = tanjun.inject(type=traits.HashRunner),
+    client: aiobungie.Client = tanjun.injected(type=aiobungie.Client),
+) -> None:
+
+    try:
+        tokens = await redis.get_bungie_tokens(ctx.author.id)
+    except LookupError:
+        await ctx.respond("Youre not authorized. Type /destiny sync to sync your account.")
+        return
+
+    access = str(tokens['access'])
+    try:
+        friend_list = await client.fetch_friends(access)
+    except aiobungie.HTTPError as e:
+        await ctx.respond(e.message)
+        return
+
+    check_status: collections.Callable[[aiobungie.Presence], str] = (
+        lambda status: '<:online2:464520569975603200>'
+        if status is aiobungie.Presence.ONLINE else '<:offline2:464520569929334784>'
+    )
+    build_friends: collections.Callable[[collections.Sequence[aiobungie.crate.Friend]], str] = (
+        lambda friend_list_: 
+            "\n".join(
+                [
+                    f"{check_status(friend.online_status)} `{friend.unique_name}` - `{friend.id}`"
+                    for friend in friend_list_[:15] if friend_list_
+            ]
+        )
+    )
+    filtered_length = list(filter(lambda f: f.online_status is aiobungie.Presence.ONLINE, friend_list))
+
+    embed = (
+        hikari.Embed(title=f"({len(filtered_length)}/{len(friend_list)}) Online.")
+        .add_field(
+            "Friends",
+            build_friends(friend_list)
+        )
+    )
+
+    requests = await client.fetch_friend_requests(access)
+    if incoming := requests.incoming:
+        embed.add_field(
+            "Incoming requests",
+            build_friends(incoming)
+        )
+
+    if outgoing := requests.outgoing:
+        embed.add_field(
+            "Sent requests",
+            build_friends(outgoing)
+        )
     await ctx.respond(embed=embed)
 
 # I don't want to force authorizing so we also allow to search for players

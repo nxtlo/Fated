@@ -25,12 +25,12 @@
 
 from __future__ import annotations
 
-import yuyo
 
 __all__: tuple[str, ...] = ("api",)
 
 import typing
 
+import yuyo
 import hikari
 import tanjun
 

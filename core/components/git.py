@@ -25,12 +25,11 @@
 
 from __future__ import annotations
 
-import yuyo
-
 __all__: tuple[str, ...] = ("git",)
 
 import datetime
 
+import yuyo
 import hikari
 import tanjun
 
