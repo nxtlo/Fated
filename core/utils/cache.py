@@ -35,7 +35,6 @@ import typing
 
 import aiobungie
 import aioredis
-
 from hikari.internal import collections as hikari_collections
 
 from . import traits
@@ -138,7 +137,7 @@ class Hash(traits.HashRunner):
                 "access": access_token,
                 "refresh": refresh_token,
                 "expires": expires_in,
-                "date": datetime.datetime.now()
+                "date": datetime.datetime.now(),
             }
         )
         await self.__connection.hset(name="tokens", key=owner, value=body)  # type: ignore
@@ -164,13 +163,14 @@ class Hash(traits.HashRunner):
         except LookupError:
             raise
 
-        
         refresh = tokens["refresh"]
         assert isinstance(refresh, str)
 
         try:
             response = await self._aiobungie_client.rest.refresh_access_token(refresh)
-            _LOG.info("Refreshed tokens for %s Last refresh was %s", owner, tokens['date'])
+            _LOG.info(
+                "Refreshed tokens for %s Last refresh was %s", owner, tokens["date"]
+            )
         except aiobungie.BadRequest as err:
             raise RuntimeError(f"Couldn't refresh tokens for {owner}.") from err
         return response

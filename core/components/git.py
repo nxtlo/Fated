@@ -29,9 +29,9 @@ __all__: tuple[str, ...] = ("git",)
 
 import datetime
 
-import yuyo
 import hikari
 import tanjun
+import yuyo
 
 from core.utils import cache, consts
 from core.utils import net as net_

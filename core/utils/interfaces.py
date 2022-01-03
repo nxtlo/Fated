@@ -28,8 +28,8 @@ from __future__ import annotations
 __all__: tuple[str, ...] = ("APIAware", "GithubRepo", "GithubUser")
 
 import abc
-import typing
 import dataclasses
+import typing
 
 if typing.TYPE_CHECKING:
     import collections.abc as collections
@@ -102,6 +102,7 @@ class GithubRepo:
     page: str | None
     stars: int
     language: str | hikari.UndefinedType
+
 
 @dataclasses.dataclass(kw_only=True, repr=False, slots=True)
 class GithubUser:

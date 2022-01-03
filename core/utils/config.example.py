@@ -2,8 +2,8 @@ from __future__ import annotations
 
 __all__: typing.Sequence[str] = ("Config",)
 
-import typing
 import dataclasses
+import typing
 
 from hikari import config as hikari_config
 

@@ -43,6 +43,7 @@ import yuyo
 
 if typing.TYPE_CHECKING:
     import collections.abc as collections
+
     T = typing.TypeVar("T", covariant=True)
 
 COLOR: typing.Final[dict[str, hikari.Colourish]] = {
@@ -78,6 +79,7 @@ GENRES: dict[str, int] = {
     "Vampire": 32,
 }
 """Anime only genres."""
+
 
 async def generate_component(
     ctx: tanjun.SlashContext,
