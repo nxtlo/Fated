@@ -71,12 +71,11 @@ async def sleep_for(
     hash: traits.HashRunner,
 ) -> None:
     assert ctx.guild_id is not None
-    while True:
-        await asyncio.sleep(timer.total_seconds())
-        await pool.execute("DELETE FROM mutes WHERE member_id = $1", member.id)
-        mute_role = await hash.get_mute_role(ctx.guild_id)
-        await member.remove_role(mute_role)
-        await ctx.respond(f"{member.mention} has been unmuted.")
+    await asyncio.sleep(timer.total_seconds())
+    await pool.execute("DELETE FROM mutes WHERE member_id = $1", member.id)
+    mute_role = await hash.get_mute_role(ctx.guild_id)
+    await member.remove_role(mute_role)
+    await ctx.respond(f"{member.mention} has been unmuted.")
 
 
 async def _set_channel_perms(

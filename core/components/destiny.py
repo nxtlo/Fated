@@ -21,7 +21,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-"""Commands references aiobungie."""
+"""Commands references aiobungie and makes my life easier."""
 
 from __future__ import annotations
 
