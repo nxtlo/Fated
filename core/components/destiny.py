@@ -28,7 +28,6 @@ from __future__ import annotations
 __all__: tuple[str, ...] = ("destiny",)
 
 import asyncio
-import datetime
 import typing
 import urllib.parse
 
@@ -169,7 +168,7 @@ def _build_inventory_item_embed(
     return embed
 
 @destiny_group.with_command
-@tanjun.as_slash_command("sync", "Sync your Bungie account with this bot.", default_to_ephemeral=True)
+@tanjun.as_slash_command("sync", "Sync your Bungie account with this bot.")
 async def sync_command(
     ctx: tanjun.SlashContext,
     redis: traits.HashRunner = tanjun.inject(type=traits.HashRunner),
@@ -180,7 +179,8 @@ async def sync_command(
     url = client.rest.build_oauth2_url()
     assert url
 
-    await ctx.respond(
+    await ctx.create_initial_response(
+        flags=hikari.MessageFlag.EPHEMERAL,
         embed=hikari.Embed(
             title="How to sync your account.",
             description=(
@@ -194,6 +194,7 @@ async def sync_command(
 
     try:
         code = await bot.wait_for(
+            # Can we make this not guild only?
             hikari.GuildMessageCreateEvent,
             90,
             lambda m: m.channel_id == ctx.channel_id
@@ -211,7 +212,7 @@ async def sync_command(
             try:
                 response = await client.rest.fetch_oauth2_tokens(parse_code)
             except aiobungie.BadRequest:
-                await ctx.respond("Invalid URL. Please run the command again and send the URL.")
+                await ctx.respond("Invalid URL. Please run the command again and send the URL.", delete_after=5)
                 return
 
             # We try to store a Destiny membership.
@@ -260,7 +261,7 @@ async def desync(
         try:
             await pool.execute("DELETE FROM destiny WHERE ctx_id = $1", member)
         except Exception as exc:
-            raise RuntimeError(f"Couldn't desync member {repr(ctx.author)}") from exc
+            raise RuntimeError(f"Couldn't delete member {repr(ctx.author)} db records.") from exc
         await ctx.respond("Successfully desynced your membership.")
     else:
         await ctx.respond("You're not already synced.")
@@ -665,7 +666,7 @@ async def lfg_command(
             hikari.Embed(
                 title=fireteam.title,
                 url=fireteam.url,
-                timestamp=fireteam.date_created.astimezone(datetime.timezone.utc),
+                timestamp=fireteam.date_created.astimezone(),
             )
             .set_thumbnail(_ACTIVITIES[activity][0])
             .add_field(

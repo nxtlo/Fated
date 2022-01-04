@@ -76,7 +76,7 @@ class Hash(traits.HashRunner):
         *,
         db: str | int = 0,
         ssl: bool = False,
-        max_connections: int = 0,
+        max_connections: int = 20,
         decode_responses: bool = True,
         **kwargs: typing.Any,
     ) -> None:
