@@ -5,5 +5,5 @@ hikari-yuyo~=1.0.5a1
 asyncpg~=0.25.0
 aioredis~=2.0.1
 humanize~=3.13.1
-spotdl~=3.9.1
+spotdl~=3.9.2
 psutil~=5.9.0
