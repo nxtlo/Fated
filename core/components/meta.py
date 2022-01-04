@@ -29,20 +29,15 @@ __all__: tuple[str, ...] = ("meta",)
 
 import datetime
 import logging
-import os
-import pathlib
-import shutil
-import subprocess
 import sys
 import typing
 
 import hikari
 import humanize
 import tanjun
-import yuyo
 from aiobungie.internal import time as time_
 
-from core.utils import consts, format, traits
+from core.utils import consts, traits
 
 _LOGGER: typing.Final[logging.Logger] = logging.getLogger("hikari.fated.component")
 prefix_group = tanjun.slash_command_group("prefix", "Handle the bot prefix configs.")
@@ -50,81 +45,6 @@ prefix_group = tanjun.slash_command_group("prefix", "Handle the bot prefix confi
 
 async def on_ready(_: hikari.ShardReadyEvent) -> None:
     _LOGGER.info("Bot ready.")
-
-
-def _clean_up(path: pathlib.Path) -> None:
-    if path.exists():
-        shutil.rmtree(path)
-    return
-
-
-@tanjun.with_owner_check
-@tanjun.with_str_slash_option("url", "The song name or url.")
-@tanjun.with_str_slash_option(
-    "output", "The audio output format", default="mp3", choices=("mp3", "m4a", "wav")
-)
-@tanjun.as_slash_command(
-    "spotify", "Downloads a song from spotify given a name or url."
-)
-async def download_spotify_song(
-    ctx: tanjun.abc.SlashContext, url: str, output: str
-) -> None:
-    """Downloads a song from spotify giving a link or name."""
-    if url is not None:
-        path = pathlib.Path("__cache__")
-
-        if path.exists():
-            _clean_up(path)
-        else:
-            os.mkdir("__cache__")
-
-            _ = await ctx.create_initial_response("Downloading...")
-            with subprocess.Popen(
-                [
-                    "spotdl",
-                    url,
-                    "--output",
-                    "__cache__",
-                    "--output-format",
-                    output,
-                ],
-                shell=False,
-                stderr=subprocess.PIPE,
-                stdin=subprocess.PIPE,
-            ) as sh:
-                _, nil = sh.communicate()
-                if nil:
-                    await ctx.respond(
-                        f"Couldn't download the requested song: {format.with_block(nil.decode('utf-8'), lang='sh')}"
-                    )
-                    return
-
-        backoff = yuyo.backoff.Backoff(max_retries=3)
-        async for _ in backoff:
-            try:
-                for file in path.iterdir():
-                    if (
-                        file.is_file()
-                        and file.name.endswith((".wav", ".m4a", ".mp3"))
-                        and not file.name == ".spotdl-cache"
-                    ):
-                        try:
-                            await ctx.edit_initial_response(attachment=file)
-                            sh.terminate()
-                            return
-                        except Exception:
-                            await ctx.respond(format.error(str=True))
-                            return
-                        finally:
-                            _clean_up(path)
-            except FileNotFoundError:
-                await ctx.respond("Encountered an error, Trying again.")
-                continue
-            except Exception as exc:
-                raise RuntimeError(
-                    f"Error while downloading a song in {ctx.guild_id}"
-                ) from exc
-
 
 @prefix_group.with_command
 @tanjun.with_guild_check

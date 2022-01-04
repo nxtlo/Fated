@@ -52,32 +52,39 @@ class HashRunner(fast.FastProtocolChecking, typing.Protocol):
         """Sets a guild prefix given a guild snowflake."""
 
     async def get_prefix(self, guild_id: snowflakes.Snowflake) -> str:
-        """Returns the cached prefix for a guild."""
+        """Returns the cached prefix for a guild snowflake."""
         raise NotImplementedError
 
-    async def set_mute_roles(
-        self, guild_id: snowflakes.Snowflake, role_id: snowflakes.Snowflake
-    ) -> None:
-        """Sets the mute role for the guild id."""
+    async def set_mute_roles(self, guild_id: snowflakes.Snowflake, role_id: snowflakes.Snowflake) -> None:
+        """Sets the mute role for a guild snowflake."""
 
-    async def get_mute_role(
-        self, guild_id: snowflakes.Snowflake
-    ) -> snowflakes.Snowflake:
+    async def get_mute_role(self, guild_id: snowflakes.Snowflake) -> snowflakes.Snowflake:
         """Return the cached mute role id. Raised LookupError if not found."""
         raise NotImplementedError
 
-    async def remove_prefix(self, guild_id: snowflakes.Snowflake) -> None:
-        """Removes a prefix for a guild."""
+    async def remove_mute_role(self, guild_id: snowflakes.Snowflake) -> None:
+        """Removes the cached mute role id for the given snowflake guild."""
 
-    async def set_bungie_tokens(
-        self, user: snowflakes.Snowflake, respons: aiobungie.OAuth2Response
-    ) -> None:
+    async def remove_prefix(self, guild_id: snowflakes.Snowflake) -> None:
+        """Removes a prefix for a guild snowflake id."""
+
+    # BTW theres no background task that runs every x hours to refresh the Bungie OAuth2 tokens.
+    # All this are handled internally, We check if the token is expired or not when the user
+    # invokes a command that requires OAuth2. If the token is expired we refresh them immediantly.
+    # else we just return the data. Since we're using redis this shoud always be a fast response.
+
+    async def set_bungie_tokens(self, user: snowflakes.Snowflake, respons: aiobungie.OAuth2Response) -> None:
         """Cache a hikari snowflake to the returned OAuth2 response object tokens."""
 
-    async def get_bungie_tokens(
-        self, user: snowflakes.Snowflake
-    ) -> dict[str, str | int]:
-        """Gets loaded dict object of the user snowflake tokens."""
+    async def get_bungie_tokens(self, user: snowflakes.Snowflake) -> dict[str, str | float]:
+        """Gets loaded dict object of the user snowflake tokens.
+
+        This dictionary contains 4 keys:
+            * access: str -> The access token for the snowflake
+            * refresh: str -> The refresh token for the snowflake
+            * expires: float -> When's this token going to expire. This is handled internally
+            * date: str date -> When was this snowflake cached, refreshed at.
+        """
         raise NotImplementedError
 
     async def remove_bungie_tokens(self, user: snowflakes.Snowflake) -> None:
