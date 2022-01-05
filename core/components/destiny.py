@@ -214,13 +214,14 @@ async def sync_command(
             except aiobungie.BadRequest:
                 raise tanjun.CommandError("Invalid URL. Please run the command again and send the URL.")
 
-            # We try to store a Destiny membership.
-            try:
-                membership = (await client.fetch_own_bungie_user(access_token=response.access_token)).destiny[0]
-            except IndexError:
-                pass
+            # We try to store the destiny membership if they're not in the database already.
+            if not (_ := await pool.fetchval("SELECT bungie_id FROM destiny WHERE ctx_id = $1", ctx.author.id)):
+                try:
+                    membership = (await client.fetch_own_bungie_user(access_token=response.access_token)).destiny[0]
+                except IndexError:
+                    # They don't have a destiny membership aperantly ¯\_(ツ)_/¯
+                    pass
 
-            try:
                 await pool.execute(
                     "INSERT INTO destiny(ctx_id, bungie_id, name, code, memtype) VALUES($1, $2, $3, $4, $5)",
                     ctx.author.id,
@@ -229,8 +230,6 @@ async def sync_command(
                     membership.code,
                     str(membership.type).title(),
                 )
-            except asyncpg.exceptions.UniqueViolationError:
-                pass
 
             try:
                 await redis.set_bungie_tokens(
@@ -263,7 +262,7 @@ async def desync(
         try:
             await pool.execute("DELETE FROM destiny WHERE ctx_id = $1", member)
         except Exception as exc:
-            raise RuntimeError(f"Couldn't delete member {repr(ctx.author)} db records.") from exc
+            raise RuntimeError(f"Couldn't delete member {ctx.author!r} db records.") from exc
         await ctx.respond("Successfully desynced your membership.")
     else:
         pass
