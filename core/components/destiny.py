@@ -212,8 +212,7 @@ async def sync_command(
             try:
                 response = await client.rest.fetch_oauth2_tokens(parse_code)
             except aiobungie.BadRequest:
-                await ctx.respond("Invalid URL. Please run the command again and send the URL.", delete_after=5)
-                return
+                raise tanjun.CommandError("Invalid URL. Please run the command again and send the URL.")
 
             # We try to store a Destiny membership.
             try:
@@ -242,6 +241,9 @@ async def sync_command(
                 raise RuntimeError(f"Couldn't set tokens for user {ctx.author}") from exc
             await ctx.respond("\U0001f44d")
 
+def iter_users(*users: aiobungie.crate.DestinyUser) -> hikari.LazyIterator[aiobungie.crate.DestinyUser]:
+    return hikari.FlatLazyIterator([*users])
+
 @destiny_group.with_command
 @tanjun.as_slash_command("desync", "Desync your destiny membership with this bot.")
 async def desync(
@@ -264,8 +266,7 @@ async def desync(
             raise RuntimeError(f"Couldn't delete member {repr(ctx.author)} db records.") from exc
         await ctx.respond("Successfully desynced your membership.")
     else:
-        await ctx.respond("You're not already synced.")
-        return
+        pass
 
 @destiny_group.with_command
 @tanjun.as_slash_command("user", "Return authorized user information.")
@@ -278,8 +279,7 @@ async def user_command(
     try:
         tokens = await redis.get_bungie_tokens(ctx.author.id)
     except LookupError:
-        await ctx.respond("Youre not authorized. Type /destiny sync to sync your account.")
-        return
+        raise tanjun.CommandError("Youre not authorized. Type `/destiny sync` to sync your account.")
 
     access_token = str(tokens['access'])
     try:
@@ -328,15 +328,13 @@ async def friend_list_command(
     try:
         tokens = await redis.get_bungie_tokens(ctx.author.id)
     except LookupError:
-        await ctx.respond("Youre not authorized. Type /destiny sync to sync your account.")
-        return
+        raise tanjun.CommandError("Youre not authorized. Type `/destiny sync` to sync your account.")
 
     access = str(tokens['access'])
     try:
         friend_list = await client.fetch_friends(access)
     except aiobungie.HTTPError as e:
-        await ctx.respond(e.message)
-        return
+        raise tanjun.CommandError(e.message)
 
     check_status: collections.Callable[[aiobungie.Presence], str] = (
         lambda status: '<:online2:464520569975603200>'
@@ -402,8 +400,8 @@ async def characters(
             try:
                 player = await _get_destiny_player(client, id_or_name)
             except LookupError as e:
-                await ctx.respond(f'{e!s}')
-                return
+                raise tanjun.CommandError(f'{e!s}')
+
             id = player.id 
             platform = str(player.type).title()
 
@@ -413,8 +411,9 @@ async def characters(
         )
     )
         if not sql:
-            await ctx.respond(f"Member `{member.display_name}` is not found, Type /destiny sync to sync your account.")
-            return
+            raise tanjun.CommandError(
+                f"Member `{member.user.username}` is not synced yet. If that was you type `/destiny sync` for syncing."
+            )
 
         id = sql['bungie_id']
         platform = sql['memtype']
@@ -425,11 +424,7 @@ async def characters(
         )
 
     except aiobungie.MembershipTypeError as exc:
-        await ctx.respond(
-            exc.message,
-            embed=hikari.Embed(description=f'{exc!s}')
-        )
-        return
+        raise tanjun.CommandError(f'{exc!s}')
 
     if char_mapper := char_resp.characters:
         iterator = tuple(c for c in char_mapper.values())
@@ -480,9 +475,9 @@ async def search_players(
     component_client: yuyo.ComponentClient = tanjun.inject(type=yuyo.ComponentClient)
 ) -> None:
     results = await client.search_users(name)
+
     if not results:
-        await ctx.respond("No players found.")
-        return
+        raise tanjun.CommandError("No players found.")
     
     iters = (
         (
@@ -514,8 +509,7 @@ async def search_entities(
     results = await client.search_entities(name, definition or "DestinyInventoryItemDefinition")
 
     if not results:
-        await ctx.respond("No items found.")
-        return
+        raise tanjun.CommandError("No items found.")
     
     await ctx.defer()
 
@@ -555,8 +549,7 @@ async def get_clan(
         else:
             clan = await client.fetch_clan(query)
     except aiobungie.NotFound as e:
-        await ctx.respond(f"{e.message}")
-        return
+        raise tanjun.CommandError(f"{e.message}")
 
     embed = hikari.Embed(description=f"{clan.about}", colour=consts.COLOR["invis"])
     (
@@ -570,14 +563,8 @@ async def get_clan(
             f"About: {clan.motto}\n"
             f"Public: `{clan.is_public}`\n"
             f"Creation date: {humanize.precisedelta(clan.created_at, minimum_unit='hours')}\n"
-            f"Type: {clan.type}",
+            f"Type: {clan.type.name.title()}",
             inline=False,
-        )
-        .add_field(
-            "Features",
-            f"Join Leve: `{clan.features.join_level}`\n"
-            f"Capabilities: `{clan.features.capabilities}`\n"
-            f"Memberships: {', '.join(str(c) for c in clan.features.membership_types)}",
         )
         .set_footer(", ".join(clan.tags))
     )
@@ -588,10 +575,8 @@ async def get_clan(
             f"Name: [{clan.owner.unique_name}]({clan.owner.link})\n"
             f"ID: `{clan.owner.id}`\n"
             f"Joined at: {humanize.precisedelta(clan.owner.joined_at, minimum_unit='hours')}\n"
-            f"Type: `{str(clan.owner.type)}`\n"
+            f"Membership: `{str(clan.owner.type).title()}`\n"
             f"Last seen: {humanize.precisedelta(clan.owner.last_online, minimum_unit='minutes')}\n"
-            f"Public profile: `{clan.owner.is_public}`\n"
-            f"Membership types: {', '.join(str(t) for t in clan.owner.types)}",
         )
     await ctx.respond(embed=embed)
 
@@ -611,8 +596,8 @@ async def item_definition_command(
 
     try:
         entity = await client.fetch_inventory_item(item_hash)
-    except Exception:
-        await ctx.respond(embed=hikari.Embed(description=format.error(str=True)))
+    except aiobungie.HTTPError as exc:
+        raise tanjun.CommandError(f'{exc!s}')
 
     embed = _build_inventory_item_embed(entity)
     cache_.put(item_hash, embed)
@@ -653,12 +638,10 @@ async def lfg_command(
             _ACTIVITIES[activity][1], platform=platform_, date_range=1
         )
     except aiobungie.HTTPError as exc:
-        await ctx.respond(exc.message)
-        return
+        raise tanjun.CommandError(exc.message)
 
     if not fireteams:
-        await ctx.respond("No results found.")
-        return
+        raise tanjun.CommandError("No results found.")
 
     pages = (
         (
@@ -698,11 +681,7 @@ async def post_activity_command(
     try:
         post = await client.fetch_post_activity(instance)
     except aiobungie.HTTPError as e:
-        await ctx.respond(e.message)
-        return
-
-    if post.is_private:
-        return
+        raise tanjun.CommandError(e.message)
 
     features: list[str] = []
 
@@ -742,5 +721,7 @@ async def post_activity_command(
 
     cache.put(instance, embed)
     await ctx.respond(embed=embed)
+
+
 
 destiny = tanjun.Component(name="Destiny/Bungie", strict=True).load_from_scope().make_loader()

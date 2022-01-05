@@ -61,8 +61,7 @@ async def get_anime(
     try:
         anime_embed = await jian.fetch_anime(name, random=random, genre=genre)
     except net_.Error as e:
-        await ctx.respond(e.data["message"])
-        return
+        raise tanjun.CommandError(e.data["message"])
 
     assert anime_embed is not None
     if not isinstance(anime_embed, typing.Generator):
@@ -101,7 +100,7 @@ async def define(
     component_client: yuyo.ComponentClient = tanjun.inject(type=yuyo.ComponentClient),
 ) -> None:
     urban = net_.Wrapper(net)
-    definitions = await urban.fetch_definitions(ctx, name)
+    definitions = await urban.fetch_definitions(name)
 
     if definitions:
         pages = ((hikari.UNDEFINED, embed) for embed in definitions)
@@ -125,9 +124,9 @@ async def doggo(
                 assert isinstance(resp, dict)
                 embed = hikari.Embed(description=resp["fact"])
                 embed.set_image(resp["image"])
-    except net_.Error as exc:
-        await ctx.respond(format.with_block(**exc.data))
-        return
+    except net_.Error:
+        pass
+
     await ctx.respond(embed=embed)
 
 
@@ -146,9 +145,8 @@ async def kittie(
                 assert isinstance(resp, dict)
                 embed = hikari.Embed(description=resp["fact"])
                 embed.set_image(resp["image"])
-    except net_.Error as exc:
-        await ctx.respond(format.with_block(**exc.data))
-        return
+    except net_.Error:
+        pass
     await ctx.respond(embed=embed)
 
 
@@ -171,9 +169,8 @@ async def wink(
                     description=f"{ctx.author.username} winked at {member.username if member else 'their self'} UwU!"
                 )
                 embed.set_image(resp)
-    except net_.Error as exc:
-        await ctx.respond(format.with_block(**exc.data))
-        return
+    except net_.Error:
+        pass
     await ctx.respond(embed=embed)
 
 
@@ -196,9 +193,8 @@ async def pat(
                     description=f"{ctx.author.username} pats {member.username if member else 'their self'} UwU!"
                 )
                 embed.set_image(resp)
-    except net_.Error as exc:
-        await ctx.respond(format.with_block(**exc.data))
-        return
+    except net_.Error:
+        pass
     await ctx.respond(embed=embed)
 
 
@@ -225,9 +221,8 @@ async def jail(
                     description=f"{ctx.author.username} jails {member.username if member else 'their self'}"
                 )
                 embed.set_image(resp)
-    except net_.Error as exc:
-        await ctx.respond(format.with_block(**exc.data))
-        return
+    except net_.Error:
+        pass
     await ctx.respond(embed=embed)
 
 
@@ -250,13 +245,8 @@ async def run_net(
         except net_.Error:
             await ctx.respond(format.error(str=True))
             return
-        try:
-            formatted = format.with_block(result, lang="json")
-            await ctx.respond(formatted)
-        except hikari.HikariError:
-            await ctx.respond(format.error(str=True))
-        except Exception:
-            pass
+        formatted = format.with_block(result, lang="json")
+        await ctx.respond(formatted)
 
 
 api = tanjun.Component(name="APIs", strict=True).load_from_scope().make_loader()

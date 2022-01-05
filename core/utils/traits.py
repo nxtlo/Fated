@@ -55,10 +55,14 @@ class HashRunner(fast.FastProtocolChecking, typing.Protocol):
         """Returns the cached prefix for a guild snowflake."""
         raise NotImplementedError
 
-    async def set_mute_roles(self, guild_id: snowflakes.Snowflake, role_id: snowflakes.Snowflake) -> None:
+    async def set_mute_roles(
+        self, guild_id: snowflakes.Snowflake, role_id: snowflakes.Snowflake
+    ) -> None:
         """Sets the mute role for a guild snowflake."""
 
-    async def get_mute_role(self, guild_id: snowflakes.Snowflake) -> snowflakes.Snowflake:
+    async def get_mute_role(
+        self, guild_id: snowflakes.Snowflake
+    ) -> snowflakes.Snowflake:
         """Return the cached mute role id. Raised LookupError if not found."""
         raise NotImplementedError
 
@@ -73,10 +77,14 @@ class HashRunner(fast.FastProtocolChecking, typing.Protocol):
     # invokes a command that requires OAuth2. If the token is expired we refresh them immediantly.
     # else we just return the data. Since we're using redis this shoud always be a fast response.
 
-    async def set_bungie_tokens(self, user: snowflakes.Snowflake, respons: aiobungie.OAuth2Response) -> None:
+    async def set_bungie_tokens(
+        self, user: snowflakes.Snowflake, respons: aiobungie.OAuth2Response
+    ) -> None:
         """Cache a hikari snowflake to the returned OAuth2 response object tokens."""
 
-    async def get_bungie_tokens(self, user: snowflakes.Snowflake) -> dict[str, str | float]:
+    async def get_bungie_tokens(
+        self, user: snowflakes.Snowflake
+    ) -> dict[str, str | float]:
         """Gets loaded dict object of the user snowflake tokens.
 
         This dictionary contains 4 keys:

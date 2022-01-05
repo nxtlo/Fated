@@ -62,8 +62,8 @@ class APIAware(abc.ABC):
 
     @abc.abstractmethod
     async def fetch_definitions(
-        self, ctx: tanjun.SlashContext, name: str
-    ) -> collections.Generator[hikari.Embed, None, None] | None:
+        self, name: str
+    ) -> collections.Generator[hikari.Embed, None, None]:
         ...
 
     @abc.abstractmethod

@@ -46,6 +46,7 @@ prefix_group = tanjun.slash_command_group("prefix", "Handle the bot prefix confi
 async def on_ready(_: hikari.ShardReadyEvent) -> None:
     _LOGGER.info("Bot ready.")
 
+
 @prefix_group.with_command
 @tanjun.with_guild_check
 @tanjun.with_author_permission_check(
@@ -61,8 +62,7 @@ async def set_prefix(
 ) -> None:
 
     if len(prefix) > 5:
-        await ctx.respond("Prefix length cannot be more than 5 letters.")
-        return
+        raise tanjun.CommandError("Prefix length cannot be more than 5 letters.")
 
     await ctx.defer()
     try:
@@ -70,8 +70,7 @@ async def set_prefix(
         await hash.set_prefix(guild_id, prefix)
 
     except Exception as err:
-        await ctx.respond(f"Couldn't change bot prefix: {err}")
-        return
+        raise tanjun.CommandError(f"Couldn't change bot prefix: {err!s}")
 
     await ctx.edit_initial_response(f"Prefix set to {prefix}")
 
@@ -98,8 +97,7 @@ async def clear_prefix(
     try:
         await hash.remove_prefix(guild.id)
     except Exception as err:
-        await ctx.respond(f"Couldn't clear the prefix: {err!s}")
-        return
+        raise tanjun.CommandError(f"Couldn't clear the prefix: {err!s}")
 
     await ctx.edit_initial_response(
         f"Cleared prefix. You can still use the main prefix which's `.`"

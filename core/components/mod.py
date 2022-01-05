@@ -23,6 +23,8 @@
 
 from __future__ import annotations
 
+from yuyo import backoff
+
 __all__: tuple[str, ...] = ("mod",)
 
 import asyncio
@@ -82,34 +84,30 @@ async def _set_channel_perms(
     ctx: tanjun.SlashContext, role_id: hikari.Snowflake
 ) -> None:
     assert ctx.guild_id
-    try:
-        async with ctx.rest.trigger_typing(ctx.channel_id):
-            channels = await ctx.rest.fetch_guild_channels(ctx.guild_id)
-            try:
-                await asyncio.gather(
-                    *(
-                        channel.edit_overwrite(
-                            role_id,
-                            target_type=hikari.PermissionOverwriteType.ROLE,
-                            deny=(
-                                hikari.Permissions.SEND_MESSAGES
-                                | hikari.Permissions.SEND_MESSAGES_IN_THREADS
-                                | hikari.Permissions.SPEAK
-                                | hikari.Permissions.ADD_REACTIONS
-                                | hikari.Permissions.CONNECT
-                                | hikari.Permissions.CREATE_PUBLIC_THREADS
-                                | hikari.Permissions.CREATE_PRIVATE_THREADS
-                            ),
-                        )
-                        for channel in channels
+
+    async with ctx.rest.trigger_typing(ctx.channel_id):
+        channels = await ctx.rest.fetch_guild_channels(ctx.guild_id)
+        try:
+            await asyncio.gather(
+                *(
+                    channel.edit_overwrite(
+                        role_id,
+                        target_type=hikari.PermissionOverwriteType.ROLE,
+                        deny=(
+                            hikari.Permissions.SEND_MESSAGES
+                            | hikari.Permissions.SEND_MESSAGES_IN_THREADS
+                            | hikari.Permissions.SPEAK
+                            | hikari.Permissions.ADD_REACTIONS
+                            | hikari.Permissions.CONNECT
+                            | hikari.Permissions.CREATE_PUBLIC_THREADS
+                            | hikari.Permissions.CREATE_PRIVATE_THREADS
+                        ),
                     )
+                    for channel in channels
                 )
-            except hikari.ForbiddenError:
-                await ctx.respond("I don't have permissions to edit channels.")
-                return
-    except hikari.HikariError:
-        await ctx.respond("Couldn't change channels permissions.")
-        raise
+            )
+        except hikari.HikariError as err:
+            raise tanjun.CommandError(f"Couldn't change channels permissions. {err!s}")
 
 
 async def _done(
@@ -164,12 +162,11 @@ async def _create_mute_role(
                 return
 
             elif maybe_setit.content in {"No", "no", "n"}:
-                await ctx.respond("Returning.")
+                await ctx.respond("Returning.", delete_after=4.0)
                 return
 
             else:
-                await ctx.respond("Unrecognized answer..")
-                return
+                raise tanjun.CommandError("Unrecognized answer..")
 
         # No muted role.
         else:
@@ -179,16 +176,14 @@ async def _create_mute_role(
                     name="Muted",
                 )
             except hikari.HikariError as exc:
-                await ctx.respond(f"Couldn't create role: {exc!s}")
-                return
+                raise tanjun.CommandError(f"Couldn't create role: {exc!s}")
+
             await _done(ctx, role, guild, hash)
             await ctx.respond("Created the mute role.")
             return
 
     except Exception:
-        raise RuntimeError(
-            f"Couldn't create mute role for guild {ctx.get_guild().name}"
-        )
+        raise RuntimeError(f"Couldn't create mute role for guild {ctx.get_guild()!r}")
 
 
 mutes = (
@@ -236,8 +231,9 @@ async def mute(
     try:
         mute_role = await hash.get_mute_role(ctx.guild_id)
     except LookupError:
-        await ctx.respond("No mute role found. Type `/mute role create` to create one.")
-        return
+        raise tanjun.CommandError(
+            "No mute role found. Type `/mute role create` to create one."
+        )
 
     try:
         total_time = DURATIONS[unit] * duration
@@ -260,8 +256,8 @@ async def mute(
         date = humanize.naturaldelta(
             datetime.datetime.now() - datetime.datetime.fromtimestamp(unlocked_at)
         )
-        await ctx.respond(f"This member is already been muted for {date}.")
-        return
+        raise tanjun.CommandError(f"This member is already been muted for {date}.")
+
     else:
         await member.add_role(mute_role)
         d = datetime.timedelta(seconds=total_time)
@@ -289,16 +285,14 @@ async def run_sql(
         result = await pool.fetch(query)
         # SQL Code error
     except asyncpg.exceptions.PostgresSyntaxError:
-        await ctx.respond(format.with_block(sys.exc_info()[1]))
-        return
+        raise tanjun.CommandError(format.with_block(sys.exc_info()[1]))
 
         # Tables doesn't exists.
     except asyncpg.exceptions.UndefinedTableError:
-        await ctx.respond(format.with_block(sys.exc_info()[1]))
-        return
+        raise tanjun.CommandError(format.with_block(sys.exc_info()[1]))
 
-    if not result:
-        await ctx.respond("Nothing found.")
+    if result is None:
+        await ctx.respond("Nothing found.", delete_after=5)
         return
 
     await ctx.respond(format.with_block(result))
@@ -317,27 +311,86 @@ async def run_sql(
 @tanjun.as_slash_command("kick", "Kick someone out of the guild.")
 async def kick(
     ctx: tanjun.abc.SlashContext,
-    member: hikari.Member | None,
+    member: hikari.InteractionMember,
     /,
     reason: hikari.UndefinedOr[str],
 ) -> None:
 
-    try:
-        guild = await ctx.fetch_guild()
-    except hikari.HikariError:
-        guild = ctx.get_guild()
+    assert ctx.guild_id
+    guild = ctx.get_guild()
 
-    if guild:
+    # In case the guild wasn't cached for somereason.
+    await ctx.defer()
+
+    if guild is None:
+        guild = await ctx.rest.fetch_guild(ctx.guild_id)
+
+    backoff_ = backoff.Backoff(3)
+    async for _ in backoff_:
         try:
-            member = await ctx.rest.fetch_member(guild.id, member.id)
-        except hikari.HTTPError:
-            member = ctx.cache.get_member(guild.id, member.id)
+            await guild.kick(member.id, reason=reason)
+        except hikari.InternalServerError:
+            pass
 
-        await guild.kick(member.id, reason=reason)
-    to_respond = [f"Member {member.username}#{member.discriminator} has been kicked"]
-    if reason:
-        to_respond += f" For {reason}."
-    await ctx.respond("".join(to_respond))
+        except hikari.HTTPError as exc:
+            await ctx.create_followup(
+                f"Couldn't kick member for {exc.message}, Trying again.",
+                flags=hikari.MessageFlag.EPHEMERAL,
+            )
+            backoff_.set_next_backoff(2.0)
+
+        else:
+            to_respond = [f"Member {member.user.mention} has been kicked."]
+            if reason:
+                to_respond += f" For {reason}."
+            await ctx.respond("".join(to_respond))
+
+
+@tanjun.with_guild_check
+@tanjun.with_own_permission_check(
+    hikari.Permissions.BAN_MEMBERS,
+    error_message="Bot doesn't have permissions to ban members.",
+)
+@tanjun.with_author_permission_check(hikari.Permissions.BAN_MEMBERS)
+@tanjun.with_str_slash_option("reason", "An optional reason for the ban.")
+@tanjun.with_member_slash_option("member", "The member to ban.")
+@tanjun.as_slash_command("ban", "Ban someone from the guild.")
+async def ban(
+    ctx: tanjun.abc.SlashContext,
+    member: hikari.InteractionMember,
+    /,
+    reason: hikari.UndefinedOr[str],
+) -> None:
+
+    assert ctx.guild_id
+    guild = ctx.get_guild()
+
+    # In case the guild wasn't cached for somereason.
+    await ctx.defer()
+
+    if guild is None:
+        guild = await ctx.rest.fetch_guild(ctx.guild_id)
+
+    backoff_ = backoff.Backoff(3)
+
+    async for _ in backoff_:
+        try:
+            await guild.ban(member.id, reason=reason)
+        except hikari.InternalServerError:
+            pass
+
+        except hikari.HTTPError as exc:
+            await ctx.create_followup(
+                f"Couldn't banned member for {exc.message}, Try again.",
+                flags=hikari.MessageFlag.EPHEMERAL,
+            )
+            backoff_.set_next_backoff(2.0)
+
+        else:
+            to_respond = [f"Member {member.user.mention} has been banned."]
+            if reason:
+                to_respond += f" For {reason}."
+            await ctx.respond("".join(to_respond))
 
 
 @tanjun.with_owner_check
@@ -352,51 +405,15 @@ async def close_bot(
         raise
 
 
-@tanjun.with_guild_check
-@tanjun.with_own_permission_check(
-    hikari.Permissions.BAN_MEMBERS,
-    error_message="Bot doesn't have permissions to ban members.",
-)
-@tanjun.with_author_permission_check(hikari.Permissions.BAN_MEMBERS)
-@tanjun.with_str_slash_option("reason", "An optional reason for the ban.")
-@tanjun.with_member_slash_option("member", "The member to ban.")
-@tanjun.as_slash_command("ban", "Ban someone from the guild.")
-async def ban(
-    ctx: tanjun.abc.SlashContext,
-    member: hikari.Member | None,
-    /,
-    reason: hikari.UndefinedOr[str],
-) -> None:
-
-    try:
-        guild = await ctx.fetch_guild()
-    except hikari.HikariError:
-        guild = ctx.get_guild()
-
-    if guild:
-        try:
-            member = await ctx.rest.fetch_member(guild.id, member.id)
-        except hikari.HTTPError:
-            member = ctx.cache.get_member(guild.id, member.id)
-
-        await guild.ban(member.id, reason=reason)
-    to_respond = [f"Member {member.username}#{member.discriminator} has been banned"]
-    if reason:
-        to_respond += f" for {reason}."
-    await ctx.respond("".join(to_respond))
-
-
 # This command perform rest calls to get an up-to-date
 # data instead of the cache.
 @tanjun.with_owner_check
-@tanjun.with_argument("id", default=None, converters=(int,))
+@tanjun.with_argument("id", default=None, converters=(hikari.Snowflake, int))
 @tanjun.with_parser
 @tanjun.as_message_command("guild")
-async def fetch_guild(
-    ctx: tanjun.MessageContext, id: hikari.Snowflakeish | int | None
-) -> None:
+async def fetch_guild(ctx: tanjun.MessageContext, id: hikari.Snowflake) -> None:
 
-    id = id or ctx.guild_id if ctx.guild_id else 411804307302776833
+    id = id or ctx.guild_id if ctx.guild_id else hikari.Snowflake(411804307302776833)
     backoff = yuyo.Backoff(2)
     async for _ in backoff:
         try:
@@ -416,7 +433,6 @@ async def fetch_guild(
         except hikari.InternalServerError:
             pass
 
-        # Other errors. break.
         else:
             embed = hikari.Embed(title=guild.name, description=guild.id)
             if ctx.cache:
@@ -445,6 +461,7 @@ async def fetch_guild(
 @tanjun.as_message_command("guilds")
 async def get_guilds(ctx: tanjun.MessageContext) -> None:
     guilds = ctx.cache.get_available_guilds_view()
+    assert guilds is not None
     embed = hikari.Embed(
         description=format.with_block(
             "\n".join(
@@ -602,8 +619,7 @@ async def remove(
         del cache_[key]
         await ctx.respond("Ok")
     except KeyError:
-        await ctx.respond("Key not found in cache.")
-        return
+        raise tanjun.CommandError("Key not found in cache.")
 
 
 @cacher.with_command

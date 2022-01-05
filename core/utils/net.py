@@ -239,121 +239,8 @@ class Wrapper(interfaces.APIAware):
             .add_field("Being aired", anime_payload.get("airing", hikari.UNDEFINED), inline=True)
         )
 
-    async def fetch_anime(
-        self,
-        name: str | None = None,
-        *,
-        random: bool | None = None,
-        genre: str,
-    ) -> hikari.Embed | collections.Generator[hikari.Embed, None, None] | None:
-
-        async with self._net as cli:
-
-            if random and name is None:
-                # This is True by default in case the name is None.
-                path = f"{consts.API['anime']}/genre/anime/{consts.GENRES[genre]}/1"
-            else:
-                path = f'{consts.API["anime"]}/search/anime?q={str(name).lower()}/Zero&page=1&limit=1'
-
-            # This kinda brain fuck but it will raise KeyError
-            # error if we don't check before we make the actual request.
-            if genre is not None and random and name is None:
-                getter = "anime"
-                start = "airing_start"
-            else:
-                getter = "results"
-                start = "start_date"
-
-            if not (
-                raw_anime := await cli.request(
-                    "GET",
-                    path,
-                    getter=getter,
-                )
-            ):
-                return
-            if isinstance(raw_anime, dict):
-                return self._make_anime_embed(raw_anime, start)
-            else:
-                assert isinstance(raw_anime, list), f"Expected a list or dict anime but got {type(raw_anime).__name__}"
-                return (self._make_anime_embed(anime, start) for anime in raw_anime)
-
-    async def fetch_manga(
-        self, name: str, /
-    ) -> collections.Generator[hikari.Embed, None, None] | None:
-
-        async with self._net as cli:
-            if not (
-                raw_mangas := await cli.request(
-                    "GET",
-                    f'{consts.API["anime"]}/search/manga?q={name}/Zero&page=1&limit=1',
-                    getter="results",
-                )
-            ):
-                return
-            assert isinstance(raw_mangas, list)
-            embeds = (
-                hikari.Embed(
-                    colour=consts.COLOR["invis"],
-                    description=manga.get("synopsis", hikari.UNDEFINED)
-                )
-                .set_author(url=manga.get("url", str(hikari.UNDEFINED)), name=manga.get("title", hikari.UNDEFINED))
-                .set_image(manga.get("image_url", None))
-                .add_field(
-                    "Published at",
-                    str(format.friendly_date(time.clean_date(manga.get("start_date", hikari.UNDEFINED)), minimum_unit='minutes'))
-                )
-                .add_field(
-                    "Finished at",
-                    str(format.friendly_date(time.clean_date(manga.get("end_date", hikari.UNDEFINED)), minimum_unit='minutes'))
-                )
-                .add_field("Chapters", manga.get("chapters", hikari.UNDEFINED))
-                .add_field("Volumes", manga.get("volumes", hikari.UNDEFINED))
-                .add_field("Type", manga.get("type", hikari.UNDEFINED))
-                .add_field("Score", manga.get("score", hikari.UNDEFINED))
-                .add_field("Community members", manga.get("members", hikari.UNDEFINED))
-                .add_field("Being published", manga.get("publishing", hikari.UNDEFINED))
-                for manga in raw_mangas
-            )
-            return embeds
-
-    async def fetch_definitions(
-        self, ctx: tanjun.SlashContext, name: str
-    ) -> collections.Generator[hikari.Embed, None, None] | None:
-        async with self._net as cli:
-
-            resp = (
-                await cli.request(
-                    "GET", consts.API["urban"], params={"term": name.lower()}, getter="list"
-                ) or []
-            )
-
-            if not resp:
-                await ctx.respond(f"Couldn't find definition about `{name}`")
-                return
-
-            assert isinstance(resp, list)
-
-            def _replace(s: str) -> str:
-                return s.replace("]", "").replace("[", "")
-
-            embeds = (
-                hikari.Embed(
-                    colour=consts.COLOR["invis"],
-                    title=f"Definition for {name}",
-                    description=_replace(defn.get("definition", hikari.UNDEFINED)),
-                    timestamp=fast_datetime(defn.get("written_on")) or None  # type: ignore
-                )
-                .add_field("Example", _replace(defn.get("example", hikari.UNDEFINED)))
-                .set_footer(
-                    text=f"\U0001f44d {defn.get('thumbs_up', 0)} - \U0001f44e {defn.get('thumb_down', 0)}"
-                )
-                .set_author(name=defn.get("author"), url=defn.get(defn.get("permalink")))
-                for defn in resp
-            )
-        return embeds
-
-    def _set_repo_owner_attrs(self, payload: dict[str, typing.Any]) -> interfaces.GithubUser:
+    @staticmethod
+    def _set_repo_owner_attrs(payload: dict[str, typing.Any]) -> interfaces.GithubUser:
         user: dict[str, typing.Any] = payload
         created_at: datetime.datetime | None = None
         if(raw_created := user.get('created_at')):
@@ -375,10 +262,7 @@ class Wrapper(interfaces.APIAware):
         )
         return user_obj
 
-    def _set_repo_attrs(
-        self,
-        payload: dict[str, list[dict[str, typing.Any]]]
-    ) -> typing.Sequence[interfaces.GithubRepo]:
+    def _set_repo_attrs(self, payload: dict[str, list[dict[str, typing.Any]]]) -> typing.Sequence[interfaces.GithubRepo]:
         repos: typing.Sequence[interfaces.GithubRepo] = []
 
         for repo in payload['items']:
@@ -409,25 +293,6 @@ class Wrapper(interfaces.APIAware):
             )
             repos.append(repo_obj)
         return repos
-
-    async def fetch_git_user(self, name: str, /) -> interfaces.GithubUser | None:
-        async with self._net as cli:
-            if(raw_user := await cli.request(
-                "GET",
-                yarl.URL(consts.API['git']['user']) / name)):
-                assert isinstance(raw_user, dict)
-                return self._set_repo_owner_attrs(raw_user)
-            return
-
-    async def fetch_git_repo(self, name: str) -> collections.Sequence[interfaces.GithubRepo] | None:
-        async with self._net as cli:
-            if(raw_repo := await cli.request(
-                "GET",
-                consts.API['git']['repo'].format(name)
-            )):
-                assert isinstance(raw_repo, dict)
-                return self._set_repo_attrs(raw_repo)
-            return
 
     def _make_git_releases(self, repo: data_binding.JSONObject, user: str, repo_name: str) -> hikari.Embed:
         embed = hikari.Embed()
@@ -461,6 +326,139 @@ class Wrapper(interfaces.APIAware):
             )
         )
         return embed
+
+    async def fetch_anime(
+        self,
+        name: str | None = None,
+        *,
+        random: bool | None = None,
+        genre: str,
+    ) -> hikari.Embed | collections.Generator[hikari.Embed, None, None] | None:
+
+        async with self._net as cli:
+
+            if random and name is None:
+                # This is True by default in case the name is None.
+                path = f"{consts.API['anime']}/genre/anime/{consts.GENRES[genre]}/1"
+            else:
+                path = f'{consts.API["anime"]}/search/anime?q={str(name).lower()}/Zero&page=1&limit=1'
+
+            # This kinda brain fuck but it will raise KeyError
+            # error if we don't check before we make the actual request.
+            if genre is not None and random and name is None:
+                getter = "anime"
+                start = "airing_start"
+            else:
+                getter = "results"
+                start = "start_date"
+
+            if not (
+                raw_anime := await cli.request(
+                    "GET",
+                    path,
+                    getter=getter,
+                )
+            ):
+                return
+
+            if isinstance(raw_anime, dict):
+                return self._make_anime_embed(raw_anime, start)
+            else:
+                assert isinstance(raw_anime, list), f"Expected a list or dict anime but got {type(raw_anime).__name__}"
+                return (self._make_anime_embed(anime, start) for anime in raw_anime)
+
+    async def fetch_manga(
+        self, name: str, /
+    ) -> collections.Generator[hikari.Embed, None, None] | None:
+
+        async with self._net as cli:
+            if not (
+                raw_mangas := await cli.request(
+                    "GET",
+                    f'{consts.API["anime"]}/search/manga?q={name}/Zero&page=1&limit=1',
+                    getter="results",
+                )
+            ):
+                return
+
+            assert isinstance(raw_mangas, list)
+
+            embeds = (
+                hikari.Embed(
+                    colour=consts.COLOR["invis"],
+                    description=manga.get("synopsis", hikari.UNDEFINED)
+                )
+                .set_author(url=manga.get("url", str(hikari.UNDEFINED)), name=manga.get("title", hikari.UNDEFINED))
+                .set_image(manga.get("image_url", None))
+                .add_field(
+                    "Published at",
+                    str(format.friendly_date(time.clean_date(manga.get("start_date", hikari.UNDEFINED)), minimum_unit='minutes'))
+                )
+                .add_field(
+                    "Finished at",
+                    str(format.friendly_date(time.clean_date(manga.get("end_date", hikari.UNDEFINED)), minimum_unit='minutes'))
+                )
+                .add_field("Chapters", manga.get("chapters", hikari.UNDEFINED))
+                .add_field("Volumes", manga.get("volumes", hikari.UNDEFINED))
+                .add_field("Type", manga.get("type", hikari.UNDEFINED))
+                .add_field("Score", manga.get("score", hikari.UNDEFINED))
+                .add_field("Community members", manga.get("members", hikari.UNDEFINED))
+                .add_field("Being published", manga.get("publishing", hikari.UNDEFINED))
+                for manga in raw_mangas
+            )
+            return embeds
+
+    async def fetch_definitions(self, name: str) -> collections.Generator[hikari.Embed, None, None]:
+        async with self._net as cli:
+
+            resp = (
+                await cli.request(
+                    "GET", consts.API["urban"], params={"term": name.lower()}, getter="list"
+                ) or []
+            )
+
+            if not resp:
+                raise tanjun.CommandError(f"Couldn't find definition about `{name}`")
+
+            assert isinstance(resp, list)
+
+            def _replace(s: str) -> str:
+                return s.replace("]", "").replace("[", "")
+
+            embeds = (
+                hikari.Embed(
+                    colour=consts.COLOR["invis"],
+                    title=f"Definition for {name}",
+                    description=_replace(defn.get("definition", hikari.UNDEFINED)),
+                    timestamp=fast_datetime(defn.get("written_on")) or None  # type: ignore
+                )
+                .add_field("Example", _replace(defn.get("example", hikari.UNDEFINED)))
+                .set_footer(
+                    text=f"\U0001f44d {defn.get('thumbs_up', 0)} - \U0001f44e {defn.get('thumb_down', 0)}"
+                )
+                .set_author(name=defn.get("author"), url=defn.get(defn.get("permalink")))
+                for defn in resp
+            )
+        return embeds
+
+    async def fetch_git_user(self, name: str, /) -> interfaces.GithubUser | None:
+        async with self._net as cli:
+            if(raw_user := await cli.request(
+                "GET",
+                yarl.URL(consts.API['git']['user']) / name)):
+                assert isinstance(raw_user, dict)
+                return self._set_repo_owner_attrs(raw_user)
+            return
+
+    async def fetch_git_repo(self, name: str) -> collections.Sequence[interfaces.GithubRepo] | None:
+        async with self._net as cli:
+            if(raw_repo := await cli.request(
+                "GET",
+                consts.API['git']['repo'].format(name)
+            )):
+                assert isinstance(raw_repo, dict)
+                return self._set_repo_attrs(raw_repo)
+            return
 
     # Can we cache this and expire after x hours?
     async def git_release(self, user: str, repo_name: str, limit: int | None = None) -> collections.Generator[hikari.Embed, None, None]:

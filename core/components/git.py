@@ -57,8 +57,7 @@ async def git_user(
     try:
         user = await git.fetch_git_user(name)
     except net_.NotFound:
-        await ctx.respond(f"User {name} was not found.")
-        return
+        raise tanjun.CommandError(f"User {name} was not found.")
 
     if user is not None:
         embed = hikari.Embed(
@@ -96,8 +95,7 @@ async def git_repo(
     try:
         repos = await git.fetch_git_repo(name)
     except net_.NotFound:
-        await ctx.respond("Nothing was found.")
-        return
+        raise tanjun.CommandError("Nothing was found.")
 
     if repos:
         pages = iter(
@@ -154,8 +152,7 @@ async def get_release(
     try:
         embeds = await git.git_release(user, repo, limit)
     except net_.Error as exc:
-        await ctx.respond(f"`{exc.data['message']}`")
-        return
+        raise tanjun.CommandError(f"`{exc.data['message']}`")
 
     await consts.generate_component(
         ctx, ((hikari.UNDEFINED, embed) for embed in embeds), component_client

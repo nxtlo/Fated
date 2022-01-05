@@ -44,7 +44,7 @@ import yuyo
 if typing.TYPE_CHECKING:
     import collections.abc as collections
 
-    T = typing.TypeVar("T", covariant=True)
+    _T = typing.TypeVar("_T", covariant=True)
 
 COLOR: typing.Final[dict[str, hikari.Colourish]] = {
     "invis": hikari.Colour(0x36393F),
@@ -114,7 +114,7 @@ def iter(map: collections.Mapping[str, typing.Any]) -> collections.Sequence[typi
     return [k for k in map.keys()]
 
 
-def randomize(seq: collections.Sequence[T] | None = None) -> T | str:
+def randomize(seq: collections.Sequence[_T] | None = None) -> _T | str:
     if not seq:
         return random.choice(list(GENRES.keys()))
     return random.choice(list(seq))

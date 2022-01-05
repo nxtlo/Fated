@@ -90,10 +90,7 @@ class Hash(traits.HashRunner):
             max_connections=max_connections,
             **kwargs,
         )
-        self.__connection = aioredis.Redis(
-            connection_pool=pool_conn,
-            ssl=ssl
-        )
+        self.__connection = aioredis.Redis(connection_pool=pool_conn, ssl=ssl)
         self._aiobungie_client = aiobungie_client
         self._lock = asyncio.Lock()
 
@@ -109,10 +106,14 @@ class Hash(traits.HashRunner):
     async def remove_prefix(self, *guild_ids: snowflakes.Snowflake) -> None:
         await self.__connection.hdel("prefixes", *list(map(str, guild_ids)))
 
-    async def set_mute_roles(self, guild_id: snowflakes.Snowflake, role_id: snowflakes.Snowflake) -> None:
+    async def set_mute_roles(
+        self, guild_id: snowflakes.Snowflake, role_id: snowflakes.Snowflake
+    ) -> None:
         await self.__connection.hset("mutes", str(guild_id), role_id)  # type: ignore
 
-    async def get_mute_role(self, guild_id: snowflakes.Snowflake) -> snowflakes.Snowflake:
+    async def get_mute_role(
+        self, guild_id: snowflakes.Snowflake
+    ) -> snowflakes.Snowflake:
         role_id: int
         if role_id := await self.__connection.hget("mutes", str(guild_id)):
             return snowflakes.Snowflake(role_id)
@@ -141,21 +142,25 @@ class Hash(traits.HashRunner):
                 "access": access_token,
                 "refresh": refresh_token,
                 "expires": expires_in,
-                "date": f'{datetime.datetime.now()!s}',
+                "date": f"{datetime.datetime.now()!s}",
             }
         )
         await self.__connection.hset(name="tokens", key=owner, value=body)  # type: ignore
         return body
 
     # Loads the authorized data from a string JSON object to a Python dict object.
-    async def __loads_tokens(self, owner: snowflakes.Snowflake) -> dict[str, str | float]:
+    async def __loads_tokens(
+        self, owner: snowflakes.Snowflake
+    ) -> dict[str, str | float]:
         resp: snowflakes.Snowflake = await self.__connection.hget("tokens", owner)
         if resp:
             return json.loads(str(resp))
 
         raise LookupError
 
-    async def __refresh_token(self, owner: snowflakes.Snowflake) -> aiobungie.OAuth2Response:
+    async def __refresh_token(
+        self, owner: snowflakes.Snowflake
+    ) -> aiobungie.OAuth2Response:
         assert (
             self._aiobungie_client is not None
         ), "Aiobungie client should never be `None` to refresh the tokens."
@@ -177,13 +182,17 @@ class Hash(traits.HashRunner):
             raise RuntimeError(f"Couldn't refresh tokens for {owner}.") from err
         return response
 
-    async def set_bungie_tokens(self, user: snowflakes.Snowflake, respons: aiobungie.OAuth2Response) -> None:
+    async def set_bungie_tokens(
+        self, user: snowflakes.Snowflake, respons: aiobungie.OAuth2Response
+    ) -> None:
         await self.__dump_tokens(
             user, respons.access_token, respons.refresh_token, respons.expires_in
         )
 
     # This impl hikari's client creds strat.
-    async def get_bungie_tokens(self, user: snowflakes.Snowflake) -> dict[str, str | float]:
+    async def get_bungie_tokens(
+        self, user: snowflakes.Snowflake
+    ) -> dict[str, str | float]:
         is_expired = await self._is_expired(user)
         if (tokens := await self.__loads_tokens(user)) and not is_expired:
             return tokens
