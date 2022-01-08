@@ -35,9 +35,8 @@ import typing
 
 import aiobungie
 import aioredis
-
-from hikari.internal import collections as hikari_collections
 from hikari import snowflakes
+from hikari.internal import collections as hikari_collections
 
 from . import traits
 
@@ -57,7 +56,7 @@ logging.basicConfig(level=logging.DEBUG)
 MKT = typing.TypeVar("MKT")
 MVT = typing.TypeVar("MVT")
 
-T = typing.TypeVar("T")
+_T = typing.TypeVar("_T")
 
 
 class Hash(traits.HashRunner):
@@ -76,7 +75,7 @@ class Hash(traits.HashRunner):
         *,
         db: str | int = 0,
         ssl: bool = False,
-        max_connections: int = 20,
+        max_connections: int = 60,
         decode_responses: bool = True,
         **kwargs: typing.Any,
     ) -> None:
@@ -219,8 +218,9 @@ class Hash(traits.HashRunner):
 class Memory(hikari_collections.ExtendedMutableMapping[MKT, MVT]):
     """A standard basic in memory cache that we may use it for APIs, embeds, etc.
 
-    This cache will pop entires after 12 hours by default if new entries
-    are inserted into the cache. This can be modified by changing `expire_after`
+    This implements hikari's `TimedCacheMap` with more functionality.
+    It will pop entries after 12 hours by default `"IF"` new entries are inserted into the cache.
+    This can be modified by changing `expire_after`.
     """
 
     __slots__ = ("_map", "expire_after", "on_expire")
@@ -236,14 +236,13 @@ class Memory(hikari_collections.ExtendedMutableMapping[MKT, MVT]):
         if isinstance(expire_after, float):
             expire_after = datetime.timedelta(seconds=expire_after)
 
-        self.expire_after = expire_after
-        self.on_expire = on_expire
-
-        if not expire_after:
+        if expire_after is None:
             # By default we only need to cache stuff
             # for 12 hours.
             expire_after = datetime.timedelta(hours=12)
 
+        self.on_expire = on_expire
+        self.expire_after = expire_after
         self._map = hikari_collections.TimedCacheMap[MKT, MVT](
             expiry=expire_after, on_expire=on_expire
         )
@@ -259,9 +258,13 @@ class Memory(hikari_collections.ExtendedMutableMapping[MKT, MVT]):
     clone = copy
     """An alias to `Memory.copy()"""
 
-    # gotta go lowlevel.
-    def memory_ptr(self, key: MKT) -> str:
-        return hex(id(self._map[key]))
+    def for_each(
+        self, devours: collections.Callable[[MKT, MVT], typing.Any]
+    ) -> Memory[MKT, MVT]:
+        """Performs an inline for loop for each key, value cached and devours/maps it to a callable."""
+        for k, v in self._map.items():
+            devours(k, v)
+        return self
 
     def freeze(self) -> collections.MutableMapping[MKT, MVT]:
         return self._map.freeze()
@@ -275,6 +278,9 @@ class Memory(hikari_collections.ExtendedMutableMapping[MKT, MVT]):
     def keys(self) -> collections.KeysView[MKT]:
         return self._map.keys()
 
+    def get(self, key: MKT, default: _T | None = None, /) -> MVT | _T | None:
+       return self._map.get(key, default) 
+
     def put(self, key: MKT, value: MVT) -> Memory[MKT, MVT]:
         self._map[key] = value
         return self
@@ -283,10 +289,10 @@ class Memory(hikari_collections.ExtendedMutableMapping[MKT, MVT]):
         self.expire_after = date
         return self
 
-    def set_on_expire(self, obj: collections.Callable[..., T]) -> T:
+    def set_on_expire(self, obj: collections.Callable[..., _T]) -> _T:
         self.on_expire = obj
         obj.__doc__ = f'{type(obj).__name__}({inspect.getargs(obj.__code__)}) -> {obj.__annotations__.get("return")}'
-        return typing.cast(T, obj)
+        return typing.cast(_T, obj)
 
     def __repr__(self) -> str:
         if not self._map:

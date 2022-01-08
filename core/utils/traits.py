@@ -72,10 +72,10 @@ class HashRunner(fast.FastProtocolChecking, typing.Protocol):
     async def remove_prefix(self, guild_id: snowflakes.Snowflake) -> None:
         """Removes a prefix for a guild snowflake id."""
 
-    # BTW theres no background task that runs every x hours to refresh the Bungie OAuth2 tokens.
+    # BTW there's no background task that runs every x hours to refresh the Bungie OAuth2 tokens.
     # All this are handled internally, We check if the token is expired or not when the user
     # invokes a command that requires OAuth2. If the token is expired we refresh them immediantly.
-    # else we just return the data. Since we're using redis this shoud always be a fast response.
+    # else we just return the data. Since we're using redis this should always be a fast response.
 
     async def set_bungie_tokens(
         self, user: snowflakes.Snowflake, respons: aiobungie.OAuth2Response

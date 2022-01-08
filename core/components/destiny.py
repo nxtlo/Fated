@@ -32,7 +32,6 @@ import typing
 import urllib.parse
 
 import aiobungie
-import asyncpg
 import hikari
 import humanize
 import tanjun
@@ -157,7 +156,7 @@ def _build_inventory_item_embed(
     if entity.has_icon:
         embed.set_thumbnail(str(entity.icon))
 
-    if entity.type is aiobungie.Item.EMBLEM:
+    if entity.type is aiobungie.ItemType.EMBLEM:
         if entity.secondary_icon is not aiobungie.Undefined:
             embed.set_image(str(entity.secondary_icon))
 
@@ -215,11 +214,13 @@ async def sync_command(
                 raise tanjun.CommandError("Invalid URL. Please run the command again and send the URL.")
 
             # We try to store the destiny membership if they're not in the database already.
+            # Since its not worth running another REST call. We check the db locally first.
+            # This is usually caused by people who are already synced but ran the sync cmd again.
             if not (_ := await pool.fetchval("SELECT bungie_id FROM destiny WHERE ctx_id = $1", ctx.author.id)):
                 try:
-                    membership = (await client.fetch_own_bungie_user(access_token=response.access_token)).destiny[0]
+                    membership = (await client.fetch_own_bungie_user(response.access_token)).destiny[0]
                 except IndexError:
-                    # They don't have a destiny membership aperantly ¯\_(ツ)_/¯
+                    # They don't have a Destiny membership aperantly ¯\_(ツ)_/¯
                     pass
 
                 await pool.execute(
@@ -239,9 +240,6 @@ async def sync_command(
             except Exception as exc:
                 raise RuntimeError(f"Couldn't set tokens for user {ctx.author}") from exc
             await ctx.respond("\U0001f44d")
-
-def iter_users(*users: aiobungie.crate.DestinyUser) -> hikari.LazyIterator[aiobungie.crate.DestinyUser]:
-    return hikari.FlatLazyIterator([*users])
 
 @destiny_group.with_command
 @tanjun.as_slash_command("desync", "Desync your destiny membership with this bot.")
@@ -282,7 +280,7 @@ async def user_command(
 
     access_token = str(tokens['access'])
     try:
-        user = await client.fetch_own_bungie_user(access_token=access_token)
+        user = await client.fetch_own_bungie_user(access_token)
     except aiobungie.Unauthorized:
         raise
 
@@ -674,6 +672,7 @@ async def post_activity_command(
 ) -> None:
 
     if cached_instance := cache.get(instance):
+        assert isinstance(cached_instance, hikari.Embed)
         await ctx.respond(embed=cached_instance)
         return
 
@@ -693,13 +692,6 @@ async def post_activity_command(
     elif post.is_solo:
         features.append(f"Solo: {STAR}")
 
-
-    players = '\n'.join(
-        # We will need the last seen name to unsure nothing in UNDEFINED.
-        [f"{player.character_class}: [{player.destiny_user.last_seen_name}#{player.destiny_user.code}]"
-        f"({player.destiny_user.link}): {player.values.played_time}" for player in post.players]
-    )
-
     embed = (
         hikari.Embed(title=post.mode)
         .add_field(
@@ -707,9 +699,29 @@ async def post_activity_command(
             f"Reference id: {post.refrence_id}\n"
             f"Membership: {post.membership_type}\n"
             f"Starting phase: {post.starting_phase}\n"
-            f"Date: {format.friendly_date(post.occurred_at)}"
+            f"Date: {format.friendly_date(post.occurred_at)}\n"
         )
-        .add_field("Players", players)
+    )
+
+    try:
+        activity = await client.rest.fetch_entity("DestinyActivityDefinition", post.refrence_id)
+    except aiobungie.HTTPError:
+        pass
+    else:
+        if raw_image := activity['pgcrImage']:
+            embed.set_thumbnail(aiobungie.url.BASE + str(raw_image))
+        if raw_props := activity['displayProperties']:
+            embed.description = raw_props['description']
+            embed.title = raw_props['name']
+
+    for player in post.players:
+        embed.add_field(
+            f"{player.destiny_user.last_seen_name}#{player.destiny_user.code}",
+            f"`Class`: [{player.character_class}]({player.destiny_user.link})\n"
+            f"`Time`: {player.values.played_time}\n"
+            f"`Kills`: {player.values.kills}\n"
+            f"`Deaths`: {player.values.deaths}\n",
+            inline=True
         )
 
     if features:
@@ -723,4 +735,8 @@ async def post_activity_command(
 
 
 
-destiny = tanjun.Component(name="Destiny/Bungie", strict=True).load_from_scope().make_loader()
+destiny = (
+    tanjun.Component(name="Destiny/Bungie", strict=True)
+    .load_from_scope()
+    .make_loader()
+)
