@@ -36,7 +36,6 @@ if typing.TYPE_CHECKING:
     import datetime
 
     import hikari
-    import tanjun
 
 
 class APIAware(abc.ABC):

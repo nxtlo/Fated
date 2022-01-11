@@ -35,7 +35,8 @@ import typing
 
 import aiobungie
 import aioredis
-from hikari import snowflakes
+import hikari
+
 from hikari.internal import collections as hikari_collections
 
 from . import traits
@@ -93,45 +94,45 @@ class Hash(traits.HashRunner):
         self._aiobungie_client = aiobungie_client
         self._lock = asyncio.Lock()
 
-    async def set_prefix(self, guild_id: snowflakes.Snowflake, prefix: str) -> None:
+    async def set_prefix(self, guild_id: hikari.Snowflake, prefix: str) -> None:
         await self.__connection.hset("prefixes", str(guild_id), prefix)  # type: ignore
 
-    async def get_prefix(self, guild_id: snowflakes.Snowflake) -> str:
+    async def get_prefix(self, guild_id: hikari.Snowflake) -> str:
         if prefix := await self.__connection.hget("prefixes", str(guild_id)):
             return typing.cast(str, prefix)
 
         raise LookupError
 
-    async def remove_prefix(self, *guild_ids: snowflakes.Snowflake) -> None:
+    async def remove_prefix(self, *guild_ids: hikari.Snowflake) -> None:
         await self.__connection.hdel("prefixes", *list(map(str, guild_ids)))
 
     async def set_mute_roles(
-        self, guild_id: snowflakes.Snowflake, role_id: snowflakes.Snowflake
+        self, guild_id: hikari.Snowflake, role_id: hikari.Snowflake
     ) -> None:
         await self.__connection.hset("mutes", str(guild_id), role_id)  # type: ignore
 
     async def get_mute_role(
-        self, guild_id: snowflakes.Snowflake
-    ) -> snowflakes.Snowflake:
+        self, guild_id: hikari.Snowflake
+    ) -> hikari.Snowflake:
         role_id: int
         if role_id := await self.__connection.hget("mutes", str(guild_id)):
-            return snowflakes.Snowflake(role_id)
+            return hikari.Snowflake(role_id)
 
         raise LookupError
 
-    async def remove_mute_role(self, guild_id: snowflakes.Snowflake) -> None:
+    async def remove_mute_role(self, guild_id: hikari.Snowflake) -> None:
         await self.__connection.hdel("mutes", str(guild_id))
 
     # Check whether the Bungie OAuth tokens are expired or not.
     # If expired we refresh them.
-    async def _is_expired(self, user: snowflakes.Snowflake) -> bool:
+    async def _is_expired(self, user: hikari.Snowflake) -> bool:
         expirey = await self.__loads_tokens(user)
         return time.monotonic() >= float(expirey["expires"])
 
     # Dump the authorized data as a string JSON object.
     async def __dump_tokens(
         self,
-        owner: snowflakes.Snowflake,
+        owner: hikari.Snowflake,
         access_token: str,
         refresh_token: str,
         expires_in: float,
@@ -149,16 +150,16 @@ class Hash(traits.HashRunner):
 
     # Loads the authorized data from a string JSON object to a Python dict object.
     async def __loads_tokens(
-        self, owner: snowflakes.Snowflake
+        self, owner: hikari.Snowflake
     ) -> dict[str, str | float]:
-        resp: snowflakes.Snowflake = await self.__connection.hget("tokens", owner)
+        resp: hikari.Snowflake = await self.__connection.hget("tokens", owner)
         if resp:
             return json.loads(str(resp))
 
         raise LookupError
 
     async def __refresh_token(
-        self, owner: snowflakes.Snowflake
+        self, owner: hikari.Snowflake
     ) -> aiobungie.OAuth2Response:
         assert (
             self._aiobungie_client is not None
@@ -182,7 +183,7 @@ class Hash(traits.HashRunner):
         return response
 
     async def set_bungie_tokens(
-        self, user: snowflakes.Snowflake, respons: aiobungie.OAuth2Response
+        self, user: hikari.Snowflake, respons: aiobungie.OAuth2Response
     ) -> None:
         await self.__dump_tokens(
             user, respons.access_token, respons.refresh_token, respons.expires_in
@@ -190,7 +191,7 @@ class Hash(traits.HashRunner):
 
     # This impl hikari's client creds strat.
     async def get_bungie_tokens(
-        self, user: snowflakes.Snowflake
+        self, user: hikari.Snowflake
     ) -> dict[str, str | float]:
         is_expired = await self._is_expired(user)
         if (tokens := await self.__loads_tokens(user)) and not is_expired:
@@ -211,12 +212,12 @@ class Hash(traits.HashRunner):
         )
         return json.loads(tokens_)
 
-    async def remove_bungie_tokens(self, user: snowflakes.Snowflake) -> None:
+    async def remove_bungie_tokens(self, user: hikari.Snowflake) -> None:
         await self.__connection.hdel("tokens", str(user))
 
 
 class Memory(hikari_collections.ExtendedMutableMapping[MKT, MVT]):
-    """A standard basic in memory cache that we may use it for APIs, embeds, etc.
+    """A standard in-memory cache that we use it for APIs responses, embeds, etc.
 
     This implements hikari's `TimedCacheMap` with more functionality.
     It will pop entries after 12 hours by default `"IF"` new entries are inserted into the cache.
@@ -258,6 +259,7 @@ class Memory(hikari_collections.ExtendedMutableMapping[MKT, MVT]):
     clone = copy
     """An alias to `Memory.copy()"""
 
+    # Technically, We can use into_iter().for_each(...) but we want to iter through k, v.
     def for_each(
         self, devours: collections.Callable[[MKT, MVT], typing.Any]
     ) -> Memory[MKT, MVT]:
@@ -266,8 +268,17 @@ class Memory(hikari_collections.ExtendedMutableMapping[MKT, MVT]):
             devours(k, v)
         return self
 
+    def into_iter(self, predicate: collections.Callable[[MKT], typing.Any], /) -> hikari.LazyIterator[MVT]:
+        """Returns a flat lazy iterator of this cache's values based on the predicate keys."""
+        for k, _ in self._map.items():
+            if predicate(k):
+                return hikari.FlatLazyIterator(list(self._map.values()))
+        return hikari.FlatLazyIterator([])
+
     def freeze(self) -> collections.MutableMapping[MKT, MVT]:
         return self._map.freeze()
+
+    # Do we actually need all this...
 
     def view(self) -> str:
         return repr(self)

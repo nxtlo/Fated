@@ -102,6 +102,9 @@ _slots: collections.Callable[[aiobungie.crate.Fireteam], str] = (
     else f"{fireteam.available_player_slots}/{fireteam.player_slot_count}"
 )
 
+# We need this hook to make sure the API is not down in this component.
+async def _ensure_api_not_down(ctx: tanjun.SlashContext, _: OSError) -> None:
+    await ctx.respond("API is currently down.")
 
 async def _get_destiny_player(
     client: aiobungie.Client,
@@ -672,7 +675,6 @@ async def post_activity_command(
 ) -> None:
 
     if cached_instance := cache.get(instance):
-        assert isinstance(cached_instance, hikari.Embed)
         await ctx.respond(embed=cached_instance)
         return
 
@@ -710,6 +712,7 @@ async def post_activity_command(
     else:
         if raw_image := activity['pgcrImage']:
             embed.set_thumbnail(aiobungie.url.BASE + str(raw_image))
+
         if raw_props := activity['displayProperties']:
             embed.description = raw_props['description']
             embed.title = raw_props['name']
@@ -733,10 +736,9 @@ async def post_activity_command(
     cache.put(instance, embed)
     await ctx.respond(embed=embed)
 
-
-
 destiny = (
     tanjun.Component(name="Destiny/Bungie", strict=True)
+    .set_slash_hooks(tanjun.AnyHooks().add_on_error(_ensure_api_not_down))
     .load_from_scope()
     .make_loader()
 )
