@@ -640,6 +640,26 @@ async def cache_clear(
     cache_.clear()
     await ctx.respond(cache_.view())
 
+@cacher.with_command
+@tanjun.as_message_command("iter")
+async def iter_cache(
+    ctx: tanjun.SlashContext,
+    cache: cache.Memory[int, hikari.Embed] = tanjun.inject(type=cache.Memory),
+    component: yuyo.ComponentClient = tanjun.inject(type=yuyo.ComponentClient)
+) -> None:
+    cache.put(0, hikari.Embed(title="zzz", description="DODO"))
+    cache.put(1, hikari.Embed(title="mememe", description="xoxo"))
+    cache.put(2, hikari.Embed(title="YOYO", description=None))
+    cache.put(30, hikari.Embed(title="??", description="brr"))
+
+    to_send = [item async for item in (
+        cache
+            # This will return all values where their keys are <= 10
+            .into_iter(lambda item_id: item_id <= 10)
+            .take_while(lambda embed: embed.description is not None)
+            .limit(4)
+    )]
+    await consts.generate_component(ctx, ((hikari.UNDEFINED, embed) for embed in to_send), component)
 
 async def when_join_guilds(event: hikari.GuildJoinEvent) -> None:
     guild = await event.fetch_guild()

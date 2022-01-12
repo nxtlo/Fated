@@ -196,20 +196,25 @@ async def sync_command(
 
     try:
         code = await bot.wait_for(
-            # Can we make this not guild only?
-            hikari.GuildMessageCreateEvent,
+            hikari.MessageCreateEvent,
             90,
             lambda m: m.channel_id == ctx.channel_id
             and m.author_id == ctx.author.id
             and m.content is not None and 'code=' in m.content
         )
     except asyncio.TimeoutError:
-        pass
+        await ctx.edit_initial_response("Time is up! Try again.")
+        return
 
     else:
         if code.content:
             parse_code = urllib.parse.urlparse(code.content).query.removeprefix("code=")
-            await code.message.delete()
+
+            try:
+                await code.message.delete()
+            # In DMs most likely, pass.
+            except hikari.ForbiddenError:
+                pass
 
             try:
                 response = await client.rest.fetch_oauth2_tokens(parse_code)
@@ -220,16 +225,23 @@ async def sync_command(
             # Since its not worth running another REST call. We check the db locally first.
             # This is usually caused by people who are already synced but ran the sync cmd again.
             if not (_ := await pool.fetchval("SELECT bungie_id FROM destiny WHERE ctx_id = $1", ctx.author.id)):
+                user = await client.fetch_own_bungie_user(response.access_token)
+
                 try:
-                    membership = (await client.fetch_own_bungie_user(response.access_token)).destiny[0]
+                    membership = user.destiny[0]
                 except IndexError:
                     # They don't have a Destiny membership aperantly ¯\_(ツ)_/¯
                     pass
 
+                if (primary_id_ := user.primary_membership_id) is not None:
+                    primary_id = primary_id_
+                else:
+                    primary_id = membership.id
+
                 await pool.execute(
                     "INSERT INTO destiny(ctx_id, bungie_id, name, code, memtype) VALUES($1, $2, $3, $4, $5)",
                     ctx.author.id,
-                    membership.id,
+                    primary_id,
                     membership.name,
                     membership.code,
                     str(membership.type).title(),

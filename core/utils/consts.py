@@ -82,7 +82,7 @@ GENRES: dict[str, int] = {
 
 
 async def generate_component(
-    ctx: tanjun.SlashContext,
+    ctx: tanjun.SlashContext | tanjun.MessageContext,
     iterable: (
         collections.Generator[tuple[hikari.UndefinedType, hikari.Embed], None, None]
         | collections.Iterator[tuple[hikari.UndefinedType, hikari.Embed]]

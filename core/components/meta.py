@@ -151,10 +151,14 @@ async def about_command(
         f"**Members**: {len(cache.get_members_view())}\n"
         f"**Users**: {len(cache.get_users_view())}\n"
         f"**Available guilds**: {len(cache.get_available_guilds_view())}\n"
-        f"**Channels**: {len(cache.get_guild_channels_view())}\n"
+        f"**Guild Channels**: {len(cache.get_guild_channels_view())}\n"
         f"**Emojis**: {len(cache.get_emojis_view())}\n"
         f"**Roles**: {len(cache.get_roles_view())}\n"
-        f"**Messages**: {len(cache.get_messages_view())}",
+        f"**Messages**: {len(cache.get_messages_view())}\n"
+        f"**Voice states**: {len(cache.get_voice_states_view())}\n"
+        f"**Presences**: {len(cache.get_presences_view())}\n"
+        f"**Invites**: {len(cache.get_invites_view())}"
+        ,
         inline=False,
     )
     embed.add_field(
