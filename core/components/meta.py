@@ -33,9 +33,7 @@ import sys
 import typing
 
 import hikari
-import humanize
 import tanjun
-from aiobungie.internal import time as time_
 
 from core.utils import consts, traits
 
@@ -115,13 +113,6 @@ async def colors(ctx: tanjun.abc.MessageContext, color: int) -> None:
     await ctx.respond(embed=embed)
 
 
-@tanjun.as_message_command("uptime")
-async def uptime(ctx: tanjun.abc.MessageContext) -> None:
-    await ctx.respond(
-        f"Been up for {humanize.precisedelta(ctx.client.metadata['uptime'] - datetime.datetime.now(), minimum_unit='MINUTES')}"
-    )
-
-
 @tanjun.as_slash_command("about", "Information about the bot itself.")
 async def about_command(
     ctx: tanjun.SlashContext,
@@ -141,8 +132,8 @@ async def about_command(
         description="Information about the bot",
         url="https://github.com/nxtlo/Fated",
     )
-    create = f"**Creation date**: {humanize.precisedelta(time_.clean_date(str(bot.created_at)[:-6]), minimum_unit='MINUTES')}"
-    uptime_ = f"**Uptime**: {humanize.precisedelta(ctx.client.metadata['uptime'] - datetime.datetime.now(), minimum_unit='MINUTES')}"
+    create = f"**Creation date**: {tanjun.from_datetime(consts.naive_datetime(bot.created_at), style='R')}"
+    uptime_ = f"**Uptime**: {ctx.client.metadata['uptime'] - datetime.datetime.now()}"
 
     embed.set_author(name=str(bot.id))
 
@@ -157,8 +148,7 @@ async def about_command(
         f"**Messages**: {len(cache.get_messages_view())}\n"
         f"**Voice states**: {len(cache.get_voice_states_view())}\n"
         f"**Presences**: {len(cache.get_presences_view())}\n"
-        f"**Invites**: {len(cache.get_invites_view())}"
-        ,
+        f"**Invites**: {len(cache.get_invites_view())}",
         inline=False,
     )
     embed.add_field(

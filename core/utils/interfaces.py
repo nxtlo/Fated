@@ -97,7 +97,7 @@ class GithubRepo:
     license: str | None
     size: int
     created_at: datetime.datetime
-    last_push: str
+    last_push: datetime.datetime
     page: str | None
     stars: int
     language: str | hikari.UndefinedType

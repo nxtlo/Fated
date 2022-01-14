@@ -53,7 +53,6 @@ async def get_anime(
     genre: str,
     net: net_.HTTPNet = tanjun.inject(type=net_.HTTPNet),
     component_client: yuyo.ComponentClient = tanjun.inject(type=yuyo.ComponentClient),
-    # cache: cache.Memory[str, hikari.Embed] = tanjun.inject(type=cache.Memory),
 ) -> None:
     await ctx.defer()
 
@@ -79,7 +78,6 @@ async def get_manga(
     ctx: tanjun.SlashContext,
     name: str,
     net: net_.HTTPNet = tanjun.inject(type=net_.HTTPNet),
-    # cache: cache.Memory[str, hikari.Embed] = tanjun.inject(type=cache.Memory),
     component_client: yuyo.ComponentClient = tanjun.inject(type=yuyo.ComponentClient),
 ) -> None:
     await ctx.defer()

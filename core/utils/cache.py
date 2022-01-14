@@ -36,10 +36,10 @@ import typing
 import aiobungie
 import aioredis
 import hikari
-
+import typing_extensions
 from hikari.internal import collections as hikari_collections
 
-from . import traits
+from . import traits, format
 
 try:
     import ujson as json  # type: ignore
@@ -111,9 +111,7 @@ class Hash(traits.HashRunner):
     ) -> None:
         await self.__connection.hset("mutes", str(guild_id), role_id)  # type: ignore
 
-    async def get_mute_role(
-        self, guild_id: hikari.Snowflake
-    ) -> hikari.Snowflake:
+    async def get_mute_role(self, guild_id: hikari.Snowflake) -> hikari.Snowflake:
         role_id: int
         if role_id := await self.__connection.hget("mutes", str(guild_id)):
             return hikari.Snowflake(role_id)
@@ -122,6 +120,38 @@ class Hash(traits.HashRunner):
 
     async def remove_mute_role(self, guild_id: hikari.Snowflake) -> None:
         await self.__connection.hdel("mutes", str(guild_id))
+
+    async def set_bungie_tokens(
+        self, user: hikari.Snowflake, respons: aiobungie.OAuth2Response
+    ) -> None:
+        await self.__dump_tokens(
+            user, respons.access_token, respons.refresh_token, respons.expires_in
+        )
+
+    async def remove_bungie_tokens(self, user: hikari.Snowflake) -> None:
+        await self.__connection.hdel("tokens", str(user))
+
+    # This impl hikari's client creds strat.
+    async def get_bungie_tokens(self, user: hikari.Snowflake) -> dict[str, str | float]:
+        is_expired = await self._is_expired(user)
+
+        if (tokens := await self.__loads_tokens(user)) and not is_expired:
+            return tokens
+
+        async with self._lock:
+            if (tokens := await self.__loads_tokens(user)) and not is_expired:
+                return tokens
+
+        try:
+            response = await self.__refresh_token(user)
+        except (aiobungie.Unauthorized, LookupError):
+            raise
+
+        expiry = time.monotonic() + math.floor(response.expires_in * 0.99)
+        tokens_ = await self.__dump_tokens(
+            user, response.access_token, response.refresh_token, expiry
+        )
+        return json.loads(tokens_)
 
     # Check whether the Bungie OAuth tokens are expired or not.
     # If expired we refresh them.
@@ -142,16 +172,14 @@ class Hash(traits.HashRunner):
                 "access": access_token,
                 "refresh": refresh_token,
                 "expires": expires_in,
-                "date": f"{datetime.datetime.now()!s}",
+                "date": str(datetime.datetime.now()),
             }
         )
         await self.__connection.hset(name="tokens", key=owner, value=body)  # type: ignore
         return body
 
     # Loads the authorized data from a string JSON object to a Python dict object.
-    async def __loads_tokens(
-        self, owner: hikari.Snowflake
-    ) -> dict[str, str | float]:
+    async def __loads_tokens(self, owner: hikari.Snowflake) -> dict[str, str | float]:
         resp: hikari.Snowflake = await self.__connection.hget("tokens", owner)
         if resp:
             return json.loads(str(resp))
@@ -182,39 +210,6 @@ class Hash(traits.HashRunner):
             raise RuntimeError(f"Couldn't refresh tokens for {owner}.") from err
         return response
 
-    async def set_bungie_tokens(
-        self, user: hikari.Snowflake, respons: aiobungie.OAuth2Response
-    ) -> None:
-        await self.__dump_tokens(
-            user, respons.access_token, respons.refresh_token, respons.expires_in
-        )
-
-    # This impl hikari's client creds strat.
-    async def get_bungie_tokens(
-        self, user: hikari.Snowflake
-    ) -> dict[str, str | float]:
-        is_expired = await self._is_expired(user)
-        if (tokens := await self.__loads_tokens(user)) and not is_expired:
-            return tokens
-
-        async with self._lock:
-            if (tokens := await self.__loads_tokens(user)) and not is_expired:
-                return tokens
-
-        try:
-            response = await self.__refresh_token(user)
-        except (aiobungie.Unauthorized, LookupError):
-            raise
-
-        expiry = time.monotonic() + math.floor(response.expires_in * 0.99)
-        tokens_ = await self.__dump_tokens(
-            user, response.access_token, response.refresh_token, expiry
-        )
-        return json.loads(tokens_)
-
-    async def remove_bungie_tokens(self, user: hikari.Snowflake) -> None:
-        await self.__connection.hdel("tokens", str(user))
-
 
 class Memory(hikari_collections.ExtendedMutableMapping[MKT, MVT]):
     """A standard in-memory cache that we use it for APIs responses, embeds, etc.
@@ -242,6 +237,11 @@ class Memory(hikari_collections.ExtendedMutableMapping[MKT, MVT]):
             # for 12 hours.
             expire_after = datetime.timedelta(hours=12)
 
+        if on_expire:
+            on_expire.__doc__ = (
+                f"{type(on_expire).__name__}({inspect.getargs(on_expire.__code__).args}) "
+                f'-> {on_expire.__annotations__.get("return")}'
+            )
         self.on_expire = on_expire
         self.expire_after = expire_after
         self._map = hikari_collections.TimedCacheMap[MKT, MVT](
@@ -268,7 +268,9 @@ class Memory(hikari_collections.ExtendedMutableMapping[MKT, MVT]):
             devours(k, v)
         return self
 
-    def into_iter(self, predicate: collections.Callable[[MKT], typing.Any], /) -> hikari.LazyIterator[MVT]:
+    def into_iter(
+        self, predicate: collections.Callable[[MKT], typing.Any], /
+    ) -> hikari.LazyIterator[MVT]:
         """Returns a flat lazy iterator of this cache's values based on the predicate keys."""
         for k, _ in self._map.items():
             if predicate(k):
@@ -290,19 +292,18 @@ class Memory(hikari_collections.ExtendedMutableMapping[MKT, MVT]):
         return self._map.keys()
 
     def get(self, key: MKT, default: _T | None = None, /) -> MVT | _T | None:
-       return self._map.get(key, default) 
+        return self._map.get(key, default)
 
-    def put(self, key: MKT, value: MVT) -> Memory[MKT, MVT]:
+    def put(self, key: MKT, value: MVT) -> typing_extensions.Self:
         self._map[key] = value
         return self
 
-    def set_expiry(self, date: datetime.timedelta) -> Memory[MKT, MVT]:
+    def set_expiry(self, date: datetime.timedelta) -> typing_extensions.Self:
         self.expire_after = date
         return self
 
     def set_on_expire(self, obj: collections.Callable[..., _T]) -> _T:
         self.on_expire = obj
-        obj.__doc__ = f'{type(obj).__name__}({inspect.getargs(obj.__code__)}) -> {obj.__annotations__.get("return")}'
         return typing.cast(_T, obj)
 
     def __repr__(self) -> str:
@@ -311,7 +312,7 @@ class Memory(hikari_collections.ExtendedMutableMapping[MKT, MVT]):
 
         docs = inspect.getdoc(self.on_expire)
         return "\n".join(
-            f"MemoryCache({k}={v!r}, expires_at={self.expire_after}, on_expire={docs})"
+            format.with_block(f"MemoryCache({k}={v!r}, expires_at={self.expire_after}, on_expire={docs})")
             for k, v in self._map.items()
         )
 

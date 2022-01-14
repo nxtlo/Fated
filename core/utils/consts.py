@@ -31,6 +31,7 @@ __all__: list[str] = [
     "iter",
     "randomize",
     "generate_component",
+    "naive_datetime"
 ]
 
 import datetime
@@ -80,6 +81,8 @@ GENRES: dict[str, int] = {
 }
 """Anime only genres."""
 
+def naive_datetime(datetime_: datetime.datetime) -> datetime.datetime:
+    return datetime_.astimezone(datetime.timezone.utc)
 
 async def generate_component(
     ctx: tanjun.SlashContext | tanjun.MessageContext,

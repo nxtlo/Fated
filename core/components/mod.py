@@ -39,21 +39,20 @@ import typing
 
 import asyncpg
 import hikari
-import humanize
 import tanjun
 import yuyo
 
 from core.psql import pool as pool_
 from core.utils import cache, consts, format, traits
 
-STDOUT: typing.Final[hikari.Snowflakeish] = hikari.Snowflake(789614938247266305)
+STDOUT: typing.Final[hikari.Snowflake] = hikari.Snowflake(789614938247266305)
 DURATIONS: dict[str, int] = {
     "Seconds": 1,
     "Minutes": 60,
     "Hours": 3600,
     "Days": 86400,
-    "Months": 2629800,
     "Weeks": 604800,
+    "Months": 2629800,
     "Years": 31557600,
 }
 
@@ -65,7 +64,7 @@ async def reload(ctx: tanjun.MessageContext) -> None:
     await ctx.respond(f"Reloaded modules")
 
 
-async def sleep_for(
+async def _sleep_for(
     timer: datetime.timedelta,
     ctx: tanjun.SlashContext,
     member: hikari.InteractionMember,
@@ -248,23 +247,19 @@ async def mute(
             reason,
         )
     except asyncpg.exceptions.UniqueViolationError:
-        unlocked_at = float(
-            await pool.fetchval(
-                "SELECT muted_at FROM mutes WHERE member_id = $1", member.id
-            )
+        unlocked_at: float = float(await pool.fetchval("SELECT muted_at FROM mutes WHERE member_id = $1", member.id))
+        unlock_date = tanjun.from_datetime(datetime.datetime.fromtimestamp(unlocked_at).astimezone(), style="R")
+        raise tanjun.CommandError(
+            f"This member is already been muted for {unlock_date}."
         )
-        date = humanize.naturaldelta(
-            datetime.datetime.now() - datetime.datetime.fromtimestamp(unlocked_at)
-        )
-        raise tanjun.CommandError(f"This member is already been muted for {date}.")
 
     else:
         await member.add_role(mute_role)
         d = datetime.timedelta(seconds=total_time)
         await ctx.respond(
-            f"Member {member.user.username} has been muted for {format.friendly_date(d, minimum_unit='SECONDS')}"
+            f"Member {member.user.username} has been muted for {duration} {unit}"
         )
-        asyncio.create_task(sleep_for(d, ctx, member, pool, hash))
+        asyncio.create_task(_sleep_for(d, ctx, member, pool, hash))
 
 
 @tanjun.with_owner_check(halt_execution=True)
@@ -628,7 +623,7 @@ async def cache_items(
     ctx: tanjun.MessageContext,
     cache_: cache.Memory[typing.Any, typing.Any] = tanjun.inject(type=cache.Memory),
 ) -> None:
-    await ctx.respond(format.with_block(cache_.view()))
+    await ctx.respond(cache_.view())
 
 
 @cacher.with_command
@@ -640,26 +635,33 @@ async def cache_clear(
     cache_.clear()
     await ctx.respond(cache_.view())
 
+
 @cacher.with_command
 @tanjun.as_message_command("iter")
 async def iter_cache(
     ctx: tanjun.SlashContext,
     cache: cache.Memory[int, hikari.Embed] = tanjun.inject(type=cache.Memory),
-    component: yuyo.ComponentClient = tanjun.inject(type=yuyo.ComponentClient)
+    component: yuyo.ComponentClient = tanjun.inject(type=yuyo.ComponentClient),
 ) -> None:
     cache.put(0, hikari.Embed(title="zzz", description="DODO"))
     cache.put(1, hikari.Embed(title="mememe", description="xoxo"))
     cache.put(2, hikari.Embed(title="YOYO", description=None))
     cache.put(30, hikari.Embed(title="??", description="brr"))
 
-    to_send = [item async for item in (
-        cache
+    to_send = [
+        item
+        async for item in (
+            cache
             # This will return all values where their keys are <= 10
             .into_iter(lambda item_id: item_id <= 10)
-            .take_while(lambda embed: embed.description is not None)
-            .limit(4)
-    )]
-    await consts.generate_component(ctx, ((hikari.UNDEFINED, embed) for embed in to_send), component)
+            # yield each item while the description is None.
+            .take_while(lambda embed: embed.description is not None).limit(4)
+        )
+    ]
+    await consts.generate_component(
+        ctx, ((hikari.UNDEFINED, embed) for embed in to_send), component
+    )
+
 
 async def when_join_guilds(event: hikari.GuildJoinEvent) -> None:
     guild = await event.fetch_guild()

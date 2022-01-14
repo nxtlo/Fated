@@ -23,16 +23,14 @@
 
 from __future__ import annotations
 
-__all__: list[str] = ["parse_code", "with_block", "error", "friendly_date"]
+__all__: list[str] = ["parse_code", "with_block", "error"]
 
 import sys
 import typing
 
-import humanize
 
 if typing.TYPE_CHECKING:
     import builtins
-    import datetime
     import types
 
 
@@ -74,9 +72,3 @@ def error(
             return with_block(sys.exc_info()[1])
         return sys.exc_info()[1]
     return source[1]
-
-
-def friendly_date(
-    date: datetime.datetime | datetime.timedelta, minimum_unit: str = "MINUTES"
-) -> str:
-    return humanize.precisedelta(date, minimum_unit=minimum_unit)

@@ -22,20 +22,20 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE. */
 
 CREATE TABLE IF NOT EXISTS destiny (
-    ctx_id BIGINT PRIMARY KEY NOT NULL,
+    ctx_id    BIGINT PRIMARY KEY NOT NULL,
     bungie_id BIGINT NOT NULL,
-    name TEXT,
-    code BIGINT,
-    memtype VARCHAR(6)
+    name      TEXT,
+    code      BIGINT,
+    memtype   VARCHAR(6)
 );
 
 CREATE TABLE IF NOT EXISTS mutes (
-    member_id BIGINT PRIMARY KEY NOT NULL,
-    guild_id BIGINT,
-    author_id BIGINT NOT NULL,
-    muted_at FLOAT NOT NULL,
-    why TEXT,
-    duration BIGINT
+    member_id   BIGINT PRIMARY KEY NOT NULL,
+    guild_id    BIGINT,
+    author_id   BIGINT NOT NULL,
+    muted_at    TIMESTAMP NOT NULL,
+    why         TEXT,
+    duration    BIGINT
 );
 
 /* We don't need this since we're using redis for the prefixes. */

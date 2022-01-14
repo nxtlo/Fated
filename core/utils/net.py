@@ -41,12 +41,15 @@ import attrs
 import hikari
 import multidict
 import yarl
+
 from aiobungie.internal import time
+
 from hikari import _about as about
 from hikari.internal import net
 from hikari.internal.time import (
     fast_iso8601_datetime_string_to_datetime as fast_datetime,
 )
+
 from yuyo import backoff
 
 from . import consts, format, interfaces, traits
@@ -201,17 +204,17 @@ class Wrapper(interfaces.APIAware):
 
         start_date: hikari.UndefinedOr[str] = hikari.UNDEFINED
         if (raw_start_date := anime_payload.get(date_key)):
-            start_date = format.friendly_date(
-                time.clean_date(raw_start_date),
-                    minimum_unit='minutes'
+            start_date = tanjun.from_datetime(
+                consts.naive_datetime(fast_datetime(raw_start_date)),  # type: ignore
+                    style='R'
                 )
 
         end_date: hikari.UndefinedOr[str] = hikari.UNDEFINED
         if (raw_end_date := anime_payload.get("end_date")):
-            end_date = format.friendly_date(
-                time.clean_date(raw_end_date),
-                minimum_unit='minutes'
-            )
+            end_date = tanjun.from_datetime(
+                consts.naive_datetime(fast_datetime(raw_end_date)),  # type: ignore
+                    style='R'
+                )
 
         return (
             hikari.Embed(
@@ -276,11 +279,7 @@ class Wrapper(interfaces.APIAware):
                 url=repo['html_url'],
                 is_forked=repo['fork'],
                 created_at=time.clean_date(repo['created_at']).astimezone(),
-                last_push=format.friendly_date(
-                    time.clean_date(
-                        repo['pushed_at']),
-                    minimum_unit='minutes'
-                ),
+                last_push=fast_datetime(repo['pushed_at']),  # type: ignore
                 page=repo.get("homepage", None),
                 size=repo['size'],
                 license=license_name,
@@ -392,11 +391,11 @@ class Wrapper(interfaces.APIAware):
                 .set_image(manga.get("image_url", None))
                 .add_field(
                     "Published at",
-                    str(format.friendly_date(time.clean_date(manga.get("start_date", hikari.UNDEFINED)), minimum_unit='minutes'))
+                    str(tanjun.from_datetime(fast_date(manga.get("start_date", hikari.UNDEFINED)), style='R'))  # type: ignore
                 )
                 .add_field(
                     "Finished at",
-                    str(format.friendly_date(time.clean_date(manga.get("end_date", hikari.UNDEFINED)), minimum_unit='minutes'))
+                    str(tanjun.from_datetime(fast_date(manga.get("end_date", hikari.UNDEFINED)), style='R'))  # type: ignore
                 )
                 .add_field("Chapters", manga.get("chapters", hikari.UNDEFINED))
                 .add_field("Volumes", manga.get("volumes", hikari.UNDEFINED))
