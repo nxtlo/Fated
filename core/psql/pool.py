@@ -25,43 +25,58 @@ from __future__ import annotations
 
 __all__: tuple[str, ...] = ("PgxPool", "PoolT")
 
-import asyncio
 import logging
-import os
 import pathlib
 import typing
+import datetime
 
 import asyncpg
-import colorlog
+import asyncpg.exceptions
 
-from core.utils import config, traits
+from hikari import iterators
 
-_LOG: typing.Final[logging.Logger] = colorlog.getLogger(__name__)
-logging.basicConfig(level=logging.INFO)
+from core.utils import traits
+from . import models
 
+if typing.TYPE_CHECKING:
+    import collections.abc as collections
+
+    import aiobungie
+    from hikari import snowflakes
+
+_LOG: typing.Final[logging.Logger] = logging.getLogger("fated.pool")
+_LOG.setLevel(logging.INFO)
+
+class ExistsError(RuntimeError):
+    """A runtime error raised when either the data exists or not found."""
+
+    def __init__(self, message: str = "") -> None:
+        self.message = message
+
+    def __repr__(self) -> str:
+        return self.message
+
+    def __str__(self) -> str:
+        return self.message
 
 class PgxPool(traits.PoolRunner):
     """An asyncpg pool."""
 
-    __slots__: tuple[str, ...] = ("_pool", "_lock")
-    _pool: asyncpg.Pool | None
+    __slots__: tuple[str, ...] = ("_pool",)
 
     def __init__(self) -> None:
-        self._lock: asyncio.Lock = asyncio.Lock()
+        self._pool: asyncpg.Pool | None = None
 
-    async def __call__(self) -> PgxPool:
-        asyncio.get_running_loop()
-        return await self.create_pool()
-
-    @property
-    def pool(self) -> asyncpg.Pool | None:
-        """Access to `self._pool`."""
-        return self._pool
+    def __await__(self) -> collections.Generator[typing.Any, None, type[PgxPool]]:
+        return self.create_pool().__await__()
 
     @classmethod
-    async def create_pool(cls, *, build: bool = False) -> PgxPool:
+    async def create_pool(cls, *, build: bool = False, schema_path: pathlib.Path | None = None) -> type[PgxPool]:
+        """Creates a new connection pool and created the tables if build is True."""
+
+        from core.utils import config
         config_ = config.Config()
-        """Returns an asyncpg new pool and creates the tables."""
+
         cls._pool = pool = await asyncpg.create_pool(
             database=config_.DB_NAME,
             user=config_.DB_USER,
@@ -69,48 +84,56 @@ class PgxPool(traits.PoolRunner):
             host=config_.DB_HOST,
             port=config_.DB_PORT,
         )
-        if build is True:
-            tables = cls.tables()
+
+        if build:
+            tables = cls.tables(schema_path)
+
             async with pool.acquire() as conn:
                 try:
-                    _LOG.info(tables)
                     await conn.execute(tables)
-                    os.system("clear" if os.name != "nt" else "cls")
                     _LOG.info("Tables build success.")
-                except asyncpg.exceptions.PostgresError as exc:
+
+                except Exception as exc:
                     raise RuntimeError("Failed to build the database tables.") from exc
+
                 finally:
                     await pool.release(conn)
-        return cls()
+        return cls
 
-    # Methods under are just typed asyncpg.Pool methods.
-    # Also since the pool already acquires the connection for us
-    # we don't need to re-aquire.
+    async def _execute(self, sql: str, /, *args: typing.Any, timeout: float | None = None) -> None:
+        await self.create_pool()
+        assert self._pool is not None
 
-    async def execute(
-        self, sql: str, /, *args: typing.Any, timeout: float | None = None
-    ) -> None:
-        return await self._pool.execute(sql, *args, timeout=timeout)
+        async with self._pool:
+            await self._pool.execute(sql, *args, timeout=typing.cast(float, timeout)) # asyncpg has weird typings.
 
-    async def fetch(
+    async def _fetch(
         self,
         sql: str,
         /,
         *args: typing.Any,
         timeout: float | None = None,
     ) -> list[typing.Any]:
-        return await self._pool.fetch(sql, *args, timeout=timeout)
+        await self.create_pool()
+        assert self._pool is not None
 
-    async def fetchrow(
+        async with self._pool.acquire() as pool:
+            return await pool.fetch(sql, *args, timeout=timeout)
+
+    async def _fetchrow(
         self,
         sql: str,
         /,
         *args: typing.Any,
         timeout: float | None = None,
-    ) -> list[typing.Any] | dict[str, typing.Any]:
-        return await self._pool.fetchrow(sql, *args, timeout=timeout)
+    ) -> list[typing.Any] | collections.Mapping[str, typing.Any] | tuple[typing.Any]:
+        await self.create_pool()
+        assert self._pool is not None
 
-    async def fetchval(
+        async with self._pool.acquire() as pool:
+            return await pool.fetchrow(sql, *args, timeout=timeout)
+
+    async def _fetchval(
         self,
         sql: str,
         /,
@@ -118,23 +141,130 @@ class PgxPool(traits.PoolRunner):
         column: int | None = 0,
         timeout: float | None = None,
     ) -> typing.Any:
-        return await self._pool.fetchval(sql, *args, column=column, timeout=timeout)
+        await self.create_pool()
+        assert self._pool is not None
+
+        async with self._pool.acquire() as pool:
+            return await pool.fetchval(sql, *args, column=column, timeout=timeout)
+
+    @property
+    def pool(self) -> asyncpg.Pool:
+        assert self._pool is not None
+        return self._pool
+
+    async def fetch_destiny_member(self, user_id: snowflakes.Snowflake) -> models.Destiny:
+        query = await self._fetchrow("SELECT * FROM Destiny WHERE ctx_id = $1;", user_id)
+        if not query:
+            raise ExistsError(f"User {user_id} not found in Destiny table.")
+
+        return models.Destiny.into(dict(query))
+
+    async def fetch_destiny_members(self) -> iterators.LazyIterator[models.Destiny]:
+        query = await self._fetch("SELECT * FROM Destiny;")
+        if not query:
+            raise ExistsError("No users found in Destiny tables.")
+
+        return iterators.FlatLazyIterator([models.Destiny.into(dict(member)) for member in query])
+
+    async def put_destiny_member(
+        self,
+        user_id: snowflakes.Snowflake,
+        membership_id: int,
+        name: str,
+        code: int,
+        membership_type: aiobungie.MembershipType
+    ) -> None:
+        try:
+            await self._execute(
+                "INSERT INTO destiny(ctx_id, membership_id, name, code, membership_type) "
+                "VALUES($1, $2, $3, $4, $5)",
+                int(user_id),
+                membership_id,
+                name,
+                code,
+                membership_type.name.title(),
+            )
+        except asyncpg.exceptions.UniqueViolationError:
+            raise ExistsError(f"User {user_id}:{name} exists.")
+
+    async def remove_destiny_member(self, user_id: snowflakes.Snowflake) -> None:
+        try:
+            await self._execute("DELETE FROM Destiny WHERE ctx_id = $1", int(user_id))
+        except asyncpg.exceptions.NoDataFoundError:
+            raise ExistsError
+
+    async def fetch_mutes(self) -> iterators.LazyIterator[models.Mutes]:
+        query = await self._fetch("SELECT * FROM Mutes;")
+        if not query:
+            raise ExistsError("No mutes found.")
+
+        return iterators.FlatLazyIterator([models.Mutes.into(dict(entry)) for entry in query])
+
+    async def put_mute(
+        self,
+        member_id: snowflakes.Snowflake,
+        author_id: snowflakes.Snowflake,
+        guild_id: snowflakes.Snowflake,
+        duration: float,
+        why: str
+    ) -> None:
+        try:
+            await self._execute(
+                "INSERT INTO mutes(member_id, guild_id, author_id, muted_at, duration, why) "
+                "VALUES($1, $2, $3, $4, $5, $6)",
+                int(member_id),
+                int(guild_id),
+                int(author_id),
+                datetime.datetime.now(datetime.timezone.utc),
+                duration,
+                why,
+            )
+        except asyncpg.exceptions.UniqueViolationError:
+            raise ExistsError(f"Member {member_id} is already muted.")
+
+    async def remove_mute(self, user_id: snowflakes.Snowflake) -> None:
+        try:
+            await self._execute("DELETE FROM Mutes WHERE member_id = $1", int(user_id))
+        except asyncpg.exceptions.NoDataFoundError:
+            raise ExistsError(f"User {user_id} is not muted.")
+
+    async def fetch_notes(self) -> iterators.LazyIterator[models.Notes]:
+        """Fetch all notes and return a lazy iterator of notes."""
+        query = await self._fetch("SELECT * FROM Notes;")
+        if not query:
+            raise ExistsError("No notes found.")
+
+        return iterators.FlatLazyIterator(models.Notes.into(dict(note)) for note in query)
+
+    async def fetch_notes_for(self, user_id: snowflakes.Snowflake) -> collections.Collection[models.Notes]:
+        """Fetch notes for a specific snowflake ID, if nothing found `LookupError` will be raised."""
+        query = await self._fetch("SELECT * FROM Notes WHERE author_id = $1", user_id)
+        if not query:
+            raise ExistsError(f"No notes for {user_id} found.")
+
+        return [models.Notes.into(dict(note)) for note in query]
+
+    async def put_note(self) -> None:
+        ...
+
+    async def remove_note(self) -> None:
+        ...
 
     async def close(self) -> None:
-        try:
-            _LOG.debug("Pool is closing.")
-            await self._pool.close()
-        except asyncpg.exceptions.InterfaceError as e:
-            raise e
+        self._pool = None
+        # This does the same thing as await pool.close()
+        del self._pool
+        _LOG.debug("Pool closed.")
 
     @staticmethod
-    def tables() -> str:
-        p = pathlib.Path("core") / "psql" / "tables.sql"
+    def tables(path: pathlib.Path | None = None) -> str:
+        p = path or pathlib.Path("core") / "psql" / "tables.sql"
+
         if not p.exists():
-            raise LookupError(f"Tables file not found in {p!r}")
+            raise FileNotFoundError(f"Tables file not found in {p!r}")
+
         with p.open() as table:
             return table.read()
-
 
 PoolT = typing.NewType("PoolT", PgxPool)
 """A new type hint for the Pool class it self.

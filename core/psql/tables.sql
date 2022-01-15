@@ -21,26 +21,28 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE. */
 
-CREATE TABLE IF NOT EXISTS destiny (
-    ctx_id    BIGINT PRIMARY KEY NOT NULL,
-    bungie_id BIGINT NOT NULL,
-    name      TEXT,
-    code      BIGINT,
-    memtype   VARCHAR(6)
+CREATE TABLE IF NOT EXISTS Destiny (
+    ctx_id          BIGINT PRIMARY KEY NOT NULL,
+    membership_id   BIGINT NOT NULL UNIQUE,
+    name            TEXT,
+    code            SMALLINT NOT NULL UNIQUE CHECK (code > 1),
+    membership_type VARCHAR(6)
 );
 
-CREATE TABLE IF NOT EXISTS mutes (
+CREATE TABLE IF NOT EXISTS Mutes (
     member_id   BIGINT PRIMARY KEY NOT NULL,
-    guild_id    BIGINT,
+    guild_id    BIGINT NOT NULL,
     author_id   BIGINT NOT NULL,
     muted_at    TIMESTAMP NOT NULL,
     why         TEXT,
-    duration    BIGINT
+    duration    BIGINT NOT NULL
 );
 
-/* We don't need this since we're using redis for the prefixes. */
-
-/*CREATE TABLE IF NOT EXISTS guilds (
-    id BIGINT PRIMARY KEY,
-    prefix VARCHAR(5)
-); */
+CREATE TABLE IF NOT EXISTS Notes (
+    id          SERIAL PRIMARY KEY,
+    name        TEXT NOT NULL UNIQUE,
+    content     TEXT NOT NULL,
+    author_id   BIGINT NOT NULL,
+    guild_id    BIGINT NOT NULL,
+    created_at  TIMESTAMP NOT NULL
+);

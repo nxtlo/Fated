@@ -36,6 +36,8 @@ if typing.TYPE_CHECKING:
     import aiohttp
     import asyncpg
     import yarl
+    import pathlib
+
     from hikari import files, snowflakes
     from hikari.internal import data_binding
 
@@ -102,69 +104,19 @@ class HashRunner(fast.FastProtocolChecking, typing.Protocol):
 
 @typing.runtime_checkable
 class PoolRunner(fast.FastProtocolChecking, typing.Protocol):
-    """A typed asyncpg pool protocol."""
+    """The main structural protocol."""
 
     __slots__ = ()
 
-    @property
-    def pool(self) -> asyncpg.Pool | None:
-        raise NotImplementedError
-
     @classmethod
-    async def create_pool(cls, *, build: bool = False) -> PoolRunner:
-        """Created a new pool.
-
-        Parameters
-        ----------
-        build : `bool`
-            if set to `True` the pool will build the tables.
-            This is only called when you run `python run.py db init`
-
-        Returns
-        --------
-        `Self`
-            The pool.
-        """
-        raise NotImplementedError
-
-    async def execute(
-        self, sql: str, /, *args: typing.Any, timeout: float | None = None
-    ) -> None:
-        raise NotImplementedError
-
-    async def fetch(
-        self,
-        sql: str,
-        /,
-        *args: typing.Any,
-        timeout: float | None = None,
-    ) -> list[typing.Any]:
-        raise NotImplementedError
-
-    async def fetchrow(
-        self,
-        sql: str,
-        /,
-        *args: typing.Any,
-        timeout: float | None = None,
-    ) -> list[typing.Any] | dict[str, typing.Any]:
-        raise NotImplementedError
-
-    async def fetchval(
-        self,
-        sql: str,
-        /,
-        *args: typing.Any,
-        column: int | None = None,
-        timeout: float | None = None,
-    ) -> typing.Any:
+    async def create_pool(cls, *, build: bool = False) -> type[PoolRunner]:
         raise NotImplementedError
 
     async def close(self) -> None:
         raise NotImplementedError
 
     @staticmethod
-    def tables() -> str:
+    def tables(path: pathlib.Path | None = None) -> str:
         raise NotImplementedError
 
 

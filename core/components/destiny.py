@@ -165,7 +165,7 @@ def _build_inventory_item_embed(
     return embed
 
 @destiny_group.with_command
-@tanjun.as_slash_command("sync", "Sync your Bungie account with this bot.")
+@tanjun.as_slash_command("sync", "Sync your Bungie account with this bot.", default_to_ephemeral=True)
 async def sync_command(
     ctx: tanjun.SlashContext,
     redis: traits.HashRunner = tanjun.inject(type=traits.HashRunner),
@@ -177,7 +177,6 @@ async def sync_command(
     assert url
 
     await ctx.create_initial_response(
-        flags=hikari.MessageFlag.EPHEMERAL,
         embed=hikari.Embed(
             title="How to sync your account.",
             description=(
@@ -198,8 +197,7 @@ async def sync_command(
             and m.content is not None and 'code=' in m.content
         )
     except asyncio.TimeoutError:
-        await ctx.edit_initial_response("Time is up! Try again.")
-        return
+        raise tanjun.CommandError("Time is up! Try again.")
 
     else:
         if code.content:
@@ -216,71 +214,58 @@ async def sync_command(
             except aiobungie.BadRequest:
                 raise tanjun.CommandError("Invalid URL. Please run the command again and send the URL.")
 
-            # We try to store the destiny membership if they're not in the database already.
-            # Since its not worth running another REST call. We check the db locally first.
-            # This is usually caused by people who are already synced but ran the sync cmd again.
-            if not (_ := await pool.fetchval("SELECT bungie_id FROM destiny WHERE ctx_id = $1", ctx.author.id)):
-                user = await client.fetch_current_user_memberships(response.access_token)
+            user = await client.fetch_current_user_memberships(response.access_token)
 
-                try:
-                    membership = user.destiny[0]
-                except IndexError:
-                    # They don't have a Destiny membership aperantly ¯\_(ツ)_/¯
-                    pass
+            try:
+                membership = user.destiny[0]
+            except IndexError:
+                # They don't have a Destiny membership aperantly ¯\_(ツ)_/¯
+                raise tanjun.CommandError("You don't have any Destiny 2 memberships!")
 
-                if (primary_id_ := user.primary_membership_id) is not None:
-                    primary_id = primary_id_
-                else:
-                    primary_id = membership.id
-
-                await pool.execute(
-                    "INSERT INTO destiny(ctx_id, bungie_id, name, code, memtype) VALUES($1, $2, $3, $4, $5)",
-                    ctx.author.id,
-                    primary_id,
-                    membership.name,
-                    membership.code,
-                    str(membership.type).title(),
-                )
-                await redis.set_bungie_tokens(
-                    ctx.author.id,
-                    response
-                )
-
-                await ctx.respond(
-                    embed=(hikari.Embed(
-                        title=membership.unique_name,
-                        description=f"Synced successfully.",
-                        url=user.bungie.profile_url
-                        ).set_thumbnail(str(user.bungie.picture))
-                    )
-                )
-
+            if (primary_id_ := user.primary_membership_id) is not None:
+                primary_id = primary_id_
             else:
-                await ctx.respond("\U0001f44d")
+                primary_id = membership.id
+
+            await pool.put_destiny_member(
+                ctx.author.id,
+                primary_id,
+                str(membership.name),
+                membership.code if membership.code else 0,
+                membership.type
+            )
+            await redis.set_bungie_tokens(
+                ctx.author.id,
+                response
+            )
+
+            await ctx.respond(
+                embed=(hikari.Embed(
+                    title=membership.unique_name,
+                    description=f"Synced successfully.",
+                    url=user.bungie.profile_url
+                    ).set_thumbnail(str(user.bungie.picture))
+                )
+            )
+
 
 @destiny_group.with_command
 @tanjun.as_slash_command("desync", "Desync your destiny membership with this bot.")
 async def desync(
     ctx: tanjun.abc.SlashContext,
-    pool: pool.PoolT = tanjun.injected(type=pool.PoolT),
+    pool_: pool.PoolT = tanjun.injected(type=pool.PoolT),
     redis: traits.HashRunner = tanjun.inject(type=traits.HashRunner)
 ) -> None:
 
     # Redis will remove if the tokens exists and fallback if not
     await redis.remove_bungie_tokens(ctx.author.id)
 
-    if (
-        member := await pool.fetchval(
-            "SELECT ctx_id FROM destiny WHERE ctx_id = $1", ctx.author.id
-        )
-    ):
-        try:
-            await pool.execute("DELETE FROM destiny WHERE ctx_id = $1", member)
-        except Exception as exc:
-            raise RuntimeError(f"Couldn't delete member {ctx.author!r} db records.") from exc
-        await ctx.respond("Successfully desynced your membership.")
-    else:
-        pass
+    try:
+        await pool_.remove_destiny_member(ctx.author.id)
+    except pool.ExistsError:
+        raise tanjun.CommandError(f"Member {ctx.author} is not synced.")
+
+    await ctx.respond("Successfully desynced your membership.")
 
 @destiny_group.with_command
 @tanjun.as_slash_command("user", "Return authorized user information.")
@@ -328,7 +313,7 @@ async def user_command(
             "Memberships",
             '\n'.join([f'[{m.type}: {m.unique_name}]({m.link})' for m in user.destiny])
         )
-        .set_footer(f'{tanjun.from_datetime(consts.naive_datetime(user.bungie.created_at), style="R")}')
+        .set_footer(f'{consts.naive_datetime(user.bungie.created_at)}')
     )
     await ctx.respond(embed=embed)
 
@@ -403,7 +388,7 @@ async def characters(
     member: hikari.InteractionMember | None,
     query: str | int | None,
     client: aiobungie.Client = tanjun.injected(type=aiobungie.Client),
-    pool: pool.PoolT = tanjun.injected(type=pool.PoolT),
+    pool_: pool.PoolT = tanjun.injected(type=pool.PoolT),
     component_client: yuyo.ComponentClient = tanjun.inject(type=yuyo.ComponentClient),
 ) -> None:
 
@@ -422,21 +407,18 @@ async def characters(
             platform = str(player.type).title()
 
     else:
-        sql = typing.cast(dict[str, typing.Any] | None, await pool.fetchrow(
-            "SELECT memtype, bungie_id FROM destiny WHERE ctx_id = $1", member.id
-        )
-    )
-        if not sql:
+        try:
+            membership = await pool_.fetch_destiny_member(member.id)
+        except pool.ExistsError:
             raise tanjun.CommandError(
-                f"Member `{member.user.username}` is not synced yet. If that was you type `/destiny sync` for syncing."
+                f"Member `{member.user.username}` is not synced yet. If that was you type `/destiny sync` first."
             )
-
-        id = sql['bungie_id']
-        platform = sql['memtype']
+        id = membership.membership_id
+        platform = membership.membership_type
 
     try:
         char_resp = await client.fetch_profile(
-            int(id), _PLATFORMS[platform], aiobungie.ComponentType.CHARACTERS
+            id, _PLATFORMS[platform], aiobungie.ComponentType.CHARACTERS
         )
 
     except aiobungie.MembershipTypeError as exc:

@@ -53,10 +53,8 @@ if typing.TYPE_CHECKING:
 _LOG: typing.Final[logging.Logger] = logging.getLogger(__name__)
 logging.basicConfig(level=logging.DEBUG)
 
-# Memory types.
 MKT = typing.TypeVar("MKT")
 MVT = typing.TypeVar("MVT")
-
 _T = typing.TypeVar("_T")
 
 

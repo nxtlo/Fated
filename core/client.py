@@ -83,6 +83,7 @@ def _build_client(
         max_retries=4,
     )
     redis_hash = cache.Hash(max_connections=10, aiobungie_client=aiobungie_client)
+    mem_cache = cache.Memory[typing.Any, typing.Any]()
     yuyo_client = yuyo.ComponentClient.from_gateway_bot(bot, event_managed=False)
 
     client = (
@@ -93,15 +94,13 @@ def _build_client(
         )
         # pg pool
         .set_type_dependency(pool_.PoolT, pg_pool)
-        .add_client_callback(tanjun.ClientCallbackNames.STARTING, pg_pool.create_pool)  # type: ignore
-        .add_client_callback(tanjun.ClientCallbackNames.CLOSING, pg_pool.close)
         # own aiohttp client session.
         .set_type_dependency(net.HTTPNet, typing.cast(traits.NetRunner, client_session))
         # Cache. This is kinda overkill but we need the memory cache for api requests
         # And the redis hash for stuff that are not worth storing in a database for the sake of speed.
         # i.e., OAuth2 tokens
         .set_type_dependency(traits.HashRunner, redis_hash)
-        .set_type_dependency(cache.Memory, cache.Memory[object, object]())
+        .set_type_dependency(cache.Memory, mem_cache)
         # aiobungie client
         .set_type_dependency(aiobungie.Client, aiobungie_client)
         .add_client_callback(
@@ -133,6 +132,7 @@ def _enable_logging(
     net: bool = False,
     aiobungie: bool = False,
 ) -> None:
+    logging.getLogger("hikari.gateway").setLevel(logging.CRITICAL)
     if hikari:
         logging.getLogger("hikari.rest").setLevel(ux.TRACE)
         logging.getLogger("hikari.cache").setLevel(logging.DEBUG)

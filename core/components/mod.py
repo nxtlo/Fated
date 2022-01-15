@@ -43,7 +43,7 @@ import tanjun
 import yuyo
 
 from core.psql import pool as pool_
-from core.utils import cache, consts, format, traits
+from core.utils import cache, format, traits
 
 STDOUT: typing.Final[hikari.Snowflake] = hikari.Snowflake(789614938247266305)
 DURATIONS: dict[str, int] = {
@@ -73,7 +73,7 @@ async def _sleep_for(
 ) -> None:
     assert ctx.guild_id is not None
     await asyncio.sleep(timer.total_seconds())
-    await pool.execute("DELETE FROM mutes WHERE member_id = $1", member.id)
+    await pool.remove_mute(member.id)
     mute_role = await hash.get_mute_role(ctx.guild_id)
     await member.remove_role(mute_role)
     await ctx.respond(f"{member.mention} has been unmuted.")
@@ -130,73 +130,69 @@ async def _create_mute_role(
     hash: traits.HashRunner,
 ) -> None:
     assert ctx.guild_id is not None
-    try:
-        # TODO: Check cache first?
-        guild = await ctx.rest.fetch_guild(ctx.guild_id)
-        if not guild:
-            # DMs
-            return
 
-        roles = await guild.fetch_roles()
+    # TODO: Check cache first?
+    guild = await ctx.rest.fetch_guild(ctx.guild_id)
+    if not guild:
+        # DMs
+        return
 
-        if any((r := role) and r.name == "Muted" for role in roles):
-            await ctx.respond(
-                "A role named `Muted` already exists, You want to set it as default mute role?"
-                f" Yes, Or No"
+    roles = await guild.fetch_roles()
+
+    if any((r := role) and r.name == "Muted" for role in roles):
+        await ctx.respond(
+            "A role named `Muted` already exists, You want to set it as default mute role?"
+            f" Yes, Or No"
+        )
+
+        try:
+            maybe_setit = await bot.wait_for(
+                hikari.GuildMessageCreateEvent,
+                20,
+                lambda m: m.channel_id == ctx.channel_id
+                and m.author_id == ctx.author.id,
             )
+        except asyncio.TimeoutError:
+            pass
 
-            try:
-                maybe_setit = await bot.wait_for(
-                    hikari.GuildMessageCreateEvent,
-                    20,
-                    lambda m: m.channel_id == ctx.channel_id
-                    and m.author_id == ctx.author.id,
-                )
-            except asyncio.TimeoutError:
-                pass
-
-            if maybe_setit.content in {"Yes", "yes", "y"}:
-                await _done(ctx, r, guild, hash)
-                await ctx.respond(f"Set mute role to {r.mention}.")
-                return
-
-            elif maybe_setit.content in {"No", "no", "n"}:
-                await ctx.respond("Returning.", delete_after=4.0)
-                return
-
-            else:
-                raise tanjun.CommandError("Unrecognized answer..")
-
-        # No muted role.
-        else:
-            try:
-                role = await ctx.rest.create_role(
-                    guild.id,
-                    name="Muted",
-                )
-            except hikari.HikariError as exc:
-                raise tanjun.CommandError(f"Couldn't create role: {exc!s}")
-
-            await _done(ctx, role, guild, hash)
-            await ctx.respond("Created the mute role.")
+        if maybe_setit.content in {"Yes", "yes", "y"}:
+            await _done(ctx, r, guild, hash)
+            await ctx.respond(f"Set mute role to {r.mention}.")
             return
 
-    except Exception:
-        raise RuntimeError(f"Couldn't create mute role for guild {ctx.get_guild()!r}")
+        elif maybe_setit.content in {"No", "no", "n"}:
+            await ctx.respond("Returning.", delete_after=4.0)
+            return
 
+        else:
+            raise tanjun.CommandError("Unrecognized answer..")
 
-mutes = (
-    tanjun.slash_command_group("mute", "Commands related to muting members.")
-    .add_check(tanjun.GuildCheck())
-    .add_check(tanjun.AuthorPermissionCheck(hikari.Permissions.MUTE_MEMBERS))
-)
-mute_roles_group = mutes.with_command(
-    tanjun.slash_command_group("role", "Commands to manages the mute role.")
-).add_check(tanjun.AuthorPermissionCheck(hikari.Permissions.MANAGE_ROLES))
+    # No muted role.
+    else:
+        try:
+            role = await ctx.rest.create_role(
+                guild.id,
+                name="Muted",
+            )
+        except hikari.HTTPError as exc:
+            raise tanjun.CommandError(f"Couldn't create role: {exc.message}")
 
+        await _done(ctx, role, guild, hash)
+        await ctx.respond("Created the mute role.")
+        return
 
-@mute_roles_group.with_command
-@tanjun.as_slash_command("create", "Creates the mute role.")
+# mutes = (
+#     tanjun.slash_command_group("mute", "Commands related to muting members.")
+#     .add_check(tanjun.GuildCheck())
+#     .add_check(tanjun.AuthorPermissionCheck(hikari.Permissions.MUTE_MEMBERS))
+# )
+# mute_roles_group = mutes.with_command(
+#     tanjun.slash_command_group("role", "Commands to manages the mute role.")
+# ).add_check(tanjun.AuthorPermissionCheck(hikari.Permissions.MANAGE_ROLES))
+# 
+# 
+# @mute_roles_group.with_command
+# @tanjun.as_slash_command("create", "Creates the mute role.")
 async def create_mute_role(
     ctx: tanjun.SlashContext,
     hash: traits.HashRunner = tanjun.inject(type=traits.HashRunner),
@@ -205,17 +201,16 @@ async def create_mute_role(
     await _create_mute_role(ctx, bot, hash)
 
 
-# TODO: Check for role positions.
-@mutes.with_command
-@tanjun.with_member_slash_option("member", "The member to mute.")
-@tanjun.with_str_slash_option(
-    "unit", "The duration unit to be muted.", choices=consts.iter(DURATIONS)
-)
-@tanjun.with_float_slash_option("duration", "The time duration to be muted")
-@tanjun.with_str_slash_option(
-    "reason", "A reason given for why the member was muted.", default="UNDEFINED"
-)
-@tanjun.as_slash_command("member", "Mute someone given a duration.")
+# @mutes.with_command
+# @tanjun.with_member_slash_option("member", "The member to mute.")
+# @tanjun.with_str_slash_option(
+#     "unit", "The duration unit to be muted.", choices=consts.iter(DURATIONS)
+# )
+# @tanjun.with_float_slash_option("duration", "The time duration to be muted")
+# @tanjun.with_str_slash_option(
+#     "reason", "A reason given for why the member was muted.", default="UNDEFINED"
+# )
+# @tanjun.as_slash_command("member", "Mute someone given a duration.")
 async def mute(
     ctx: tanjun.SlashContext,
     member: hikari.InteractionMember,
@@ -236,30 +231,29 @@ async def mute(
 
     try:
         total_time = DURATIONS[unit] * duration
-        await pool.execute(
-            "INSERT INTO mutes(member_id, guild_id, author_id, muted_at, duration, why) "
-            "VALUES($1, $2, $3, $4, $5, $6)",
+        await pool.put_mute(
             member.id,
             ctx.guild_id,
             ctx.author.id,
-            datetime.datetime.today().timestamp(),
             total_time,
             reason,
         )
-    except asyncpg.exceptions.UniqueViolationError:
-        unlocked_at: float = float(await pool.fetchval("SELECT muted_at FROM mutes WHERE member_id = $1", member.id))
-        unlock_date = tanjun.from_datetime(datetime.datetime.fromtimestamp(unlocked_at).astimezone(), style="R")
-        raise tanjun.CommandError(
-            f"This member is already been muted for {unlock_date}."
-        )
 
-    else:
-        await member.add_role(mute_role)
-        d = datetime.timedelta(seconds=total_time)
-        await ctx.respond(
-            f"Member {member.user.username} has been muted for {duration} {unit}"
-        )
-        asyncio.create_task(_sleep_for(d, ctx, member, pool, hash))
+    except pool_.ExistsError:
+        mutes = await pool.fetch_mutes()
+
+        async for mute in mutes.filter(lambda m: m.member_id == member.id):
+            unlock_date = tanjun.from_datetime(mute.muted_at, style="R")
+            raise tanjun.CommandError(
+                f"This member muted. Will unlock in {unlock_date}."
+            )
+
+    await member.add_role(mute_role)
+    d = datetime.timedelta(seconds=total_time)
+    await ctx.respond(
+        f"Member {member.user.username} has been muted for {duration} {unit}"
+    )
+    asyncio.create_task(_sleep_for(d, ctx, member, pool, hash))
 
 
 @tanjun.with_owner_check(halt_execution=True)
@@ -277,7 +271,7 @@ async def run_sql(
     result: None | list[asyncpg.Record] = None
 
     try:
-        result = await pool.fetch(query)
+        result = await pool._fetch(query)  # type: ignore
         # SQL Code error
     except asyncpg.exceptions.PostgresSyntaxError:
         raise tanjun.CommandError(format.with_block(sys.exc_info()[1]))
@@ -634,34 +628,6 @@ async def cache_clear(
 ) -> None:
     cache_.clear()
     await ctx.respond(cache_.view())
-
-
-@cacher.with_command
-@tanjun.as_message_command("iter")
-async def iter_cache(
-    ctx: tanjun.SlashContext,
-    cache: cache.Memory[int, hikari.Embed] = tanjun.inject(type=cache.Memory),
-    component: yuyo.ComponentClient = tanjun.inject(type=yuyo.ComponentClient),
-) -> None:
-    cache.put(0, hikari.Embed(title="zzz", description="DODO"))
-    cache.put(1, hikari.Embed(title="mememe", description="xoxo"))
-    cache.put(2, hikari.Embed(title="YOYO", description=None))
-    cache.put(30, hikari.Embed(title="??", description="brr"))
-
-    to_send = [
-        item
-        async for item in (
-            cache
-            # This will return all values where their keys are <= 10
-            .into_iter(lambda item_id: item_id <= 10)
-            # yield each item while the description is None.
-            .take_while(lambda embed: embed.description is not None).limit(4)
-        )
-    ]
-    await consts.generate_component(
-        ctx, ((hikari.UNDEFINED, embed) for embed in to_send), component
-    )
-
 
 async def when_join_guilds(event: hikari.GuildJoinEvent) -> None:
     guild = await event.fetch_guild()
