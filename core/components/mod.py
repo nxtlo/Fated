@@ -28,13 +28,8 @@ from yuyo import backoff
 __all__: tuple[str, ...] = ("mod",)
 
 import asyncio
-import contextlib
 import datetime
-import inspect
-import io
 import sys
-import textwrap
-import traceback
 import typing
 
 import asyncpg
@@ -60,9 +55,7 @@ DURATIONS: dict[str, int] = {
 @tanjun.with_owner_check
 @tanjun.as_message_command("reload")
 async def reload(ctx: tanjun.MessageContext) -> None:
-    ctx.client.reload_modules(f"core.components")
-    await ctx.respond(f"Reloaded modules")
-
+    await ctx.client.clear_application_commands()
 
 async def _sleep_for(
     timer: datetime.timedelta,
@@ -181,6 +174,7 @@ async def _create_mute_role(
         await ctx.respond("Created the mute role.")
         return
 
+
 # mutes = (
 #     tanjun.slash_command_group("mute", "Commands related to muting members.")
 #     .add_check(tanjun.GuildCheck())
@@ -189,8 +183,8 @@ async def _create_mute_role(
 # mute_roles_group = mutes.with_command(
 #     tanjun.slash_command_group("role", "Commands to manages the mute role.")
 # ).add_check(tanjun.AuthorPermissionCheck(hikari.Permissions.MANAGE_ROLES))
-# 
-# 
+#
+#
 # @mute_roles_group.with_command
 # @tanjun.as_slash_command("create", "Creates the mute role.")
 async def create_mute_role(
@@ -462,101 +456,6 @@ async def get_guilds(ctx: tanjun.MessageContext) -> None:
     )
     await ctx.respond(embed=embed)
 
-
-@tanjun.with_owner_check
-@tanjun.with_greedy_argument("body", converters=(str,))
-@tanjun.with_parser
-@tanjun.as_message_command("eval")
-async def eval_command(
-    ctx: tanjun.MessageContext,
-    body: str,
-    /,
-    bot: hikari.GatewayBot = tanjun.inject(type=hikari.GatewayBot),
-) -> None:
-    """Evaluates python code"""
-    env = {
-        "ctx": ctx,
-        "bot": bot,
-        "hikari": hikari,
-        "tanjun": tanjun,
-        "asyncio": asyncio,
-        "source": inspect.getsource,
-    }
-
-    def cleanup_code(content: str) -> str:
-        """Automatically removes code blocks from the code."""
-        # remove ```py\n```
-        if content.startswith("```") and content.endswith("```"):
-            return "\n".join(content.split("\n")[1:-1])
-
-        return content.strip("` \n")
-
-    env.update(globals())
-
-    body = cleanup_code(body)
-    stdout = io.StringIO()
-    err = out = None
-
-    to_compile = f'async def func():\n{textwrap.indent(body, "  ")}'
-
-    def paginate(text: str) -> list[str]:
-        """Simple generator that paginates text."""
-        last = 0
-        pages: list[str] = []
-        for curr in range(0, len(text)):
-            if curr % 1980 == 0:
-                pages.append(text[last:curr])
-                last = curr
-                appd_index = curr
-        if appd_index != len(text) - 1:
-            pages.append(text[last:curr])
-        return list(filter(lambda a: a != "", pages))
-
-    try:
-        exec(to_compile, env)
-    except Exception as e:
-        err = await ctx.respond(f"```py\n{e.__class__.__name__}: {e}\n```")
-        return await ctx.message.add_reaction("\u2049")
-
-    func = env["func"]
-    try:
-        with contextlib.redirect_stdout(stdout):
-            ret = await func()  # type: ignore
-    except Exception as e:
-        value = stdout.getvalue()
-        err = await ctx.respond(f"```py\n{value}{traceback.format_exc()}\n```")
-    else:
-        value = stdout.getvalue()
-        if ret is None:
-            if value:
-                try:
-                    out = await ctx.respond(f"```py\n{value}\n```")
-                except Exception:
-                    paginated_text = paginate(value)
-                    for page in paginated_text:
-                        if page == paginated_text[-1]:
-                            out = await ctx.respond(f"```py\n{page}\n```")
-                            break
-                        await ctx.respond(f"```py\n{page}\n```")
-        else:
-            try:
-                out = await ctx.respond(f"```py\n{value}{ret}\n```")
-            except:
-                paginated_text = paginate(f"{value}{ret}")
-                for page in paginated_text:
-                    if page == paginated_text[-1]:
-                        out = await ctx.respond(f"```py\n{page}\n```")
-                        break
-                    await ctx.respond(f"```py\n{page}\n```")
-
-    if out:
-        await ctx.message.add_reaction("\u2705")
-    elif err:
-        await ctx.message.add_reaction("\u2049")
-    else:
-        await ctx.message.add_reaction("\u2705")
-
-
 # Originally, These commands are used to manage and test the cache
 # not for actually caching stuff.
 @tanjun.with_owner_check
@@ -628,6 +527,7 @@ async def cache_clear(
 ) -> None:
     cache_.clear()
     await ctx.respond(cache_.view())
+
 
 async def when_join_guilds(event: hikari.GuildJoinEvent) -> None:
     guild = await event.fetch_guild()

@@ -28,7 +28,6 @@ __all__: list[str] = ["parse_code", "with_block", "error"]
 import sys
 import typing
 
-
 if typing.TYPE_CHECKING:
     import builtins
     import types

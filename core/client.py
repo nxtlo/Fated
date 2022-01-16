@@ -38,7 +38,7 @@ from hikari.internal import aio, ux
 
 from core.psql import pool as pool_
 from core.utils import cache
-from core.utils import config as config_
+from core.utils import config as __config
 from core.utils import net, traits
 
 if typing.TYPE_CHECKING:
@@ -59,7 +59,7 @@ async def get_prefix(
 
 
 def _build_bot() -> hikari.impl.GatewayBot:
-    config = config_.Config()
+    config = __config.Config()
     intents = hikari.Intents.ALL_GUILDS | hikari.Intents.ALL_MESSAGES
     bot = hikari.GatewayBot(
         banner=None,
@@ -72,7 +72,7 @@ def _build_bot() -> hikari.impl.GatewayBot:
 
 
 def _build_client(
-    bot: hikari_traits.GatewayBotAware, config: config_.Config
+    bot: hikari_traits.GatewayBotAware, config: __config.Config
 ) -> tanjun.Client:
     pg_pool = pool_.PgxPool()
     client_session = net.HTTPNet()
@@ -82,7 +82,7 @@ def _build_client(
         config.BUNGIE_CLIENT_ID,
         max_retries=4,
     )
-    redis_hash = cache.Hash(max_connections=10, aiobungie_client=aiobungie_client)
+    redis_hash = cache.Hash(aiobungie_client=aiobungie_client)
     mem_cache = cache.Memory[typing.Any, typing.Any]()
     yuyo_client = yuyo.ComponentClient.from_gateway_bot(bot, event_managed=False)
 
@@ -94,6 +94,7 @@ def _build_client(
         )
         # pg pool
         .set_type_dependency(pool_.PoolT, pg_pool)
+        .add_client_callback(tanjun.ClientCallbackNames.STARTING, pg_pool.create_pool)
         # own aiohttp client session.
         .set_type_dependency(net.HTTPNet, typing.cast(traits.NetRunner, client_session))
         # Cache. This is kinda overkill but we need the memory cache for api requests
@@ -154,11 +155,9 @@ def main(ctx: click.Context) -> None:
     if ctx.invoked_subcommand is None:
         _build_bot().run(status=hikari.Status.DO_NOT_DISTURB)
 
-
 @main.group(short_help="Handles the db configs.", options_metavar="[options]")
 def db() -> None:
     pass
-
 
 @db.command(name="init", short_help="Build the database tables.")
 def init() -> None:

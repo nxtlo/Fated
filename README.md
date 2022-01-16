@@ -11,6 +11,7 @@ This is mainly used to function with Bungie's API but also have some useful comm
 You'll also need to make the user and database from psql yourself.
 
 ### Running
+- Configs found here `"./core/utils/config.example.py"`.
 - Requirements `python run.py install`
 - Init the database `python run.py db init`
 - Run redis `redis-server &`

@@ -143,8 +143,8 @@ async def about_command(
         f"**Users**: {len(cache.get_users_view())}\n"
         f"**Available guilds**: {len(cache.get_available_guilds_view())}\n"
         f"**Guild Channels**: {len(cache.get_guild_channels_view())}\n"
-        f"**Emojis**: {len(cache.get_emojis_view())}\n"
         f"**Roles**: {len(cache.get_roles_view())}\n"
+        f"**Emojis**: {len(cache.get_emojis_view())}\n"
         f"**Messages**: {len(cache.get_messages_view())}\n"
         f"**Voice states**: {len(cache.get_voice_states_view())}\n"
         f"**Presences**: {len(cache.get_presences_view())}\n"
@@ -173,19 +173,14 @@ async def about_command(
 @tanjun.with_member_slash_option("member", "The discord member.", default=None)
 @tanjun.as_slash_command("member", "Gets you information about a discord member.")
 async def member_view(
-    ctx: tanjun.SlashContext, member: hikari.InteractionMember
+    ctx: tanjun.SlashContext, member: hikari.InteractionMember | None
 ) -> None:
 
     assert ctx.guild_id is not None
-    try:
-        guild = await ctx.rest.fetch_guild(ctx.guild_id)
-    except Exception:
-        _LOGGER.exception(f"Couldn't fetch guild for {ctx.guild_id}")
-        guild = ctx.get_guild()
-    assert guild is not None
 
-    member = member or ctx.member
-    assert member is not None
+    member = ctx.member or typing.cast(
+        hikari.InteractionMember, await ctx.rest.fetch_member(ctx.guild_id, member.id)
+    )
     embed = hikari.Embed(title=member.id)
 
     if member.avatar_url:
@@ -199,8 +194,8 @@ async def member_view(
 
     info = [
         f'Nickname: {member.nickname or "N/A"}',
-        f"Joined discord at: {tanjun.from_datetime(member.created_at, style='R')}",
-        f"Joined guild at: {tanjun.from_datetime(member.joined_at, style='R')}",
+        f"Joined Discord at: {tanjun.from_datetime(member.created_at, style='R')}",
+        f"Joined Guild at: {tanjun.from_datetime(member.joined_at, style='R')}",
         f"Is bot: {member.is_bot}\nIs system: {member.is_system}",
     ]
     embed.add_field("Information", "\n".join(info))
@@ -211,6 +206,38 @@ async def member_view(
         if not "everyone" in role.name
     ]
     embed.add_field("Roles", "\n".join(roles))
+
+    perms = [f"`{perm.name}`" for perm in member.permissions if perm.name]
+
+    if "ADMINISTRATOR" in perms:
+        perms = ["ADMINISTRATOR"]
+
+    embed.add_field("Permissions", ", ".join(perms))
+
+    await ctx.respond(embed=embed)
+
+
+@tanjun.with_user_slash_option("user", "The discord member.", default=None)
+@tanjun.as_slash_command("user", "Gets you information about a discord user.")
+async def user_view(ctx: tanjun.SlashContext, user: hikari.User) -> None:
+
+    user = ctx.author or await ctx.rest.fetch_user(user.id)
+    embed = hikari.Embed(title=user.id)
+
+    if user.avatar_url:
+        embed.set_thumbnail(user.avatar_url)
+
+    if user.banner_url:
+        embed.set_image(user.banner_url)
+
+    colour = user.accent_colour or consts.COLOR["invis"]
+    embed.colour = colour
+
+    info = [
+        f"Joined Discord at: {tanjun.from_datetime(user.created_at, style='R')}",
+        f"Is bot: {user.is_bot}\nIs system: {user.is_system}",
+    ]
+    embed.add_field("Information", "\n".join(info))
 
     await ctx.respond(embed=embed)
 

@@ -39,7 +39,7 @@ import hikari
 import typing_extensions
 from hikari.internal import collections as hikari_collections
 
-from . import traits, format
+from . import format, traits
 
 try:
     import ujson as json  # type: ignore
@@ -310,7 +310,9 @@ class Memory(hikari_collections.ExtendedMutableMapping[MKT, MVT]):
 
         docs = inspect.getdoc(self.on_expire)
         return "\n".join(
-            format.with_block(f"MemoryCache({k}={v!r}, expires_at={self.expire_after}, on_expire={docs})")
+            format.with_block(
+                f"MemoryCache({k}={v!r}, expires_at={self.expire_after}, on_expire={docs})"
+            )
             for k, v in self._map.items()
         )
 

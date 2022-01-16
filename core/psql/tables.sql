@@ -38,11 +38,11 @@ CREATE TABLE IF NOT EXISTS Mutes (
     duration    BIGINT NOT NULL
 );
 
+-- This is supposed to be self-notes not like tags.
 CREATE TABLE IF NOT EXISTS Notes (
-    id          SERIAL PRIMARY KEY,
+    id          SERIAL NOT NULL,
     name        TEXT NOT NULL UNIQUE,
     content     TEXT NOT NULL,
-    author_id   BIGINT NOT NULL,
-    guild_id    BIGINT NOT NULL,
+    author_id   BIGINT PRIMARY KEY NOT NULL,
     created_at  TIMESTAMP NOT NULL
 );

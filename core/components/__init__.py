@@ -23,10 +23,11 @@
 
 from __future__ import annotations
 
-__all__: tuple[str, ...] = ("api", "destiny", "git", "meta", "mod")
+__all__: tuple[str, ...] = ("api", "destiny", "git", "meta", "mod", "notes_component")
 
 from .api import api
 from .destiny import destiny
 from .git import git
 from .meta import meta
 from .mod import mod
+from .notes import notes_component

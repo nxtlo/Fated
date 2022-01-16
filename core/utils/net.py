@@ -41,15 +41,12 @@ import attrs
 import hikari
 import multidict
 import yarl
-
 from aiobungie.internal import time
-
 from hikari import _about as about
 from hikari.internal import net
 from hikari.internal.time import (
     fast_iso8601_datetime_string_to_datetime as fast_datetime,
 )
-
 from yuyo import backoff
 
 from . import consts, format, interfaces, traits

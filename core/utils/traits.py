@@ -32,12 +32,12 @@ import typing
 from hikari.internal import fast_protocol as fast  # too long >:
 
 if typing.TYPE_CHECKING:
+    import pathlib
+
     import aiobungie
     import aiohttp
     import asyncpg
     import yarl
-    import pathlib
-
     from hikari import files, snowflakes
     from hikari.internal import data_binding
 
@@ -104,19 +104,31 @@ class HashRunner(fast.FastProtocolChecking, typing.Protocol):
 
 @typing.runtime_checkable
 class PoolRunner(fast.FastProtocolChecking, typing.Protocol):
-    """The main structural protocol."""
+    """The core asyncpg pool structural protocol. Every impl should have these methods."""
 
     __slots__ = ()
 
+    @property
+    def pool(self) -> asyncpg.Pool:
+        raise NotImplementedError
+
+    @property
+    def pools(self) -> int:
+        """Return the count of all running pools."""
+        raise NotImplementedError
+
     @classmethod
     async def create_pool(cls, *, build: bool = False) -> type[PoolRunner]:
+        """Initialize and creates a new connection pool."""
         raise NotImplementedError
 
     async def close(self) -> None:
+        """Closes all pool connections."""
         raise NotImplementedError
 
     @staticmethod
     def tables(path: pathlib.Path | None = None) -> str:
+        """Returns the source of the tables that this pool will build."""
         raise NotImplementedError
 
 
