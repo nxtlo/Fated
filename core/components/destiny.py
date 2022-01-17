@@ -171,7 +171,7 @@ async def sync_command(
     redis: traits.HashRunner = tanjun.inject(type=traits.HashRunner),
     client: aiobungie.Client = tanjun.inject(type=aiobungie.Client),
     bot: hikari.GatewayBot = tanjun.inject(type=hikari.GatewayBot),
-    pool: pool.PoolT = tanjun.injected(type=pool.PoolT),
+    pool_: pool.PoolT = tanjun.injected(type=pool.PoolT),
 ) -> None:
     url = client.rest.build_oauth2_url()
     assert url
@@ -227,17 +227,22 @@ async def sync_command(
             else:
                 primary_id = membership.id
 
-            await pool.put_destiny_member(
-                ctx.author.id,
-                primary_id,
-                str(membership.name),
-                membership.code if membership.code else 0,
-                membership.type
-            )
             await redis.set_bungie_tokens(
                 ctx.author.id,
                 response
             )
+
+            try:
+                await pool_.put_destiny_member(
+                    ctx.author.id,
+                    primary_id,
+                    str(membership.name),
+                    membership.code if membership.code else 0,
+                    membership.type
+                )
+            except pool.ExistsError:
+                # They already exists in the DB.
+                pass
 
             await ctx.respond(
                 embed=(hikari.Embed(
