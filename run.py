@@ -37,4 +37,4 @@ if os.name != "nt":
         asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

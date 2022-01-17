@@ -201,14 +201,14 @@ class Wrapper(interfaces.APIAware):
 
         start_date: hikari.UndefinedOr[str] = hikari.UNDEFINED
         if (raw_start_date := anime_payload.get(date_key)):
-            start_date = tanjun.from_datetime(
+            start_date = tanjun.conversion.from_datetime(
                 consts.naive_datetime(fast_datetime(raw_start_date)),  # type: ignore
                     style='R'
                 )
 
         end_date: hikari.UndefinedOr[str] = hikari.UNDEFINED
         if (raw_end_date := anime_payload.get("end_date")):
-            end_date = tanjun.from_datetime(
+            end_date = tanjun.conversion.from_datetime(
                 consts.naive_datetime(fast_datetime(raw_end_date)),  # type: ignore
                     style='R'
                 )

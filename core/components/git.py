@@ -85,7 +85,7 @@ async def git_user(
 @tanjun.with_str_slash_option("name", "The repo name to search for.")
 @tanjun.as_slash_command("repo", "Search for Github repos.")
 async def git_repo(
-    ctx: tanjun.SlashContext,
+    ctx: tanjun.abc.SlashContext,
     name: str,
     net: net_.HTTPNet = tanjun.inject(type=net_.HTTPNet),
     component_client: yuyo.ComponentClient = tanjun.inject(type=yuyo.ComponentClient),
@@ -140,11 +140,11 @@ async def git_repo(
     "release", "Fetch a github project releases and returns information about them."
 )
 async def get_release(
-    ctx: tanjun.SlashContext,
+    ctx: tanjun.abc.SlashContext,
     user: str,
     repo: str,
     limit: int | None,
-    net: net_.HTTPNet = tanjun.injected(type=net_.HTTPNet),
+    net: net_.HTTPNet = tanjun.inject(type=net_.HTTPNet),
     component_client: yuyo.ComponentClient = tanjun.inject(type=yuyo.ComponentClient),
 ) -> None:
     git = net_.Wrapper(net)

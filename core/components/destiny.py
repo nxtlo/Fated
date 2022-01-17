@@ -167,11 +167,11 @@ def _build_inventory_item_embed(
 @destiny_group.with_command
 @tanjun.as_slash_command("sync", "Sync your Bungie account with this bot.", default_to_ephemeral=True)
 async def sync_command(
-    ctx: tanjun.SlashContext,
+    ctx: tanjun.abc.SlashContext,
     redis: traits.HashRunner = tanjun.inject(type=traits.HashRunner),
     client: aiobungie.Client = tanjun.inject(type=aiobungie.Client),
     bot: hikari.GatewayBot = tanjun.inject(type=hikari.GatewayBot),
-    pool_: pool.PoolT = tanjun.injected(type=pool.PoolT),
+    pool_: pool.PoolT = tanjun.inject(type=pool.PoolT),
 ) -> None:
     url = client.rest.build_oauth2_url()
     assert url
@@ -258,7 +258,7 @@ async def sync_command(
 @tanjun.as_slash_command("desync", "Desync your destiny membership with this bot.")
 async def desync(
     ctx: tanjun.abc.SlashContext,
-    pool_: pool.PoolT = tanjun.injected(type=pool.PoolT),
+    pool_: pool.PoolT = tanjun.inject(type=pool.PoolT),
     redis: traits.HashRunner = tanjun.inject(type=traits.HashRunner)
 ) -> None:
 
@@ -275,7 +275,7 @@ async def desync(
 @destiny_group.with_command
 @tanjun.as_slash_command("user", "Return authorized user information.")
 async def user_command(
-    ctx: tanjun.SlashContext,
+    ctx: tanjun.abc.SlashContext,
     redis: traits.HashRunner = tanjun.inject(type=traits.HashRunner),
     client: aiobungie.Client = tanjun.inject(type=aiobungie.Client),
 ) -> None:
@@ -326,9 +326,9 @@ async def user_command(
 @destiny_group.with_command
 @tanjun.as_slash_command("friends", "View your Bungie friend list")
 async def friend_list_command(
-    ctx: tanjun.SlashContext,
+    ctx: tanjun.abc.SlashContext,
     redis: traits.HashRunner = tanjun.inject(type=traits.HashRunner),
-    client: aiobungie.Client = tanjun.injected(type=aiobungie.Client),
+    client: aiobungie.Client = tanjun.inject(type=aiobungie.Client),
 ) -> None:
 
     try:
@@ -389,11 +389,11 @@ async def friend_list_command(
     "character", "Information about a member's Destiny characters."
 )
 async def characters(
-    ctx: tanjun.SlashContext,
+    ctx: tanjun.abc.SlashContext,
     member: hikari.InteractionMember | None,
     query: str | int | None,
-    client: aiobungie.Client = tanjun.injected(type=aiobungie.Client),
-    pool_: pool.PoolT = tanjun.injected(type=pool.PoolT),
+    client: aiobungie.Client = tanjun.inject(type=aiobungie.Client),
+    pool_: pool.PoolT = tanjun.inject(type=pool.PoolT),
     component_client: yuyo.ComponentClient = tanjun.inject(type=yuyo.ComponentClient),
 ) -> None:
 
@@ -429,8 +429,7 @@ async def characters(
     except aiobungie.MembershipTypeError as exc:
         raise tanjun.CommandError(f'{exc!s}')
 
-    if char_mapper := char_resp.characters:
-        iterator = tuple(c for c in char_mapper.values())
+    if characters := char_resp.characters:
         pages = iter(
             (
                 (
@@ -449,7 +448,7 @@ async def characters(
                         f"Gender: {char.gender}\n"
                         f"Race: {char.race}\n"
                         f"Played Time: {char.total_played_time}\n"
-                        f"Last played: {tanjun.from_datetime(consts.naive_datetime(char.last_played), style='R')}\n"
+                        f"Last played: {tanjun.conversion.from_datetime(consts.naive_datetime(char.last_played), style='R')}\n"
                         f"Title hash: {char.title_hash if char.title_hash else 'N/A'}\n"
                         f"Member ID: {char.member_id}\nMember Type: {char.member_type}\n",
                     )
@@ -457,14 +456,14 @@ async def characters(
                         "Stats",
                         "\n".join(
                             [
-                                f"{str(key).replace('_', '').title()}: {val} {STAR if val >= 90 and key.name != 'LIGHT_POWER' else ''}"
+                                f"{key.name.replace('_', '').title()}: {val} {STAR if val >= 90 and key.name != 'LIGHT_POWER' else ''}"
                                 for key, val in char.stats.items()
                             ]
                         ),
                     ),
                     # We dont need char_id since its in the object itself.
                 )
-                for char in iterator
+                for char in (c for c in characters.values())
             )
         )
         await consts.generate_component(ctx, pages, component_client)
@@ -481,7 +480,7 @@ async def characters(
 )
 @tanjun.as_slash_command("lfg", "Look for fireteams to play with.")
 async def lfg_command(
-    ctx: tanjun.SlashContext,
+    ctx: tanjun.abc.SlashContext,
     activity: str,
     platform: str,
     client: aiobungie.Client = tanjun.inject(type=aiobungie.Client),
@@ -537,7 +536,7 @@ async def lfg_command(
 # @last_group.with_command
 # @tanjun.as_slash_command("raid", "Returns information about the last raid you played.")
 # async def last_raid(
-#     ctx: tanjun.SlashContext,
+#     ctx: tanjun.abc.SlashContext,
 #     client: aiobungie.Client = tanjun.inject(type=aiobungie.Client),
 #     pool: pool.PgxPool = tanjun.inject(type=pool.PoolT)
 # ) -> None:
@@ -553,7 +552,7 @@ search_group = destiny_group.with_command(
 @tanjun.with_str_slash_option("name", "The player names to search for.")
 @tanjun.as_slash_command("player", "Search for Destiny 2 players.")
 async def search_players(
-    ctx: tanjun.SlashContext,
+    ctx: tanjun.abc.SlashContext,
     name: str,
     client: aiobungie.Client = tanjun.inject(type=aiobungie.Client),
     component_client: yuyo.ComponentClient = tanjun.inject(type=yuyo.ComponentClient)
@@ -585,17 +584,18 @@ async def search_players(
 @tanjun.with_str_slash_option("definition", "The definition of the entity. Default to inventory item", default=None)
 @tanjun.as_slash_command("entity", "Search for Destiny 2 entity given its definition.")
 async def search_entities(
-    ctx: tanjun.SlashContext,
+    ctx: tanjun.abc.SlashContext,
     name: str,
     definition: str | None,
     client: aiobungie.Client = tanjun.inject(type=aiobungie.Client),
     component_client: yuyo.ComponentClient = tanjun.inject(type=yuyo.ComponentClient)
 ) -> None:
-    results = await client.search_entities(name, definition or "DestinyInventoryItemDefinition")
 
-    if not results:
-        raise tanjun.CommandError("No items found.")
-    
+    try:
+        results = await client.search_entities(name, definition or "DestinyInventoryItemDefinition")
+    except aiobungie.NotFound as exc:
+        raise tanjun.CommandError(exc.message)
+
     await ctx.defer()
 
     iters = (
@@ -623,7 +623,7 @@ async def search_entities(
 async def get_clan(
     ctx: tanjun.abc.SlashContext,
     query: str | int,
-    client: aiobungie.Client = tanjun.injected(type=aiobungie.Client),
+    client: aiobungie.Client = tanjun.inject(type=aiobungie.Client),
 ) -> None:
 
     await ctx.defer()
@@ -647,7 +647,7 @@ async def get_clan(
             f"Total members: `{clan.member_count}`\n"
             f"About: {clan.motto}\n"
             f"Public: `{clan.is_public}`\n"
-            f"Creation date: {tanjun.from_datetime(consts.naive_datetime(clan.created_at), style='R')}\n"
+            f"Creation date: {tanjun.conversion.from_datetime(consts.naive_datetime(clan.created_at), style='R')}\n"
             f"Type: {clan.type.name.title()}",
             inline=False,
         )
@@ -659,8 +659,8 @@ async def get_clan(
             f"Owner",
             f"Name: [{clan.owner.unique_name}]({clan.owner.link})\n"
             f"ID: `{clan.owner.id}`\n"
-            f"Joined at: {tanjun.from_datetime(consts.naive_datetime(clan.owner.joined_at), style='R')}\n"
-            f"Last seen: {tanjun.from_datetime(consts.naive_datetime(clan.owner.last_online), style='R')}\n"
+            f"Joined at: {tanjun.conversion.from_datetime(consts.naive_datetime(clan.owner.joined_at), style='R')}\n"
+            f"Last seen: {tanjun.conversion.from_datetime(consts.naive_datetime(clan.owner.last_online), style='R')}\n"
             f"Membership: `{clan.owner.type.name.title()}`"
         )
     await ctx.respond(embed=embed)
@@ -670,7 +670,7 @@ async def get_clan(
 @tanjun.with_int_slash_option("item_hash", "The item hash to get.")
 @tanjun.as_slash_command("item", "Fetch a Bungie inventory item by its hash.")
 async def item_definition_command(
-    ctx: tanjun.SlashContext,
+    ctx: tanjun.abc.SlashContext,
     item_hash: int,
     client: aiobungie.Client = tanjun.inject(type=aiobungie.Client),
     cache_: cache.Memory[int, hikari.Embed] = tanjun.inject(type=cache.Memory),
@@ -693,7 +693,7 @@ async def item_definition_command(
 @tanjun.with_int_slash_option("instance", "The instance id of the activity.")
 @tanjun.as_slash_command("post_activity", "Get post activity information given the activity's instance id.")
 async def post_activity_command(
-    ctx: tanjun.SlashContext,
+    ctx: tanjun.abc.SlashContext,
     instance: int,
     client: aiobungie.Client = tanjun.inject(type=aiobungie.Client),
     cache: cache.Memory[int, hikari.Embed] = tanjun.inject(type=cache.Memory)
@@ -727,7 +727,7 @@ async def post_activity_command(
             f"Reference id: {post.refrence_id}\n"
             f"Membership: {post.membership_type}\n"
             f"Starting phase: {post.starting_phase}\n"
-            f"Date: {tanjun.from_datetime(consts.naive_datetime(post.occurred_at), style='R')}\n"
+            f"Date: {tanjun.conversion.from_datetime(consts.naive_datetime(post.occurred_at), style='R')}\n"
         )
     )
 

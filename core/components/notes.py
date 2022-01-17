@@ -39,7 +39,7 @@ note = tanjun.slash_command_group("note", "Create notes.")
 @tanjun.with_str_slash_option("name", "The note name.")
 @tanjun.as_slash_command("create", "Create a new note.")
 async def create_note(
-    ctx: tanjun.SlashContext,
+    ctx: tanjun.abc.SlashContext,
     name: str,
     content: str,
     pool: pgpool.PgxPool = tanjun.inject(type=pgpool.PoolT),
@@ -60,7 +60,7 @@ async def create_note(
 @tanjun.with_str_slash_option("name", "The note name to get.")
 @tanjun.as_slash_command("get", "Gets a note your created.")
 async def get_note(
-    ctx: tanjun.SlashContext,
+    ctx: tanjun.abc.SlashContext,
     name: str,
     pool: pgpool.PgxPool = tanjun.inject(type=pgpool.PoolT),
 ) -> None:
@@ -93,7 +93,7 @@ async def get_note(
 @tanjun.with_str_slash_option("name", "The note name to remove.", default=None)
 @tanjun.as_slash_command("remove", "Remove a note you created.")
 async def delete_note(
-    ctx: tanjun.SlashContext,
+    ctx: tanjun.abc.SlashContext,
     name: str | None,
     strict: bool,
     pool: pgpool.PgxPool = tanjun.inject(type=pgpool.PoolT)
@@ -109,7 +109,7 @@ async def delete_note(
 @note.with_command
 @tanjun.as_slash_command("all", "Get all the notes you created.")
 async def get_all_notes(
-    ctx: tanjun.SlashContext,
+    ctx: tanjun.abc.SlashContext,
     pool: pgpool.PgxPool = tanjun.inject(type=pgpool.PoolT),
     component_client: yuyo.ComponentClient = tanjun.inject(type=yuyo.ComponentClient)
 ) -> None:
@@ -124,7 +124,7 @@ async def get_all_notes(
             hikari.UNDEFINED,
             hikari.Embed(title=n.name, description=n.content)
             .add_field("Creator", f"<@!{n.author_id}>")
-            .add_field("Created at", f'{tanjun.from_datetime(consts.naive_datetime(n.created_at))}')
+            .add_field("Created at", f'{tanjun.conversion.from_datetime(consts.naive_datetime(n.created_at))}')
             .set_footer(f"ID({n.id})")
         )
         for n in notes
@@ -136,7 +136,7 @@ async def get_all_notes(
 @tanjun.with_str_slash_option("name", "The note name you want to update.")
 @tanjun.as_slash_command("update", "Update an existing note you created.")
 async def update_note_(
-    ctx: tanjun.SlashContext,
+    ctx: tanjun.abc.SlashContext,
     name: str,
     content: str,
     pool: pgpool.PgxPool = tanjun.inject(type=pgpool.PoolT),

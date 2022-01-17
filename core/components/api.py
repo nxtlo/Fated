@@ -47,7 +47,7 @@ from core.utils import net as net_
 )
 @tanjun.as_slash_command("anime", "Returns basic information about an anime.")
 async def get_anime(
-    ctx: tanjun.SlashContext,
+    ctx: tanjun.abc.SlashContext,
     name: str,
     random: bool | None,
     genre: str,
@@ -75,7 +75,7 @@ async def get_anime(
 @tanjun.with_str_slash_option("name", "The manga name")
 @tanjun.as_slash_command("manga", "Returns basic information about a manga.")
 async def get_manga(
-    ctx: tanjun.SlashContext,
+    ctx: tanjun.abc.SlashContext,
     name: str,
     net: net_.HTTPNet = tanjun.inject(type=net_.HTTPNet),
     component_client: yuyo.ComponentClient = tanjun.inject(type=yuyo.ComponentClient),
@@ -92,7 +92,7 @@ async def get_manga(
 @tanjun.with_str_slash_option("name", "The name of the definition.")
 @tanjun.as_slash_command("def", "Returns a definition given a name.")
 async def define(
-    ctx: tanjun.SlashContext,
+    ctx: tanjun.abc.SlashContext,
     name: str,
     net: net_.HTTPNet = tanjun.inject(type=net_.HTTPNet),
     component_client: yuyo.ComponentClient = tanjun.inject(type=yuyo.ComponentClient),
@@ -109,7 +109,7 @@ async def define(
 # Fun stuff.
 @tanjun.as_message_command("dog")
 async def doggo(
-    ctx: tanjun.MessageContext,
+    ctx: tanjun.abc.MessageContext,
     net: net_.HTTPNet = tanjun.inject(type=net_.HTTPNet),
 ) -> None:
     try:
@@ -130,7 +130,7 @@ async def doggo(
 
 @tanjun.as_message_command("cat")
 async def kittie(
-    ctx: tanjun.MessageContext,
+    ctx: tanjun.abc.MessageContext,
     net: net_.HTTPNet = tanjun.inject(type=net_.HTTPNet),
 ) -> None:
     try:
@@ -152,7 +152,7 @@ async def kittie(
 @tanjun.with_parser
 @tanjun.as_message_command("wink")
 async def wink(
-    ctx: tanjun.MessageContext,
+    ctx: tanjun.abc.MessageContext,
     member: hikari.Member | None,
     net: net_.HTTPNet = tanjun.inject(type=net_.HTTPNet),
 ) -> None:
@@ -176,7 +176,7 @@ async def wink(
 @tanjun.with_parser
 @tanjun.as_message_command("pat")
 async def pat(
-    ctx: tanjun.MessageContext,
+    ctx: tanjun.abc.MessageContext,
     member: hikari.Member | None,
     net: net_.HTTPNet = tanjun.inject(type=net_.HTTPNet),
 ) -> None:
@@ -200,7 +200,7 @@ async def pat(
 @tanjun.with_parser
 @tanjun.as_message_command("jail")
 async def jail(
-    ctx: tanjun.MessageContext,
+    ctx: tanjun.abc.MessageContext,
     member: hikari.Member | None,
     net: net_.HTTPNet = tanjun.inject(type=net_.HTTPNet),
 ) -> None:

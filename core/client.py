@@ -80,7 +80,7 @@ def _build_client(
         config.BUNGIE_TOKEN,
         config.BUNGIE_CLIENT_SECRET,
         config.BUNGIE_CLIENT_ID,
-        max_retries=4,
+        max_retries=2,
     )
     redis_hash = cache.Hash(aiobungie_client=aiobungie_client)
     mem_cache = cache.Memory[typing.Any, typing.Any]()
@@ -96,7 +96,7 @@ def _build_client(
         .set_type_dependency(pool_.PoolT, pg_pool)
         .add_client_callback(tanjun.ClientCallbackNames.STARTING, pg_pool.create_pool)
         # own aiohttp client session.
-        .set_type_dependency(net.HTTPNet, typing.cast(traits.NetRunner, client_session))
+        .set_type_dependency(net.HTTPNet, client_session)
         # Cache. This is kinda overkill but we need the memory cache for api requests
         # And the redis hash for stuff that are not worth storing in a database for the sake of speed.
         # i.e., OAuth2 tokens

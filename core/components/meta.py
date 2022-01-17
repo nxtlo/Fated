@@ -115,7 +115,7 @@ async def colors(ctx: tanjun.abc.MessageContext, color: int) -> None:
 
 @tanjun.as_slash_command("about", "Information about the bot itself.")
 async def about_command(
-    ctx: tanjun.SlashContext,
+    ctx: tanjun.abc.SlashContext,
 ) -> None:
     """Info about the bot itself."""
 
@@ -132,7 +132,7 @@ async def about_command(
         description="Information about the bot",
         url="https://github.com/nxtlo/Fated",
     )
-    create = f"**Creation date**: {tanjun.from_datetime(consts.naive_datetime(bot.created_at), style='R')}"
+    create = f"**Creation date**: {tanjun.conversion.from_datetime(consts.naive_datetime(bot.created_at), style='R')}"
     uptime_ = f"**Uptime**: {ctx.client.metadata['uptime'] - datetime.datetime.now()}"
 
     embed.set_author(name=str(bot.id))
@@ -173,7 +173,7 @@ async def about_command(
 @tanjun.with_member_slash_option("member", "The discord member.", default=None)
 @tanjun.as_slash_command("member", "Gets you information about a discord member.")
 async def member_view(
-    ctx: tanjun.SlashContext, member: hikari.InteractionMember | None
+    ctx: tanjun.abc.SlashContext, member: hikari.InteractionMember | None
 ) -> None:
 
     assert ctx.guild_id is not None
@@ -194,8 +194,8 @@ async def member_view(
 
     info = [
         f'Nickname: {member.nickname or "N/A"}',
-        f"Joined Discord at: {tanjun.from_datetime(member.created_at, style='R')}",
-        f"Joined Guild at: {tanjun.from_datetime(member.joined_at, style='R')}",
+        f"Joined Discord at: {tanjun.conversion.from_datetime(member.created_at, style='R')}",
+        f"Joined Guild at: {tanjun.conversion.from_datetime(member.joined_at, style='R')}",
         f"Is bot: {member.is_bot}\nIs system: {member.is_system}",
     ]
     embed.add_field("Information", "\n".join(info))
@@ -219,7 +219,7 @@ async def member_view(
 
 @tanjun.with_user_slash_option("user", "The discord member.", default=None)
 @tanjun.as_slash_command("user", "Gets you information about a discord user.")
-async def user_view(ctx: tanjun.SlashContext, user: hikari.User) -> None:
+async def user_view(ctx: tanjun.abc.SlashContext, user: hikari.User) -> None:
 
     user = ctx.author or await ctx.rest.fetch_user(user.id)
     embed = hikari.Embed(title=user.id)
@@ -234,7 +234,7 @@ async def user_view(ctx: tanjun.SlashContext, user: hikari.User) -> None:
     embed.colour = colour
 
     info = [
-        f"Joined Discord at: {tanjun.from_datetime(user.created_at, style='R')}",
+        f"Joined Discord at: {tanjun.conversion.from_datetime(user.created_at, style='R')}",
         f"Is bot: {user.is_bot}\nIs system: {user.is_system}",
     ]
     embed.add_field("Information", "\n".join(info))
@@ -244,7 +244,7 @@ async def user_view(ctx: tanjun.SlashContext, user: hikari.User) -> None:
 
 @tanjun.with_member_slash_option("member", "The discord member", default=None)
 @tanjun.as_slash_command("avatar", "Returns the avatar of a discord member or yours.")
-async def avatar_view(ctx: tanjun.SlashContext, /, member: hikari.Member) -> None:
+async def avatar_view(ctx: tanjun.abc.SlashContext, /, member: hikari.Member) -> None:
     """View of your discord avatar or other member."""
     member = member or ctx.author
     avatar = member.avatar_url or member.default_avatar_url

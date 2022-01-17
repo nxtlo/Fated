@@ -54,12 +54,12 @@ DURATIONS: dict[str, int] = {
 
 @tanjun.with_owner_check
 @tanjun.as_message_command("reload")
-async def reload(ctx: tanjun.MessageContext) -> None:
+async def reload(ctx: tanjun.abc.MessageContext) -> None:
     await ctx.client.clear_application_commands()
 
 async def _sleep_for(
     timer: datetime.timedelta,
-    ctx: tanjun.SlashContext,
+    ctx: tanjun.abc.SlashContext,
     member: hikari.InteractionMember,
     pool: pool_.PgxPool,
     hash: traits.HashRunner,
@@ -73,7 +73,7 @@ async def _sleep_for(
 
 
 async def _set_channel_perms(
-    ctx: tanjun.SlashContext, role_id: hikari.Snowflake
+    ctx: tanjun.abc.SlashContext, role_id: hikari.Snowflake
 ) -> None:
     assert ctx.guild_id
 
@@ -103,7 +103,7 @@ async def _set_channel_perms(
 
 
 async def _done(
-    ctx: tanjun.SlashContext,
+    ctx: tanjun.abc.SlashContext,
     role: hikari.Role,
     guild: hikari.Guild,
     hash: traits.HashRunner,
@@ -118,7 +118,7 @@ async def _done(
 
 
 async def _create_mute_role(
-    ctx: tanjun.SlashContext,
+    ctx: tanjun.abc.SlashContext,
     bot: hikari.GatewayBot,
     hash: traits.HashRunner,
 ) -> None:
@@ -188,7 +188,7 @@ async def _create_mute_role(
 # @mute_roles_group.with_command
 # @tanjun.as_slash_command("create", "Creates the mute role.")
 async def create_mute_role(
-    ctx: tanjun.SlashContext,
+    ctx: tanjun.abc.SlashContext,
     hash: traits.HashRunner = tanjun.inject(type=traits.HashRunner),
     bot: hikari.GatewayBot = tanjun.inject(type=hikari.GatewayBot),
 ) -> None:
@@ -206,7 +206,7 @@ async def create_mute_role(
 # )
 # @tanjun.as_slash_command("member", "Mute someone given a duration.")
 async def mute(
-    ctx: tanjun.SlashContext,
+    ctx: tanjun.abc.SlashContext,
     member: hikari.InteractionMember,
     unit: str,
     duration: float,
@@ -237,7 +237,7 @@ async def mute(
         mutes = await pool.fetch_mutes()
 
         async for mute in mutes.filter(lambda m: m.member_id == member.id):
-            unlock_date = tanjun.from_datetime(mute.muted_at, style="R")
+            unlock_date = tanjun.conversion.from_datetime(mute.muted_at, style="R")
             raise tanjun.CommandError(
                 f"This member muted. Will unlock in {unlock_date}."
             )
@@ -255,9 +255,9 @@ async def mute(
 @tanjun.with_parser
 @tanjun.as_message_command("sql")
 async def run_sql(
-    ctx: tanjun.MessageContext,
+    ctx: tanjun.abc.MessageContext,
     query: str,
-    pool: pool_.PoolT = tanjun.injected(type=pool_.PoolT),
+    pool: pool_.PoolT = tanjun.inject(type=pool_.PoolT),
 ) -> None:
     """Run sql code to the database pool."""
 
@@ -379,7 +379,7 @@ async def ban(
 @tanjun.with_owner_check
 @tanjun.as_message_command("close", "shutdown")
 async def close_bot(
-    _: tanjun.MessageContext,
+    _: tanjun.abc.MessageContext,
     bot: hikari.GatewayBot = tanjun.inject(type=hikari.GatewayBot),
 ) -> None:
     try:
@@ -394,7 +394,7 @@ async def close_bot(
 @tanjun.with_argument("id", default=None, converters=(hikari.Snowflake, int))
 @tanjun.with_parser
 @tanjun.as_message_command("guild")
-async def fetch_guild(ctx: tanjun.MessageContext, id: hikari.Snowflake) -> None:
+async def fetch_guild(ctx: tanjun.abc.MessageContext, id: hikari.Snowflake) -> None:
 
     id = id or ctx.guild_id if ctx.guild_id else hikari.Snowflake(411804307302776833)
     backoff = yuyo.Backoff(2)
@@ -427,7 +427,7 @@ async def fetch_guild(ctx: tanjun.MessageContext, id: hikari.Snowflake) -> None:
                 embed.add_field(
                     "Information",
                     f"Members: {len(guild.get_members())}\n"
-                    f"Created at: {tanjun.from_datetime(guild.created_at, style='R')}\n"
+                    f"Created at: {tanjun.conversion.from_datetime(guild.created_at, style='R')}\n"
                     f"Cached: {guild.id in guild_snowflakes or False}",  # type: ignore
                 ).add_field(
                     "Owner",
@@ -442,7 +442,7 @@ async def fetch_guild(ctx: tanjun.MessageContext, id: hikari.Snowflake) -> None:
 
 @tanjun.with_owner_check
 @tanjun.as_message_command("guilds")
-async def get_guilds(ctx: tanjun.MessageContext) -> None:
+async def get_guilds(ctx: tanjun.abc.MessageContext) -> None:
     guilds = ctx.cache.get_available_guilds_view()
     assert guilds is not None
     embed = hikari.Embed(
@@ -461,7 +461,7 @@ async def get_guilds(ctx: tanjun.MessageContext) -> None:
 @tanjun.with_owner_check
 @tanjun.as_message_command_group("cache")
 async def cacher(
-    ctx: tanjun.MessageContext,
+    ctx: tanjun.abc.MessageContext,
 ) -> None:
     # This will always not respond.
     assert not ctx.has_responded
@@ -473,7 +473,7 @@ async def cacher(
 @tanjun.with_parser
 @tanjun.as_message_command("put")
 async def put(
-    ctx: tanjun.MessageContext,
+    ctx: tanjun.abc.MessageContext,
     key: typing.Any,
     value: typing.Any,
     cache_: cache.Memory[typing.Any, typing.Any] = tanjun.inject(type=cache.Memory),
@@ -487,7 +487,7 @@ async def put(
 @tanjun.with_parser
 @tanjun.as_message_command("get")
 async def get(
-    ctx: tanjun.MessageContext,
+    ctx: tanjun.abc.MessageContext,
     key: typing.Any,
     cache_: cache.Memory[typing.Any, typing.Any] = tanjun.inject(type=cache.Memory),
 ) -> None:
@@ -499,7 +499,7 @@ async def get(
 @tanjun.with_parser
 @tanjun.as_message_command("del")
 async def remove(
-    ctx: tanjun.MessageContext,
+    ctx: tanjun.abc.MessageContext,
     key: typing.Any,
     cache_: cache.Memory[typing.Any, typing.Any] = tanjun.inject(type=cache.Memory),
 ) -> None:
@@ -513,7 +513,7 @@ async def remove(
 @cacher.with_command
 @tanjun.as_message_command("items")
 async def cache_items(
-    ctx: tanjun.MessageContext,
+    ctx: tanjun.abc.MessageContext,
     cache_: cache.Memory[typing.Any, typing.Any] = tanjun.inject(type=cache.Memory),
 ) -> None:
     await ctx.respond(cache_.view())
@@ -522,7 +522,7 @@ async def cache_items(
 @cacher.with_command
 @tanjun.as_message_command("clear")
 async def cache_clear(
-    ctx: tanjun.MessageContext,
+    ctx: tanjun.abc.MessageContext,
     cache_: cache.Memory[typing.Any, typing.Any] = tanjun.inject(type=cache.Memory),
 ) -> None:
     cache_.clear()
@@ -541,7 +541,7 @@ async def when_join_guilds(event: hikari.GuildJoinEvent) -> None:
         embed.set_thumbnail(guild.icon_url)
     (
         embed.add_field("Member count", str(len(guild.get_members())))
-        .add_field("Created at", tanjun.from_datetime(guild.created_at, style="R"))
+        .add_field("Created at", tanjun.conversion.from_datetime(guild.created_at, style="R"))
         .add_field("Owner", f"Name: {guild_owner.username}\n" f"ID: {guild_owner.id}")
     )
     await event.app.rest.create_message(STDOUT, embed=embed)
@@ -554,7 +554,7 @@ async def when_leave_guilds(event: hikari.GuildLeaveEvent) -> None:
             title=f"{guild.name} | {guild.id}",
             description="Left a guild.",
             timestamp=datetime.datetime.utcnow().astimezone(datetime.timezone.utc),
-        ).add_field("Created at", tanjun.from_datetime(guild.created_at, style="R"))
+        ).add_field("Created at", tanjun.conversion.from_datetime(guild.created_at, style="R"))
         await event.app.rest.create_message(STDOUT, embed=embed)
         return
     await event.app.rest.create_message(
