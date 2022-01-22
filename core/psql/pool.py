@@ -44,6 +44,7 @@ if typing.TYPE_CHECKING:
     import aiobungie
     from hikari import snowflakes
 
+
 _LOG: typing.Final[logging.Logger] = logging.getLogger("fated.pool")
 _LOG.setLevel(logging.INFO)
 
@@ -89,9 +90,11 @@ class PgxPool(traits.PoolRunner):
             host=config_.DB_HOST,
             port=config_.DB_PORT,
         )
+        assert pool is not None
 
         if build:
             tables = cls.tables(schema_path)
+            conn: asyncpg.Connection
 
             async with pool.acquire() as conn:
                 try:

@@ -5,16 +5,18 @@
     "typeCheckingMode": "strict",
     "venvPath": ".",
     "venv": ".venv",
-    "reportUnboundVariable": false,
-    "reportUndefinedVariable": true,
     // Some modules doesn't have stubs
     // so we just ignore them.
+    "reportUndefinedVariable": true,
+    "reportMissingParameterType": "error",
+    "reportMissingTypeArgument": "error",
+    "reportUnboundVariable": false,
     "reportMissingTypeStubs": false,
     "reportUnknownMemberType": false,
-    "reportUnknownVariableType": false,
-    "reportUnknownArgumentType": "information",
+    "reportUnknownVariableType": "none",
+    "reportUnknownArgumentType": "error",
     "reportUnknownParameterType": "error",
     "reportUnusedImport": "warning",
-    "reportUnusedVariable": "warning",
+    "reportUnusedVariable": "error",
     "reportOptionalMemberAccess": "information"
 }

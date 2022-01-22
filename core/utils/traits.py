@@ -118,7 +118,7 @@ class PoolRunner(fast.FastProtocolChecking, typing.Protocol):
         raise NotImplementedError
 
     @classmethod
-    async def create_pool(cls, *, build: bool = False) -> type[PoolRunner]:
+    async def create_pool(cls, *, build: bool = False) -> asyncpg.Pool:
         """Initialize and creates a new connection pool."""
         raise NotImplementedError
 

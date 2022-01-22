@@ -96,8 +96,8 @@ class Hash(traits.HashRunner):
         await self.__connection.hset("prefixes", str(guild_id), prefix)  # type: ignore
 
     async def get_prefix(self, guild_id: hikari.Snowflake) -> str:
-        if prefix := await self.__connection.hget("prefixes", str(guild_id)):
-            return typing.cast(str, prefix)
+        if prefix := typing.cast(str, await self.__connection.hget("prefixes", str(guild_id))):
+            return prefix
 
         raise LookupError
 
@@ -110,8 +110,7 @@ class Hash(traits.HashRunner):
         await self.__connection.hset("mutes", str(guild_id), role_id)  # type: ignore
 
     async def get_mute_role(self, guild_id: hikari.Snowflake) -> hikari.Snowflake:
-        role_id: int
-        if role_id := await self.__connection.hget("mutes", str(guild_id)):
+        if role_id := typing.cast(str, await self.__connection.hget("mutes", str(guild_id))):
             return hikari.Snowflake(role_id)
 
         raise LookupError

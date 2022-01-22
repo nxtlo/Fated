@@ -122,14 +122,15 @@ class HTTPNet(traits.NetRunner):
 
         data: data_binding.JSONObject | data_binding.JSONArray | hikari.Resourceish | _GETTER_TYPE | None = None
         backoff_ = backoff.Backoff(max_retries=6)
+        response: aiohttp.ClientResponse
 
         user_agent: typing.Final[
             str
         ] = f"Fated DiscordBot(https://github.com/nxtlo/Fated) Hikari/{about.__version__}"
 
-        headers: collections.Mapping[str, str]
-        kwargs["headers"] = headers = {}
-        headers["User-Agent"] = user_agent
+
+        kwargs["headers"] = headers = data_binding.StringMapBuilder()
+        headers.put("User-Agent", user_agent)
 
         while True:
             async for _ in backoff_:
@@ -143,7 +144,7 @@ class HTTPNet(traits.NetRunner):
 
                             data = await response.json(encoding="utf-8")
                             _LOG.debug(
-                                f"{method} Request Success from {str(response.real_url)} "
+                                f"{method} Request Success from {response.real_url!s} "
                                 f"{self.__rest._stringify_http_message(response.headers, data)} "  # type: ignore
                             )
                             if data is None:
@@ -154,7 +155,7 @@ class HTTPNet(traits.NetRunner):
                                     return data[getter]  # type: ignore
                                 except KeyError:
                                     raise LookupError(
-                                        response.real_url, response.headers, data
+                                        f"{response.real_url!s}", f"{response.headers!r}", data
                                     )
 
                             return data
