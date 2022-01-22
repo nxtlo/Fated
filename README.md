@@ -12,7 +12,7 @@ You'll also need to make the user and database from psql yourself.
 
 ### Running
 - Configs found here `"./core/utils/config.example.py"`.
-- Requirements `python run.py install`
+- Requirements `python -m pip install -r requirements.txt`
 - Init the database `python run.py db init`
 - Run redis `redis-server &`
 - Run the bot `python run.py`
