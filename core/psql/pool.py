@@ -61,6 +61,7 @@ class ExistsError(RuntimeError):
     def __str__(self) -> str:
         return self.message
 
+
 class PgxPool(traits.PoolRunner):
     """An asyncpg pool impl."""
 
@@ -76,7 +77,9 @@ class PgxPool(traits.PoolRunner):
         return self.create_pool().__await__()
 
     @classmethod
-    async def create_pool(cls, *, build: bool = False, schema_path: pathlib.Path | None = None) -> asyncpg.Pool:
+    async def create_pool(
+        cls, *, build: bool = False, schema_path: pathlib.Path | None = None
+    ) -> asyncpg.Pool:
         """Creates a new connection pool and created the tables if build is True."""
 
         from core.utils import config
@@ -185,7 +188,7 @@ class PgxPool(traits.PoolRunner):
             "SELECT * FROM Destiny WHERE ctx_id = $1;", user_id
         )
         if not query:
-            raise ExistsError(f"User {user_id} not found in Destiny table.")
+            raise ExistsError(f"User <@!{user_id}> not found.")
 
         return models.Destiny.into(dict(query))
 
@@ -306,7 +309,9 @@ class PgxPool(traits.PoolRunner):
     ) -> None:
         await self._execute(
             "UPDATE Notes SET content = $1 WHERE name = $2 AND author_id = $3",
-            new_content, note_name, author_id
+            new_content,
+            note_name,
+            author_id,
         )
 
     async def remove_note(
@@ -328,6 +333,7 @@ class PgxPool(traits.PoolRunner):
         if name is not None:
             sql += " AND name = $2"
             await self._execute("".join(sql), author_id, name)
+
 
 PoolT = typing.NewType("PoolT", PgxPool)
 """A new type hint for the Pool class it self.

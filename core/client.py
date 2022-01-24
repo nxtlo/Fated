@@ -23,7 +23,6 @@
 
 from __future__ import annotations
 
-import datetime
 import logging
 import subprocess
 import traceback
@@ -76,13 +75,7 @@ def _build_client(
 ) -> tanjun.Client:
     pg_pool = pool_.PgxPool()
     client_session = net.HTTPNet()
-    aiobungie_client = aiobungie.Client(
-        config.BUNGIE_TOKEN,
-        config.BUNGIE_CLIENT_SECRET,
-        config.BUNGIE_CLIENT_ID,
-        max_retries=2,
-    )
-    redis_hash = cache.Hash(aiobungie_client=aiobungie_client)
+    redis_hash = cache.Hash()
     mem_cache = cache.Memory[typing.Any, typing.Any]()
     yuyo_client = yuyo.ComponentClient.from_gateway_bot(bot, event_managed=False)
 
@@ -94,7 +87,7 @@ def _build_client(
         )
         # pg pool
         .set_type_dependency(pool_.PoolT, pg_pool)
-        .add_client_callback(tanjun.ClientCallbackNames.STARTING, pg_pool.create_pool)
+        .add_client_callback(tanjun.ClientCallbackNames.STARTING, pg_pool.create_pool)  # type: ignore asyncpg :)
         # own aiohttp client session.
         .set_type_dependency(net.HTTPNet, client_session)
         # Cache. This is kinda overkill but we need the memory cache for api requests
@@ -102,11 +95,6 @@ def _build_client(
         # i.e., OAuth2 tokens
         .set_type_dependency(traits.HashRunner, redis_hash)
         .set_type_dependency(cache.Memory, mem_cache)
-        # aiobungie client
-        .set_type_dependency(aiobungie.Client, aiobungie_client)
-        .add_client_callback(
-            tanjun.ClientCallbackNames.CLOSING, aiobungie_client.rest.close
-        )
         # yuyo
         .set_type_dependency(yuyo.ComponentClient, yuyo_client)
         .add_client_callback(tanjun.ClientCallbackNames.STARTING, yuyo_client.open)
@@ -118,12 +106,26 @@ def _build_client(
         .set_prefix_getter(get_prefix)
         .add_prefix(".")
     )
-    (
-        tanjun.InMemoryCooldownManager()
-        .set_bucket("destiny", tanjun.BucketResource.USER, 2, 4)
-        .add_to_client(client)
-    )
-    client.metadata["uptime"] = datetime.datetime.now()
+
+    if config.verify_bungie_tokens():
+        aiobungie_client = aiobungie.Client(
+            str(config.BUNGIE_TOKEN),
+            config.BUNGIE_CLIENT_SECRET,
+            config.BUNGIE_CLIENT_ID,
+            max_retries=2,
+        )
+        redis_hash.set_aiobungie_client(aiobungie_client)
+        client.set_type_dependency(aiobungie.Client, aiobungie_client)
+        client.add_client_callback(
+            tanjun.ClientCallbackNames.CLOSING, aiobungie_client.rest.close
+        )
+        (
+            tanjun.InMemoryCooldownManager()
+            .set_bucket("destiny", tanjun.BucketResource.USER, 2, 4)
+            .add_to_client(client)
+        )
+        client.load_modules("core.components.destiny")
+
     return client
 
 
@@ -155,15 +157,17 @@ def main(ctx: click.Context) -> None:
     if ctx.invoked_subcommand is None:
         _build_bot().run(status=hikari.Status.DO_NOT_DISTURB)
 
+
 @main.group(short_help="Handles the db configs.", options_metavar="[options]")
 def db() -> None:
     pass
+
 
 @db.command(name="init", short_help="Build the database tables.")
 def init() -> None:
     loop = aio.get_or_make_loop()
     try:
-        loop.run_until_complete(pool_.PgxPool.create_pool(build=True))
+        loop.run_until_complete(pool_.PgxPool.create_pool(build=True))  # type: ignore
     except Exception:
         click.echo("Couldn't build the daatabse tables.", err=True, color=True)
         traceback.print_exc()

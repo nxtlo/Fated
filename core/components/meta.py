@@ -37,20 +37,27 @@ import tanjun
 
 from core.utils import consts, traits
 
-_LOGGER: typing.Final[logging.Logger] = logging.getLogger("hikari.fated.component")
-prefix_group = tanjun.slash_command_group("prefix", "Handle the bot prefix configs.")
+_LOGGER: typing.Final[logging.Logger] = logging.getLogger("fated.meta")
+prefix_group = (
+    tanjun.slash_command_group("prefix", "Handle the bot prefix configs.")
+    .add_check(tanjun.checks.GuildCheck())
+    .add_check(
+        tanjun.checks.AuthorPermissionCheck(
+            hikari.Permissions.MANAGE_GUILD,
+            error_message="Only guild managers can run this.",
+        )
+    )
+)
 
 
-async def on_ready(_: hikari.ShardReadyEvent) -> None:
+async def on_ready(
+    _: hikari.ShardReadyEvent, client: tanjun.Client = tanjun.inject(type=tanjun.Client)
+) -> None:
+    client.metadata["uptime"] = datetime.datetime.now()
     _LOGGER.info("Bot ready.")
 
 
 @prefix_group.with_command
-@tanjun.with_guild_check
-@tanjun.with_author_permission_check(
-    hikari.Permissions.MANAGE_GUILD,
-    error_message="You need to be a guild manager to execute this command",
-)
 @tanjun.with_str_slash_option("prefix", "The prefix to set.")
 @tanjun.as_slash_command("set", "Change the bot prefix to a custom one.")
 async def set_prefix(
@@ -59,13 +66,13 @@ async def set_prefix(
     hash: traits.HashRunner = tanjun.inject(type=traits.HashRunner),
 ) -> None:
 
+    assert ctx.guild_id
     if len(prefix) > 5:
         raise tanjun.CommandError("Prefix length cannot be more than 5 letters.")
 
     await ctx.defer()
     try:
-        guild_id = ctx.guild_id or (await ctx.fetch_guild()).id
-        await hash.set_prefix(guild_id, prefix)
+        await hash.set_prefix(ctx.guild_id, prefix)
 
     except Exception as err:
         raise tanjun.CommandError(f"Couldn't change bot prefix: {err!s}")
@@ -74,22 +81,13 @@ async def set_prefix(
 
 
 @prefix_group.with_command
-@tanjun.with_guild_check
-@tanjun.with_author_permission_check(
-    hikari.Permissions.MANAGE_GUILD,
-    error_message="You need to be a guild manager to execute this command",
-)
 @tanjun.as_slash_command("clear", "Clear the bot prefix to a custom one.")
 async def clear_prefix(
     ctx: tanjun.abc.SlashContext,
     hash: traits.HashRunner = tanjun.inject(type=traits.HashRunner),
 ) -> None:
 
-    if ctx.cache:
-        guild = ctx.get_guild()
-    else:
-        guild = await ctx.fetch_guild()
-
+    guild = ctx.get_guild() or await ctx.fetch_guild()
     await ctx.defer()
 
     try:
@@ -102,20 +100,10 @@ async def clear_prefix(
     )
 
 
-@tanjun.with_str_slash_option("color", "The color hex code.")
-@tanjun.as_slash_command("colour", "Returns a view of a color by its hex.")
-async def colors(ctx: tanjun.abc.MessageContext, color: int) -> None:
-    embed = hikari.Embed()
-    embed.set_author(name=ctx.author.username)
-    image = f"https://some-random-api.ml/canvas/colorviewer?hex={color}"
-    embed.set_image(image)
-    embed.title = f"0x{color}"
-    await ctx.respond(embed=embed)
-
-
 @tanjun.as_slash_command("about", "Information about the bot itself.")
 async def about_command(
     ctx: tanjun.abc.SlashContext,
+    bot_: hikari.GatewayBot = tanjun.inject(type=hikari.GatewayBot),
 ) -> None:
     """Info about the bot itself."""
 
@@ -125,15 +113,20 @@ async def about_command(
 
     if ctx.cache:
         cache = ctx.cache
-        bot = cache.get_me()
+
+    bot = bot_.get_me() or await bot_.rest.fetch_my_user()
 
     embed = hikari.Embed(
         title=bot.username,
         description="Information about the bot",
         url="https://github.com/nxtlo/Fated",
     )
-    create = f"**Creation date**: {tanjun.conversion.from_datetime(consts.naive_datetime(bot.created_at), style='R')}"
-    uptime_ = f"**Uptime**: {ctx.client.metadata['uptime'] - datetime.datetime.now()}"
+
+    create_date = tanjun.conversion.from_datetime(
+        consts.naive_datetime(bot.created_at), style="R"
+    )
+    metadata_uptime: datetime.datetime = ctx.client.metadata["uptime"]
+    uptime = str(metadata_uptime - datetime.datetime.now())
 
     embed.set_author(name=str(bot.id))
 
@@ -153,7 +146,7 @@ async def about_command(
     )
     embed.add_field(
         "Bot",
-        f"{create}\n{uptime_}\n",
+        f"**Creation Date**: {create_date}\n" f"**Uptime**: {uptime[1:]}",
         inline=False,
     )
     if bot.avatar_url:
@@ -217,11 +210,12 @@ async def member_view(
     await ctx.respond(embed=embed)
 
 
-@tanjun.with_user_slash_option("user", "The discord member.", default=None)
+@tanjun.with_user_slash_option("user", "The discord user.", default=None)
 @tanjun.as_slash_command("user", "Gets you information about a discord user.")
-async def user_view(ctx: tanjun.abc.SlashContext, user: hikari.User) -> None:
+async def user_view(ctx: tanjun.abc.SlashContext, user: hikari.User | None) -> None:
 
-    user = ctx.author or await ctx.rest.fetch_user(user.id)
+    id_ = ctx.author.id or user.id
+    user = await ctx.rest.fetch_user(id_)
     embed = hikari.Embed(title=user.id)
 
     if user.avatar_url:

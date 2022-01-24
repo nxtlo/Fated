@@ -35,6 +35,7 @@ import aiobungie
 import hikari
 import tanjun
 import yuyo
+from hikari.internal import aio
 
 from core.psql import pool
 from core.utils import cache, consts, traits
@@ -763,8 +764,69 @@ async def post_activity_command(
     cache.put(instance, embed)
     await ctx.respond(embed=embed)
 
-destiny = (
-    tanjun.Component(name="Destiny/Bungie", strict=True)
-    .load_from_scope()
-    .make_loader()
+@tanjun.with_cooldown("destiny")
+@destiny_group.with_command
+@tanjun.with_member_slash_option(
+    "member",
+    "An optional member or get their collectibles.",
+    default=None
 )
+@tanjun.with_str_slash_option(
+    "username",
+    "An optional Bungie membership username to fetch.",
+    default=None
+)
+@tanjun.as_slash_command("collectibles", "Take a look at your last acquired items in Destiny 2.")
+async def acquired_items_command(
+    ctx: tanjun.abc.SlashContext,
+    member: hikari.InteractionMember | hikari.User | None,
+    username: str | None,
+    client: aiobungie.Client = tanjun.inject(type=aiobungie.Client),
+    pool_: pool.PgxPool = tanjun.inject(type=pool.PoolT),
+    component_client: yuyo.ComponentClient = tanjun.inject(type=yuyo.ComponentClient)
+) -> None:
+
+        member = member or ctx.author
+        # This is kinda repeatable :\.
+        if username is not None and '#' in username:
+            try:
+                membership = await _get_destiny_player(client, username)
+                id_ = membership.id
+                platform = membership.type.name.title()
+            except LookupError as err:
+                raise tanjun.CommandError(f'{err}')
+        else:
+            try:
+                membership = await pool_.fetch_destiny_member(member.id)
+                id_ = membership.membership_id
+                platform = membership.membership_type
+            except pool.ExistsError as e:
+                raise tanjun.CommandError(e.message)
+
+        profile = await client.fetch_profile(id_, _PLATFORMS[platform], aiobungie.ComponentType.COLLECTIBLES)
+
+        if collectibles := profile.profile_collectibles:
+            if not (recent_items := collectibles.recent_collectibles):
+                raise tanjun.CommandError(f"No items found for {membership.name}")
+
+            items = await aio.all_of(*[client.rest.fetch_entity("DestinyCollectibleDefinition", item) for item in recent_items])
+            pages = (
+                (
+                    hikari.UNDEFINED,
+                    hikari.Embed(
+                        title=entity['displayProperties']['name'],
+                        description=(
+                            entity['displayProperties']['description']
+                            if entity['displayProperties']['description']
+                            else hikari.UNDEFINED
+                        )
+                    )
+                    .set_thumbnail(aiobungie.url.BASE + entity['displayProperties']['icon'])
+                    .add_field("Source", entity.get('sourceString', "Unknown"))
+                    .add_field("Hash", entity['itemHash'])
+                )
+                for entity in items
+            )
+            await consts.generate_component(ctx, pages, component_client)
+
+destiny = tanjun.Component(name="Destiny/Bungie", strict=True).load_from_scope().make_loader()

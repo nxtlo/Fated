@@ -57,6 +57,7 @@ DURATIONS: dict[str, int] = {
 async def reload(ctx: tanjun.abc.MessageContext) -> None:
     await ctx.client.clear_application_commands()
 
+
 async def _sleep_for(
     timer: datetime.timedelta,
     ctx: tanjun.abc.SlashContext,
@@ -456,6 +457,7 @@ async def get_guilds(ctx: tanjun.abc.MessageContext) -> None:
     )
     await ctx.respond(embed=embed)
 
+
 # Originally, These commands are used to manage and test the cache
 # not for actually caching stuff.
 @tanjun.with_owner_check
@@ -541,7 +543,9 @@ async def when_join_guilds(event: hikari.GuildJoinEvent) -> None:
         embed.set_thumbnail(guild.icon_url)
     (
         embed.add_field("Member count", str(len(guild.get_members())))
-        .add_field("Created at", tanjun.conversion.from_datetime(guild.created_at, style="R"))
+        .add_field(
+            "Created at", tanjun.conversion.from_datetime(guild.created_at, style="R")
+        )
         .add_field("Owner", f"Name: {guild_owner.username}\n" f"ID: {guild_owner.id}")
     )
     await event.app.rest.create_message(STDOUT, embed=embed)
@@ -554,7 +558,9 @@ async def when_leave_guilds(event: hikari.GuildLeaveEvent) -> None:
             title=f"{guild.name} | {guild.id}",
             description="Left a guild.",
             timestamp=datetime.datetime.utcnow().astimezone(datetime.timezone.utc),
-        ).add_field("Created at", tanjun.conversion.from_datetime(guild.created_at, style="R"))
+        ).add_field(
+            "Created at", tanjun.conversion.from_datetime(guild.created_at, style="R")
+        )
         await event.app.rest.create_message(STDOUT, embed=embed)
         return
     await event.app.rest.create_message(

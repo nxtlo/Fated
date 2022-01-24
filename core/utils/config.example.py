@@ -8,52 +8,61 @@ import typing
 from hikari import config as hikari_config
 
 
-@dataclasses.dataclass(slots=True, repr=False, eq=False, frozen=True)
+@dataclasses.dataclass(slots=True, repr=False, frozen=True)
 class Config:
-    """Handle the bot's configs."""
+    """Main shared configuration between the bot, client, database and other."""
 
-    BOT_TOKEN: typing.Final[str] = dataclasses.field(default="TOKEN")
-    """The bot's token."""
+    BOT_TOKEN: str = "BOT_TOKEN"
 
-    DB_NAME: typing.Final[str] = dataclasses.field(default="NAME")
-    """Your database name."""
+    # This is optional. The component will not load if these field are not set.
+    BUNGIE_TOKEN: str | None = None
+    BUNGIE_CLIENT_ID: int | None = None
+    BUNGIE_CLIENT_SECRET: str | None = None
 
-    BUNGIE_TOKEN: typing.Final[str | None] = dataclasses.field(default=None)
-    """Bungie api key for interacting with aiobungie."""
+    # postgresql stuff.
+    DB_NAME: str = "NAME"
+    DB_USER: str = "PSQL_USER"
+    DB_PASSWORD: str | int = "PSQL_PASSWORD"
+    DB_HOST: str = "127.0.0.1"
+    DB_PORT: int = 5432
 
-    BUNGIE_CLIENT_ID: typing.Final[int] = dataclasses.field(default=0)
-    """Bungie Application client id for account syncing."""
-
-    BUNGIE_CLIENT_SECRET: typing.Final[str] = dataclasses.field(default="")
-    """Bungie Application client secret for account syncing."""
-
-    DB_USER: typing.Final[str] = dataclasses.field(default="PSQL_USER")
-    """Your database username."""
-
-    DB_PASSWORD: typing.Final[str | int] = dataclasses.field(default="PSQL_PASSWORD")
-    """Your database password. this can be an int or a string."""
-
-    DB_HOST: typing.Final[str] = dataclasses.field(default="127.0.0.1")
-    """Your database host. default to `127.0.0.1`"""
-
-    DB_PORT: typing.Final[int] = dataclasses.field(default=5432)
-    """Your database's port. Defaults to 5432."""
-
-    CACHE: hikari_config.CacheComponents = dataclasses.field(
-        default=(
-            hikari_config.CacheComponents.GUILD_CHANNELS
-            | hikari_config.CacheComponents.GUILDS
-            | hikari_config.CacheComponents.MEMBERS
-            | hikari_config.CacheComponents.ROLES
-        )
+    # Bot's cache
+    CACHE_SETTINGS: hikari_config.CacheComponents = (
+        hikari_config.CacheComponents.GUILD_CHANNELS
+        | hikari_config.CacheComponents.GUILDS
+        | hikari_config.CacheComponents.MEMBERS
+        | hikari_config.CacheComponents.ROLES
     )
-    """The bot's cache settings."""
 
-    REDIS_HOST: typing.Final[str] = dataclasses.field(default="127.0.0.1")
-    """The redis server host."""
+    # Redis stuff
+    REDIS_HOST: str = "127.0.0.1"
+    REDIS_PORT: int = 6379
+    REDIS_PASSWORD: str | None = None
 
-    REDIS_PORT: typing.Final[int] = dataclasses.field(default=6379)
-    """The redis server port."""
+    @classmethod
+    def into_dotenv(cls) -> Config:
+        """Loads the configs from `.env` file if installed and set."""
+        try:
+            import os as _os
 
-    REDIS_PASSWORD: typing.Final[str | None] = dataclasses.field(default=None)
-    """The redis server password, This can be left None."""
+            import dotenv
+
+            dotenv.load_dotenv()
+        except ImportError:
+            raise
+
+        return Config(
+            BOT_TOKEN=_os.environ["BOT_TOKEN"],
+            DB_NAME=_os.environ["DB_NAME"],
+            DB_PASSWORD=_os.environ["DB_PASSEORD"],
+            DB_HOST=_os.environ["DB_HOST"],
+            DB_PORT=int(_os.environ["DB_PORT"]),
+            DB_USER=_os.environ["DB_USER"],
+            BUNGIE_TOKEN=_os.environ.get("BUNGIE_TOKEN", ""),
+            BUNGIE_CLIENT_ID=int(_os.environ.get("BUNGIE_CLIENT_TOKEN", 0)),
+            BUNGIE_CLIENT_SECRET=_os.environ.get("BUNGIE_CLIENT_SECRET", ""),
+            CACHE_SETTINGS=cls.CACHE_SETTINGS,
+            REDIS_HOST=_os.environ.get("REDIS_HOST", cls.REDIS_HOST),
+            REDIS_PORT=int(_os.environ.get("REDIS_PORT", cls.REDIS_PORT)),
+            REDIS_PASSWORD=_os.environ.get("REDIS_PASSWORD"),
+        )

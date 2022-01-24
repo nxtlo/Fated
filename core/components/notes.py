@@ -34,6 +34,7 @@ from core.utils import consts
 
 note = tanjun.slash_command_group("note", "Create notes.")
 
+
 @note.with_command
 @tanjun.with_str_slash_option("content", "The note content.")
 @tanjun.with_str_slash_option("name", "The note name.")
@@ -55,6 +56,7 @@ async def create_note(
         raise tanjun.CommandError(e.message)
 
     await ctx.respond("\U0001f44d")
+
 
 @note.with_command
 @tanjun.with_str_slash_option("name", "The note name to get.")
@@ -85,33 +87,37 @@ async def get_note(
 
     origin = notes_[0]
     embed = hikari.Embed(title=f"{origin.name}", description=origin.content)
-    embed.set_footer(f'ID({origin.id})')
+    embed.set_footer(f"ID({origin.id})")
     await ctx.respond(embed=embed)
 
+
 @note.with_command
-@tanjun.with_bool_slash_option("strict", "If True, Then all notes will be removed.", default=False)
+@tanjun.with_bool_slash_option(
+    "strict", "If True, Then all notes will be removed.", default=False
+)
 @tanjun.with_str_slash_option("name", "The note name to remove.", default=None)
 @tanjun.as_slash_command("remove", "Remove a note you created.")
 async def delete_note(
     ctx: tanjun.abc.SlashContext,
     name: str | None,
     strict: bool,
-    pool: pgpool.PgxPool = tanjun.inject(type=pgpool.PoolT)
+    pool: pgpool.PgxPool = tanjun.inject(type=pgpool.PoolT),
 ) -> None:
 
     try:
         await pool.remove_note(ctx.author.id, strict, name)
     except ValueError as e:
-        raise tanjun.CommandError(f'{e!s}')
+        raise tanjun.CommandError(f"{e!s}")
 
     await ctx.respond("\U0001f44d")
+
 
 @note.with_command
 @tanjun.as_slash_command("all", "Get all the notes you created.")
 async def get_all_notes(
     ctx: tanjun.abc.SlashContext,
     pool: pgpool.PgxPool = tanjun.inject(type=pgpool.PoolT),
-    component_client: yuyo.ComponentClient = tanjun.inject(type=yuyo.ComponentClient)
+    component_client: yuyo.ComponentClient = tanjun.inject(type=yuyo.ComponentClient),
 ) -> None:
 
     try:
@@ -124,12 +130,16 @@ async def get_all_notes(
             hikari.UNDEFINED,
             hikari.Embed(title=n.name, description=n.content)
             .add_field("Creator", f"<@!{n.author_id}>")
-            .add_field("Created at", f'{tanjun.conversion.from_datetime(consts.naive_datetime(n.created_at))}')
-            .set_footer(f"ID({n.id})")
+            .add_field(
+                "Created at",
+                f"{tanjun.conversion.from_datetime(consts.naive_datetime(n.created_at))}",
+            )
+            .set_footer(f"ID({n.id})"),
         )
         for n in notes
     )
     await consts.generate_component(ctx, component, component_client)
+
 
 @note.with_command
 @tanjun.with_str_slash_option("content", "The new content to set.")
@@ -144,4 +154,7 @@ async def update_note_(
     await pool.update_note(name, content, ctx.author.id)
     await ctx.respond("\U0001f44d")
 
-notes_component = tanjun.Component(name="Notes", strict=True).load_from_scope().make_loader()
+
+notes_component = (
+    tanjun.Component(name="Notes", strict=True).load_from_scope().make_loader()
+)

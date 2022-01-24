@@ -1,16 +1,15 @@
 # config
 config.py
+.env
 
-# Venv
+# venv
 .venv/
 
 # cache
 __pycache__/
 .mypy_cache/
 
-# others
+# Redis
 dump.rdb
+# Vscode configs.
 .vscode/
-
-# Spotify stuff
-__cache__/
