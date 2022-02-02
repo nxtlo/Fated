@@ -35,7 +35,6 @@ import aiobungie
 import hikari
 import tanjun
 import yuyo
-from hikari.internal import aio
 
 from core.psql import pool
 from core.utils import cache, consts, traits
@@ -106,21 +105,18 @@ async def _get_destiny_player(
     client: aiobungie.Client,
     name: str,
     type: aiobungie.MembershipType = aiobungie.MembershipType.ALL,
-) -> aiobungie.crate.DestinyUser:
+) -> aiobungie.crate.DestinyMembership:
     names = name.split("#")
     name_, code = names
-    try:
-        player = await client.fetch_player(name_, int(code), type)
-        assert player
-        # The sequence always holds one player.
-        # If they're not found means there's no player with the given name.
-        return player[0]
-    except IndexError:
+
+    player = await client.fetch_player(name_, int(code), type)
+    if not player:
         raise LookupError(
             f"Player name `{name}` not found. "
             "Make sure you include the full name looks like this `Fate#123`"
         ) from None
 
+    return player[0]
 
 def _build_inventory_item_embed(
     entity: aiobungie.crate.InventoryEntity,
@@ -165,6 +161,7 @@ def _build_inventory_item_embed(
 
     return embed
 
+@tanjun.with_concurrency_limit("destiny")
 @destiny_group.with_command
 @tanjun.as_slash_command("sync", "Sync your Bungie account with this bot.", default_to_ephemeral=True)
 async def sync_command(
@@ -378,7 +375,7 @@ async def friend_list_command(
 
 # I don't want to force authorizing so we also allow to search for players
 # either with their name or id.
-@tanjun.with_cooldown("destiny")
+@tanjun.with_concurrency_limit("destiny")
 @destiny_group.with_command
 @tanjun.with_member_slash_option(
     "member", "An optional discord member to get their characters.", default=None
@@ -410,7 +407,7 @@ async def characters(
                 raise tanjun.CommandError(f'{e!s}')
 
             id = player.id 
-            platform = str(player.type).title()
+            platform = player.type.name.title()
 
     else:
         try:
@@ -548,7 +545,6 @@ search_group = destiny_group.with_command(
     tanjun.slash_command_group("search", "Commands search for stuff in the API.")
 )
 
-# This one is currently bugged.
 @search_group.with_command
 @tanjun.with_str_slash_option("name", "The player names to search for.")
 @tanjun.as_slash_command("player", "Search for Destiny 2 players.")
@@ -559,26 +555,26 @@ async def search_players(
     component_client: yuyo.ComponentClient = tanjun.inject(type=yuyo.ComponentClient)
 ) -> None:
     ...
-    # results = await client.search_users(name)
+    results = await client.search_users(name)
 
-    # if not results:
-    #     raise tanjun.CommandError("No players found.")
+    if not results:
+        raise tanjun.CommandError("No players found.")
     
-    # iters = (
-    #     (
-    #         hikari.UNDEFINED,
-    #         hikari.Embed(title=player.unique_name, url=player.link)
-    #         .add_field(
-    #             "Information",
-    #             f"Membershiptype: {player.type}\n"
-    #             f"ID: {player.id}\n"
-    #             f"Crossave-override: {str(player.crossave_override).title()}"
-    #         )
-    #         .set_thumbnail(str(player.icon))
-    #     )
-    #     for player in results
-    # )
-    # await consts.generate_component(ctx, iters, component_client)
+    iters = (
+        (
+            hikari.UNDEFINED,
+            hikari.Embed(title=player.memberships[0].unique_name, url=player.memberships[0].link)
+            .add_field(
+                "Information",
+                f"Membershiptype: {player.memberships[0].type}\n"
+                f"ID: {player.memberships[0].id}\n"
+                f"Crossave-override: {str(player.memberships[0].crossave_override).title()}"
+            )
+            .set_thumbnail(str(player.memberships[0].icon))
+        )
+        for player in results
+    )
+    await consts.generate_component(ctx, iters, component_client)
 
 @search_group.with_command
 @tanjun.with_str_slash_option("name", "The entity name to search for.")
@@ -689,7 +685,7 @@ async def item_definition_command(
     cache_.put(item_hash, embed)
     await ctx.respond(embed=embed)
 
-@tanjun.with_cooldown("destiny")
+@tanjun.with_concurrency_limit("destiny")
 @search_group.with_command
 @tanjun.with_int_slash_option("instance", "The instance id of the activity.")
 @tanjun.as_slash_command("post_activity", "Get post activity information given the activity's instance id.")
@@ -764,7 +760,7 @@ async def post_activity_command(
     cache.put(instance, embed)
     await ctx.respond(embed=embed)
 
-@tanjun.with_cooldown("destiny")
+@tanjun.with_concurrency_limit("destiny")
 @destiny_group.with_command
 @tanjun.with_member_slash_option(
     "member",
@@ -809,7 +805,7 @@ async def acquired_items_command(
             if not (recent_items := collectibles.recent_collectibles):
                 raise tanjun.CommandError(f"No items found for {membership.name}")
 
-            items = await aio.all_of(*[client.rest.fetch_entity("DestinyCollectibleDefinition", item) for item in recent_items])
+            items = await consts.spawn(*[client.rest.fetch_entity("DestinyCollectibleDefinition", item) for item in recent_items])
             pages = (
                 (
                     hikari.UNDEFINED,
@@ -825,7 +821,7 @@ async def acquired_items_command(
                     .add_field("Source", entity.get('sourceString', "Unknown"))
                     .add_field("Hash", entity['itemHash'])
                 )
-                for entity in items
+                for entity in reversed(items)
             )
             await consts.generate_component(ctx, pages, component_client)
 

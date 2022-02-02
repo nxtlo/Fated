@@ -124,6 +124,11 @@ def _build_client(
             .set_bucket("destiny", tanjun.BucketResource.USER, 2, 4)
             .add_to_client(client)
         )
+        (
+            tanjun.InMemoryConcurrencyLimiter()
+            .set_bucket("destiny", tanjun.BucketResource.USER, 2)
+            .add_to_client(client)
+        )
         client.load_modules("core.components.destiny")
 
     return client

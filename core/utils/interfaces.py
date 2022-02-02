@@ -77,7 +77,7 @@ class APIAware(abc.ABC):
 
     @abc.abstractmethod
     async def git_release(
-        self, user: str, repo_name: str, limit: int | None
+        self, user: str, repo_name: str, limit: int | None = None
     ) -> collections.Generator[hikari.Embed, None, None]:
         ...
 

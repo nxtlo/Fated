@@ -214,7 +214,7 @@ async def member_view(
 @tanjun.as_slash_command("user", "Gets you information about a discord user.")
 async def user_view(ctx: tanjun.abc.SlashContext, user: hikari.User | None) -> None:
 
-    id_ = ctx.author.id or user.id
+    id_ = user.id if user is not None else ctx.author.id
     user = await ctx.rest.fetch_user(id_)
     embed = hikari.Embed(title=user.id)
 

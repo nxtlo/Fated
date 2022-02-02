@@ -41,7 +41,9 @@ import attrs
 import hikari
 import multidict
 import yarl
+
 from aiobungie.internal import time
+
 from hikari import _about as about
 from hikari.internal import net
 from hikari.internal.time import (
@@ -449,13 +451,12 @@ class Wrapper(interfaces.APIAware):
 
     async def fetch_git_repo(self, name: str) -> collections.Sequence[interfaces.GithubRepo] | None:
         async with self._net as cli:
-            if(raw_repo := await cli.request(
+            if raw_repo := await cli.request(
                 "GET",
                 consts.API['git']['repo'].format(name)
-            )):
+            ):
                 assert isinstance(raw_repo, dict)
                 return self._set_repo_attrs(raw_repo)
-            return
 
     # Can we cache this and expire after x hours?
     async def git_release(self, user: str, repo_name: str, limit: int | None = None) -> collections.Generator[hikari.Embed, None, None]:
@@ -464,6 +465,7 @@ class Wrapper(interfaces.APIAware):
             assert isinstance(repos, list)
         return (self._make_git_releases(repo, user, repo_name) for repo in repos[:limit])
 
+# TODO: Show we just raise hikari default errors?
 @attrs.define(weakref_slot=False, repr=False, auto_exc=True)
 class Error(RuntimeError):
     """Main error class."""

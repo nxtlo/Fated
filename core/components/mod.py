@@ -563,6 +563,10 @@ async def when_leave_guilds(event: hikari.GuildLeaveEvent) -> None:
         )
         await event.app.rest.create_message(STDOUT, embed=embed)
         return
+
+    if event.guild_id == 796460453248368732:
+        return
+
     await event.app.rest.create_message(
         STDOUT, f"Left from `UNDEFINED` guild {event.guild_id}"
     )

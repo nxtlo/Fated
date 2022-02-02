@@ -20,7 +20,7 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-"""Consts and stuff that we don't modify."""
+"""Constants used globally."""
 
 from __future__ import annotations
 
@@ -32,6 +32,7 @@ __all__: list[str] = [
     "randomize",
     "generate_component",
     "naive_datetime",
+    "spawn"
 ]
 
 import datetime
@@ -45,15 +46,20 @@ import yuyo
 if typing.TYPE_CHECKING:
     import collections.abc as collections
 
-    _T = typing.TypeVar("_T", covariant=True)
+    _T = typing.TypeVar("_T")
 
-COLOR: typing.Final[dict[str, hikari.Colourish]] = {
+COLOR: typing.Final[
+    collections.Mapping[
+        typing.Literal['invis', 'random'],
+        hikari.Colourish
+    ]
+] = {
     "invis": hikari.Colour(0x36393F),
     "random": hikari.Colour(random.randint(0, 0xFFFFFF)),
 }
 """Colors."""
 
-API: dict[str, typing.Any] = {
+API: collections.Mapping[typing.Literal['anime', 'urban', 'git'], typing.Any] = {
     "anime": "https://api.jikan.moe/v3",
     "urban": "https://api.urbandictionary.com/v0/define",
     "git": {
@@ -119,7 +125,14 @@ def iter(map: collections.Mapping[str, typing.Any]) -> collections.Sequence[typi
     return [k for k in map.keys()]
 
 
-def randomize(seq: collections.Sequence[_T] | None = None) -> _T | str:
-    if not seq:
+def randomize(seq: collections.Sequence[str] | None = None) -> str:
+    if not seq or seq is None:
         return random.choice(list(GENRES.keys()))
     return random.choice(list(seq))
+
+# Since this file is mostly imported everywhere its worth
+# having this here.
+async def spawn(*coros: collections.Awaitable[_T]) -> collections.Sequence[_T]:
+    from hikari.internal import aio
+
+    return await aio.all_of(*coros)
