@@ -296,7 +296,6 @@ async def run_sql(
 async def kick(
     ctx: tanjun.abc.SlashContext,
     member: hikari.InteractionMember,
-    /,
     reason: hikari.UndefinedOr[str],
 ) -> None:
 
@@ -328,6 +327,7 @@ async def kick(
             if reason:
                 to_respond += f" For {reason}."
             await ctx.respond("".join(to_respond))
+            return
 
 
 @tanjun.with_guild_check
@@ -342,7 +342,6 @@ async def kick(
 async def ban(
     ctx: tanjun.abc.SlashContext,
     member: hikari.InteractionMember,
-    /,
     reason: hikari.UndefinedOr[str],
 ) -> None:
 
@@ -375,6 +374,7 @@ async def ban(
             if reason:
                 to_respond += f" For {reason}."
             await ctx.respond("".join(to_respond))
+            return
 
 
 @tanjun.with_owner_check
