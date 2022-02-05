@@ -32,7 +32,7 @@ __all__: list[str] = [
     "randomize",
     "generate_component",
     "naive_datetime",
-    "spawn"
+    "spawn",
 ]
 
 import datetime
@@ -49,17 +49,14 @@ if typing.TYPE_CHECKING:
     _T = typing.TypeVar("_T")
 
 COLOR: typing.Final[
-    collections.Mapping[
-        typing.Literal['invis', 'random'],
-        hikari.Colourish
-    ]
+    collections.Mapping[typing.Literal["invis", "random"], hikari.Colourish]
 ] = {
     "invis": hikari.Colour(0x36393F),
     "random": hikari.Colour(random.randint(0, 0xFFFFFF)),
 }
 """Colors."""
 
-API: collections.Mapping[typing.Literal['anime', 'urban', 'git'], typing.Any] = {
+API: collections.Mapping[typing.Literal["anime", "urban", "git"], typing.Any] = {
     "anime": "https://api.jikan.moe/v3",
     "urban": "https://api.urbandictionary.com/v0/define",
     "git": {
@@ -129,6 +126,7 @@ def randomize(seq: collections.Sequence[str] | None = None) -> str:
     if not seq or seq is None:
         return random.choice(list(GENRES.keys()))
     return random.choice(list(seq))
+
 
 # Since this file is mostly imported everywhere its worth
 # having this here.

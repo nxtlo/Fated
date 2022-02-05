@@ -225,10 +225,7 @@ async def sync_command(
             else:
                 primary_id = membership.id
 
-            await redis.set_bungie_tokens(
-                ctx.author.id,
-                response
-            )
+            await redis.set_bungie_tokens(ctx.author.id, response)
 
             try:
                 await pool_.put_destiny_member(

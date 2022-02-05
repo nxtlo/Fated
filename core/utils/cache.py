@@ -136,7 +136,11 @@ class Hash(traits.HashRunner):
         await self.__connection.hdel("tokens", str(user))
 
     # This impl hikari's client creds strat.
-    async def get_bungie_tokens(self, user: hikari.Snowflake) -> dict[str, str | float]:
+    async def get_bungie_tokens(
+        self, user: hikari.Snowflake
+    ) -> collections.Mapping[
+        typing.Literal["access", "refresh", "date", "expires"], str | float
+    ]:
         is_expired = await self._is_expired(user)
 
         if (tokens := await self.__loads_tokens(user)) and not is_expired:
@@ -183,7 +187,11 @@ class Hash(traits.HashRunner):
         return body
 
     # Loads the authorized data from a string JSON object to a Python dict object.
-    async def __loads_tokens(self, owner: hikari.Snowflake) -> dict[str, str | float]:
+    async def __loads_tokens(
+        self, owner: hikari.Snowflake
+    ) -> collections.Mapping[
+        typing.Literal["access", "refresh", "date", "expires"], str | float
+    ]:
         resp: hikari.Snowflake = await self.__connection.hget("tokens", owner)
         if resp:
             return json.loads(str(resp))

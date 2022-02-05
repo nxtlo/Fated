@@ -32,6 +32,7 @@ import typing
 from hikari.internal import fast_protocol as fast  # too long >:
 
 if typing.TYPE_CHECKING:
+    import collections.abc as collections
     import pathlib
 
     import aiobungie
@@ -46,7 +47,7 @@ if typing.TYPE_CHECKING:
 
 @typing.runtime_checkable
 class HashRunner(fast.FastProtocolChecking, typing.Protocol):
-    """Standard Redis hash trait. This hash is used to store fast key -> value objects for our needs."""
+    """Core redis hash trait. This hash is used to store fast key -> value objects for our needs."""
 
     __slots__ = ()
 
@@ -56,6 +57,9 @@ class HashRunner(fast.FastProtocolChecking, typing.Protocol):
     async def get_prefix(self, guild_id: snowflakes.Snowflake) -> str:
         """Returns the cached prefix for a guild snowflake."""
         raise NotImplementedError
+
+    async def remove_prefix(self, guild_id: snowflakes.Snowflake) -> None:
+        """Removes a prefix for a guild snowflake id."""
 
     async def set_mute_roles(
         self, guild_id: snowflakes.Snowflake, role_id: snowflakes.Snowflake
@@ -71,9 +75,6 @@ class HashRunner(fast.FastProtocolChecking, typing.Protocol):
     async def remove_mute_role(self, guild_id: snowflakes.Snowflake) -> None:
         """Removes the cached mute role id for the given snowflake guild."""
 
-    async def remove_prefix(self, guild_id: snowflakes.Snowflake) -> None:
-        """Removes a prefix for a guild snowflake id."""
-
     # BTW there's no background task that runs every x hours to refresh the Bungie OAuth2 tokens.
     # All this are handled internally, We check if the token is expired or not when the user
     # invokes a command that requires OAuth2. If the token is expired we refresh them immediantly.
@@ -86,14 +87,16 @@ class HashRunner(fast.FastProtocolChecking, typing.Protocol):
 
     async def get_bungie_tokens(
         self, user: snowflakes.Snowflake
-    ) -> dict[str, str | float]:
+    ) -> collections.Mapping[
+        typing.Literal["access", "refresh", "date", "expires"], str | float
+    ]:
         """Gets loaded dict object of the user snowflake tokens.
 
         This dictionary contains 4 keys:
             * access: str -> The access token for the snowflake
             * refresh: str -> The refresh token for the snowflake
             * expires: float -> When's this token going to expire. This is handled internally
-            * date: str date -> When was this snowflake cached, refreshed at.
+            * date: ISO string datetime -> When was this snowflake cached/refreshed at.
         """
         raise NotImplementedError
 
@@ -104,7 +107,7 @@ class HashRunner(fast.FastProtocolChecking, typing.Protocol):
 
 @typing.runtime_checkable
 class PoolRunner(fast.FastProtocolChecking, typing.Protocol):
-    """The core asyncpg pool structural protocol. Every impl should have these methods."""
+    """Core asyncpg pool trait. Every impl should have these methods."""
 
     __slots__ = ()
 
@@ -134,7 +137,7 @@ class PoolRunner(fast.FastProtocolChecking, typing.Protocol):
 
 @typing.runtime_checkable
 class NetRunner(fast.FastProtocolChecking, typing.Protocol):
-    """An interface for our http client."""
+    """Core trait for the HTTP client impl."""
 
     __slots__ = ()
 
@@ -143,14 +146,16 @@ class NetRunner(fast.FastProtocolChecking, typing.Protocol):
         raise NotImplementedError
 
     async def close(self) -> None:
-        """Closes the http session."""
+        """Closes the HTTP client session."""
 
     async def request(
         self,
         method: typing.Literal["GET", "POST", "PUT", "DELETE", "PATCH"],
         url: str | yarl.URL,
         getter: typing.Any | _GETTER_TYPE | None = None,
-        read_bytes: bool = False,
+        json: typing.Optional[data_binding.StringMapBuilder] = None,
+        auth: typing.Optional[str] = None,
+        unwrap_bytes: bool = False,
         **kwargs: typing.Any,
     ) -> data_binding.JSONArray | data_binding.JSONObject | files.Resourceish | _GETTER_TYPE | None:
         """Perform an HTTP request.
@@ -159,17 +164,18 @@ class NetRunner(fast.FastProtocolChecking, typing.Protocol):
         ----------
         method : `str`
             The http request method.
-            This can be `GET`. `POST`. `PUT`. `DELETE`. etc.
-
         url : `str` | `yarl.URL`
             The api url. This also can be used as a `yarl.URL(...)` object.
         getter: `T`
             if your data is a dict[..., ...] You can use this
             parameter to get something specific value from the dict
             This is equl to `request['key']` -> `request(getter='key')`
-        read_bytes : `bool`
-            If set to true then the request will read the bytes
-            and return them.
+        json : typing.Optional[data_binding.StringMapBuilder]
+            JSON data that can be passed to the request if needed.
+        unwrap_bytes : `bool`
+            If set to true then the request will return the bytes of the response.
+        auth : `typing.Optional[str]`
+            If the request requires a Bearer access token for auth, This can be passed here.
         **kwargs : `typing.Any`
             Other keyword arguments you can pass to the request.
         """

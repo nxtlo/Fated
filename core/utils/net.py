@@ -40,12 +40,11 @@ import aiohttp
 import attrs
 import hikari
 import multidict
+import tanjun
 import yarl
-
 from aiobungie.internal import time
-
 from hikari import _about as about
-from hikari.internal import net
+from hikari.internal import data_binding, net
 from hikari.internal.time import (
     fast_iso8601_datetime_string_to_datetime as fast_datetime,
 )
@@ -57,8 +56,6 @@ if typing.TYPE_CHECKING:
     import collections.abc as collections
     import types
 
-    import tanjun
-    from hikari.internal import data_binding
 
     _GETTER_TYPE = typing.TypeVar("_GETTER_TYPE", covariant=True)
     DATA_TYPE = dict[str, typing.Any] | multidict.CIMultiDictProxy[str]
@@ -104,13 +101,24 @@ class HTTPNet(traits.NetRunner):
         method: typing.Literal["GET", "POST", "PUT", "DELETE", "PATCH"],
         url: str | yarl.URL,
         getter: _GETTER_TYPE | None = None,
-        read_bytes: bool = False,
+        json: typing.Optional[data_binding.StringMapBuilder] = None,
+        auth: typing.Optional[str] = None,
+        unwrap_bytes: bool = False,
         **kwargs: typing.Any,
     ) -> data_binding.JSONObject | data_binding.JSONArray | hikari.Resourceish | _GETTER_TYPE | None:
         if not self._lock:
             self._lock = asyncio.Lock()
+
         async with self._lock:
-            return await self._request(method, url, getter, read_bytes, **kwargs)
+            return await self._request(
+                method=method,
+                url=url,
+                getter=getter,
+                unwrap_bytes=unwrap_bytes,
+                json=json,
+                auth=auth,
+                **kwargs
+            )
 
     @typing.final
     async def _request(
@@ -118,7 +126,9 @@ class HTTPNet(traits.NetRunner):
         method: typing.Literal["GET", "POST", "PUT", "DELETE", "PATCH"],
         url: str | yarl.URL,
         getter: _GETTER_TYPE |  None = None,
-        read_bytes: bool = False,
+        json: typing.Optional[data_binding.StringMapBuilder] = None,
+        auth: typing.Optional[str] = None,
+        unwrap_bytes: bool = False,
         **kwargs: typing.Any,
     ) -> data_binding.JSONObject | data_binding.JSONArray | hikari.Resourceish | _GETTER_TYPE | None:
 
@@ -134,14 +144,21 @@ class HTTPNet(traits.NetRunner):
         kwargs["headers"] = headers = data_binding.StringMapBuilder()
         headers.put("User-Agent", user_agent)
 
+        if auth is not None:
+            headers.put("Authorization", f"Bearer {auth}")
+
         while True:
             async for _ in backoff_:
+                assert self._session is not hikari.UNDEFINED
                 try:
-                    async with self._session.request(  # type: ignore
-                        method, yarl.URL(url) if type(url) is yarl.URL else url, **kwargs
+                    async with self._session.request(
+                        method,
+                        url,
+                        json=json,
+                        **kwargs
                     ) as response:
                         if http.HTTPStatus.MULTIPLE_CHOICES > response.status >= http.HTTPStatus.OK:
-                            if read_bytes:
+                            if unwrap_bytes:
                                 return await response.read()
 
                             data = await response.json(encoding="utf-8")
@@ -185,7 +202,6 @@ class HTTPNet(traits.NetRunner):
         ___: types.TracebackType | None,
     ) -> None:
         await self.close()
-        return
 
     @staticmethod
     async def error_handle(response: aiohttp.ClientResponse, /) -> typing.NoReturn:
@@ -391,11 +407,11 @@ class Wrapper(interfaces.APIAware):
                 .set_image(manga.get("image_url", None))
                 .add_field(
                     "Published at",
-                    str(tanjun.from_datetime(fast_date(manga.get("start_date", hikari.UNDEFINED)), style='R'))  # type: ignore
+                    str(tanjun.conversion.from_datetime(fast_datetime(manga.get("start_date")), style='R') or hikari.UNDEFINED)  # type: ignore
                 )
                 .add_field(
                     "Finished at",
-                    str(tanjun.from_datetime(fast_date(manga.get("end_date", hikari.UNDEFINED)), style='R'))  # type: ignore
+                    str(tanjun.conversion.from_datetime(fast_datetime(manga.get("end_date")), style='R') or hikari.UNDEFINED)  # type: ignore
                 )
                 .add_field("Chapters", manga.get("chapters", hikari.UNDEFINED))
                 .add_field("Volumes", manga.get("volumes", hikari.UNDEFINED))
