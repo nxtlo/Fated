@@ -256,6 +256,8 @@ class Memory(hikari_collections.ExtendedMutableMapping[MKT, MVT]):
             )
         self.on_expire = on_expire
         self.expire_after = expire_after
+        super().__init__()
+
         self._map = hikari_collections.TimedCacheMap[MKT, MVT](
             expiry=expire_after, on_expire=on_expire
         )

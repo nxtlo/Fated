@@ -153,7 +153,7 @@ class NetRunner(fast.FastProtocolChecking, typing.Protocol):
         method: typing.Literal["GET", "POST", "PUT", "DELETE", "PATCH"],
         url: str | yarl.URL,
         getter: typing.Any | _GETTER_TYPE | None = None,
-        json: typing.Optional[data_binding.StringMapBuilder] = None,
+        json: typing.Optional[data_binding.JSONObjectBuilder] = None,
         auth: typing.Optional[str] = None,
         unwrap_bytes: bool = False,
         **kwargs: typing.Any,
@@ -163,20 +163,20 @@ class NetRunner(fast.FastProtocolChecking, typing.Protocol):
         Parameters
         ----------
         method : `str`
-            The http request method.
+            The HTTP request method.
         url : `str` | `yarl.URL`
-            The api url. This also can be used as a `yarl.URL(...)` object.
-        getter: `T`
-            if your data is a dict[..., ...] You can use this
-            parameter to get something specific value from the dict
+            The API endpoint URL.
+        getter: `T?`
+            if your data is a `dict['key' -> 'val']` You can use this
+            parameter to get something the value from the dict
             This is equl to `request['key']` -> `request(getter='key')`
-        json : typing.Optional[data_binding.StringMapBuilder]
-            JSON data that can be passed to the request if needed.
+        json : `data_binding.JSONObjectBuilder?`
+            Optional JSON data that can be passed to the request if needed.
         unwrap_bytes : `bool`
             If set to true then the request will return the bytes of the response.
-        auth : `typing.Optional[str]`
+        auth : `str?`
             If the request requires a Bearer access token for auth, This can be passed here.
-        **kwargs : `typing.Any`
+        **kwargs : `Any`
             Other keyword arguments you can pass to the request.
         """
 

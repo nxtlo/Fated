@@ -101,7 +101,7 @@ class HTTPNet(traits.NetRunner):
         method: typing.Literal["GET", "POST", "PUT", "DELETE", "PATCH"],
         url: str | yarl.URL,
         getter: _GETTER_TYPE | None = None,
-        json: typing.Optional[data_binding.StringMapBuilder] = None,
+        json: typing.Optional[data_binding.JSONObjectBuilder] = None,
         auth: typing.Optional[str] = None,
         unwrap_bytes: bool = False,
         **kwargs: typing.Any,
@@ -126,7 +126,7 @@ class HTTPNet(traits.NetRunner):
         method: typing.Literal["GET", "POST", "PUT", "DELETE", "PATCH"],
         url: str | yarl.URL,
         getter: _GETTER_TYPE |  None = None,
-        json: typing.Optional[data_binding.StringMapBuilder] = None,
+        json: typing.Optional[data_binding.JSONObjectBuilder] = None,
         auth: typing.Optional[str] = None,
         unwrap_bytes: bool = False,
         **kwargs: typing.Any,
@@ -202,6 +202,9 @@ class HTTPNet(traits.NetRunner):
         ___: types.TracebackType | None,
     ) -> None:
         await self.close()
+
+    def __repr__(self) -> str:
+        return f'HTTPNet(session: {self._session!r})'
 
     @staticmethod
     async def error_handle(response: aiohttp.ClientResponse, /) -> typing.NoReturn:

@@ -24,7 +24,6 @@
 from __future__ import annotations
 
 import os
-import asyncio
 
 from core.client import main
 
@@ -34,7 +33,7 @@ if os.name != "nt":
     except ImportError:
         pass
     else:
-        asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+        uvloop.install()
 
 if __name__ == "__main__":
     raise SystemExit(main())
