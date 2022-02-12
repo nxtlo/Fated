@@ -21,11 +21,16 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-"""Protocols or traits or whatever used for our impls. and also used as dependency injectors."""
+"""Common trait interfaces for core impls."""
 
 from __future__ import annotations
 
-__all__: tuple[str, ...] = ("PoolRunner", "NetRunner", "HashRunner")
+__all__: tuple[str, ...] = (
+    "PartialPool",
+    "PoolRunner",
+    "NetRunner",
+    "HashRunner",
+)
 
 import typing
 
@@ -39,10 +44,10 @@ if typing.TYPE_CHECKING:
     import aiohttp
     import asyncpg
     import yarl
-    from hikari import files, snowflakes
+    from hikari import files, iterators, snowflakes
     from hikari.internal import data_binding
 
-    _GETTER_TYPE = typing.TypeVar("_GETTER_TYPE", covariant=True)
+    from core import models
 
 
 @typing.runtime_checkable
@@ -75,11 +80,6 @@ class HashRunner(fast.FastProtocolChecking, typing.Protocol):
     async def remove_mute_role(self, guild_id: snowflakes.Snowflake) -> None:
         """Removes the cached mute role id for the given snowflake guild."""
 
-    # BTW there's no background task that runs every x hours to refresh the Bungie OAuth2 tokens.
-    # All this are handled internally, We check if the token is expired or not when the user
-    # invokes a command that requires OAuth2. If the token is expired we refresh them immediantly.
-    # else we just return the data. Since we're using redis this should always be a fast response.
-
     async def set_bungie_tokens(
         self, user: snowflakes.Snowflake, respons: aiobungie.OAuth2Response
     ) -> None:
@@ -106,18 +106,15 @@ class HashRunner(fast.FastProtocolChecking, typing.Protocol):
 
 
 @typing.runtime_checkable
-class PoolRunner(fast.FastProtocolChecking, typing.Protocol):
-    """Core asyncpg pool trait. Every impl should have these methods."""
+class PartialPool(fast.FastProtocolChecking, typing.Protocol):
+    """Partial pool trait. Types for which have minimal access to the pool."""
 
     __slots__ = ()
 
-    @property
-    def pool(self) -> asyncpg.Pool:
+    async def __call__(self) -> asyncpg.Pool:
         raise NotImplementedError
 
-    @property
-    def pools(self) -> int:
-        """Return the count of all running pools."""
+    def __await__(self) -> collections.Generator[typing.Any, None, asyncpg.Pool]:
         raise NotImplementedError
 
     @classmethod
@@ -134,15 +131,101 @@ class PoolRunner(fast.FastProtocolChecking, typing.Protocol):
         """Returns the source of the tables that this pool will build."""
         raise NotImplementedError
 
+    @property
+    def pool(self) -> asyncpg.Pool:
+        raise NotImplementedError
+
+    @property
+    def pools(self) -> int:
+        """Return the count of all running pools."""
+        raise NotImplementedError
+
+
+@typing.runtime_checkable
+class PoolRunner(PartialPool, fast.FastProtocolChecking, typing.Protocol):
+    """Core pool trait that include all methods."""
+
+    __slots__ = ()
+
+    async def fetch_destiny_member(
+        self, user_id: snowflakes.Snowflake
+    ) -> models.Destiny:
+        raise NotImplementedError
+
+    async def fetch_destiny_members(self) -> iterators.LazyIterator[models.Destiny]:
+        raise NotImplementedError
+
+    async def put_destiny_member(
+        self,
+        user_id: snowflakes.Snowflake,
+        membership_id: int,
+        name: str,
+        code: int,
+        membership_type: aiobungie.MembershipType,
+    ) -> None:
+        raise NotImplementedError
+
+    async def remove_destiny_member(self, user_id: snowflakes.Snowflake) -> None:
+        raise NotImplementedError
+
+    # This is not used and probably will be Removed soonish.
+    async def fetch_mutes(self) -> iterators.LazyIterator[models.Mutes]:
+        raise NotImplementedError
+
+    async def put_mute(
+        self,
+        member_id: snowflakes.Snowflake,
+        author_id: snowflakes.Snowflake,
+        guild_id: snowflakes.Snowflake,
+        duration: float,
+        why: str,
+    ) -> None:
+        raise NotImplementedError
+
+    async def remove_mute(self, user_id: snowflakes.Snowflake) -> None:
+        raise NotImplementedError
+
+    async def fetch_notes(self) -> iterators.LazyIterator[models.Notes]:
+        """Fetch all notes and return a lazy iterator of notes."""
+        raise NotImplementedError
+
+    async def fetch_notes_for(
+        self, user_id: snowflakes.Snowflake
+    ) -> collections.Collection[models.Notes]:
+        """Fetch notes for a specific snowflake ID."""
+        raise NotImplementedError
+
+    async def put_note(
+        self,
+        name: str,
+        content: str,
+        author_id: snowflakes.Snowflake,
+    ) -> None:
+        raise NotImplementedError
+
+    async def update_note(
+        self, note_name: str, new_content: str, author_id: snowflakes.Snowflake
+    ) -> None:
+        raise NotImplementedError
+
+    async def remove_note(
+        self,
+        author_id: snowflakes.Snowflake,
+        /,
+        strict: bool = False,
+        name: str | None = None,
+    ) -> None:
+        raise NotImplementedError
+
 
 @typing.runtime_checkable
 class NetRunner(fast.FastProtocolChecking, typing.Protocol):
-    """Core trait for the HTTP client impl."""
+    """Core trait for any HTTP client impl."""
 
     __slots__ = ()
 
     async def acquire(self) -> aiohttp.ClientSession:
-        """Acquires the session if its closed or set to `hikari.UNDEFINED`"""
+        """Acquires a new session if its closed or set to `hikari.UNDEFINED`"""
         raise NotImplementedError
 
     async def close(self) -> None:
@@ -152,12 +235,12 @@ class NetRunner(fast.FastProtocolChecking, typing.Protocol):
         self,
         method: typing.Literal["GET", "POST", "PUT", "DELETE", "PATCH"],
         url: str | yarl.URL,
-        getter: typing.Any | _GETTER_TYPE | None = None,
-        json: typing.Optional[data_binding.JSONObjectBuilder] = None,
-        auth: typing.Optional[str] = None,
+        getter: str | None = None,
+        json: data_binding.JSONObjectBuilder | None = None,
+        auth: str | None = None,
         unwrap_bytes: bool = False,
         **kwargs: typing.Any,
-    ) -> data_binding.JSONArray | data_binding.JSONObject | files.Resourceish | _GETTER_TYPE | None:
+    ) -> data_binding.JSONArray | data_binding.JSONObject | files.Resourceish | None:
         """Perform an HTTP request.
 
         Parameters
@@ -166,21 +249,21 @@ class NetRunner(fast.FastProtocolChecking, typing.Protocol):
             The HTTP request method.
         url : `str` | `yarl.URL`
             The API endpoint URL.
-        getter: `T?`
+        getter: `str | None`
             if your data is a `dict['key' -> 'val']` You can use this
             parameter to get something the value from the dict
             This is equl to `request['key']` -> `request(getter='key')`
-        json : `data_binding.JSONObjectBuilder?`
+        json : `data_binding.JSONObjectBuilder | None`
             Optional JSON data that can be passed to the request if needed.
         unwrap_bytes : `bool`
             If set to true then the request will return the bytes of the response.
-        auth : `str?`
+        auth : `str | None`
             If the request requires a Bearer access token for auth, This can be passed here.
         **kwargs : `Any`
             Other keyword arguments you can pass to the request.
         """
 
     @staticmethod
-    async def error_handle(response: aiohttp.ClientResponse, /) -> typing.NoReturn:
+    async def acquire_errors(response: aiohttp.ClientResponse, /) -> typing.NoReturn:
         """Handling the request errors."""
         raise NotImplementedError

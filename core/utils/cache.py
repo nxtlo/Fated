@@ -39,7 +39,7 @@ import hikari
 import typing_extensions
 from hikari.internal import collections as hikari_collections
 
-from . import format, traits
+from . import boxed, traits
 
 try:
     import ujson as json  # type: ignore
@@ -50,7 +50,7 @@ if typing.TYPE_CHECKING:
     import collections.abc as collections
 
 
-_LOG: typing.Final[logging.Logger] = logging.getLogger(__name__)
+_LOG: typing.Final[logging.Logger] = logging.getLogger("fated.cache")
 logging.basicConfig(level=logging.DEBUG)
 
 MKT = typing.TypeVar("MKT")
@@ -91,6 +91,9 @@ class Hash(traits.HashRunner):
         self.__connection = aioredis.Redis(connection_pool=pool_conn, ssl=ssl)
         self._aiobungie_client = aiobungie_client
         self._lock = asyncio.Lock()
+
+    def __repr__(self) -> str:
+        return f"Hash(client: {self.__connection.client!r})"
 
     def set_aiobungie_client(self, client: aiobungie.Client) -> None:
         self._aiobungie_client = client
@@ -326,7 +329,7 @@ class Memory(hikari_collections.ExtendedMutableMapping[MKT, MVT]):
 
         docs = inspect.getdoc(self.on_expire)
         return "\n".join(
-            format.with_block(
+            boxed.with_block(
                 f"MemoryCache({k}={v!r}, expires_at={self.expire_after}, on_expire={docs})"
             )
             for k, v in self._map.items()

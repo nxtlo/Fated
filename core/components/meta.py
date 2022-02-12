@@ -35,7 +35,7 @@ import typing
 import hikari
 import tanjun
 
-from core.utils import consts, traits
+from core.utils import boxed, traits
 
 _LOGGER: typing.Final[logging.Logger] = logging.getLogger("fated.meta")
 prefix_group = (
@@ -123,7 +123,7 @@ async def about_command(
     )
 
     create_date = tanjun.conversion.from_datetime(
-        consts.naive_datetime(bot.created_at), style="R"
+        boxed.naive_datetime(bot.created_at), style="R"
     )
     metadata_uptime: datetime.datetime = ctx.client.metadata["uptime"]
     uptime = str(metadata_uptime - datetime.datetime.now())
@@ -182,7 +182,7 @@ async def member_view(
     if member.banner_url:
         embed.set_image(member.banner_url)
 
-    colour = member.accent_colour or consts.COLOR["invis"]
+    colour = member.accent_colour or boxed.COLOR["invis"]
     embed.colour = colour
 
     info = [
@@ -224,7 +224,7 @@ async def user_view(ctx: tanjun.abc.SlashContext, user: hikari.User | None) -> N
     if user.banner_url:
         embed.set_image(user.banner_url)
 
-    colour = user.accent_colour or consts.COLOR["invis"]
+    colour = user.accent_colour or boxed.COLOR["invis"]
     embed.colour = colour
 
     info = [

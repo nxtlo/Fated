@@ -38,7 +38,7 @@ import tanjun
 import yuyo
 
 from core.psql import pool as pool_
-from core.utils import cache, format, traits
+from core.utils import boxed, cache, traits
 
 STDOUT: typing.Final[hikari.Snowflake] = hikari.Snowflake(789614938247266305)
 DURATIONS: dict[str, int] = {
@@ -62,7 +62,7 @@ async def _sleep_for(
     timer: datetime.timedelta,
     ctx: tanjun.abc.SlashContext,
     member: hikari.InteractionMember,
-    pool: pool_.PgxPool,
+    pool: traits.PoolRunner,
     hash: traits.HashRunner,
 ) -> None:
     assert ctx.guild_id is not None
@@ -199,7 +199,7 @@ async def create_mute_role(
 # @mutes.with_command
 # @tanjun.with_member_slash_option("member", "The member to mute.")
 # @tanjun.with_str_slash_option(
-#     "unit", "The duration unit to be muted.", choices=consts.iter(DURATIONS)
+#     "unit", "The duration unit to be muted.", choices=boxed.iter(DURATIONS)
 # )
 # @tanjun.with_float_slash_option("duration", "The time duration to be muted")
 # @tanjun.with_str_slash_option(
@@ -212,7 +212,7 @@ async def mute(
     unit: str,
     duration: float,
     reason: str,
-    pool: pool_.PgxPool = tanjun.inject(type=pool_.PoolT),
+    pool: traits.PoolRunner = tanjun.inject(type=traits.PoolRunner),
     hash: traits.HashRunner = tanjun.inject(type=traits.HashRunner),
 ) -> None:
     assert ctx.guild_id is not None
@@ -258,28 +258,28 @@ async def mute(
 async def run_sql(
     ctx: tanjun.abc.MessageContext,
     query: str,
-    pool: pool_.PoolT = tanjun.inject(type=pool_.PoolT),
+    pool: traits.PoolRunner = tanjun.inject(type=traits.PoolRunner),
 ) -> None:
     """Run sql code to the database pool."""
 
-    query = format.parse_code(code=query)
+    query = boxed.parse_code(code=query)
     result: None | list[asyncpg.Record] = None
 
     try:
         result = await pool._fetch(query)  # type: ignore
         # SQL Code error
     except asyncpg.exceptions.PostgresSyntaxError:
-        raise tanjun.CommandError(format.with_block(sys.exc_info()[1]))
+        raise tanjun.CommandError(boxed.with_block(sys.exc_info()[1]))
 
         # Tables doesn't exists.
     except asyncpg.exceptions.UndefinedTableError:
-        raise tanjun.CommandError(format.with_block(sys.exc_info()[1]))
+        raise tanjun.CommandError(boxed.with_block(sys.exc_info()[1]))
 
     if result is None:
         await ctx.respond("Nothing found.", delete_after=5)
         return
 
-    await ctx.respond(format.with_block(result))
+    await ctx.respond(boxed.with_block(result))
 
 
 @tanjun.with_guild_check
@@ -447,7 +447,7 @@ async def get_guilds(ctx: tanjun.abc.MessageContext) -> None:
     guilds = ctx.cache.get_available_guilds_view()
     assert guilds is not None
     embed = hikari.Embed(
-        description=format.with_block(
+        description=boxed.with_block(
             "\n".join(
                 f"{id}::{guild.name}::{len(guild.get_members())}"
                 for id, guild in guilds.items()

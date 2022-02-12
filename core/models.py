@@ -21,69 +21,91 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-"""Interfaces/ABCs for multiple impls."""
+"""Dataclass models provides Pytohnic classes which represents data fethced from Database / APIs / etc."""
 
 from __future__ import annotations
 
-__all__: tuple[str, ...] = ("APIAware", "GithubRepo", "GithubUser")
+__all__: tuple[str, ...] = ("Destiny", "Mutes", "Notes")
 
-import abc
 import dataclasses
 import typing
+
+import hikari
 
 if typing.TYPE_CHECKING:
     import collections.abc as collections
     import datetime
 
-    import hikari
+
+@dataclasses.dataclass(slots=True)
+class Destiny:
+    """Represents a fetched Destiny database record."""
+
+    ctx_id: hikari.Snowflake
+    membership_id: int
+    name: str
+    code: int
+    membership_type: str
+
+    @classmethod
+    def into(cls, response: collections.Mapping[str, typing.Any]) -> Destiny:
+        return Destiny(
+            ctx_id=hikari.Snowflake(response["ctx_id"]),
+            membership_id=response["membership_id"],
+            name=response["name"],
+            code=response["code"],
+            membership_type=response["membership_type"],
+        )
 
 
-class APIAware(abc.ABC):
-    """An abctract interface for our wrapper class."""
+@dataclasses.dataclass(slots=True)
+class Mutes:
+    """Represents a fetched mute database record."""
 
-    __slots__ = ()
+    member_id: hikari.Snowflake
+    guild_id: hikari.Snowflake
+    author_id: hikari.Snowflake
+    muted_at: datetime.datetime
+    why: str
+    duration: int
 
-    @abc.abstractmethod
-    async def fetch_anime(
-        self,
-        name: str | None = None,
-        *,
-        random: bool | None = None,
-        genre: str,
-    ) -> hikari.Embed | collections.Generator[hikari.Embed, None, None] | None:
-        ...
+    @classmethod
+    def into(cls, response: collections.Mapping[str, typing.Any]) -> Mutes:
+        return Mutes(
+            member_id=hikari.Snowflake(response["member_id"]),
+            guild_id=hikari.Snowflake(response["guild_id"]),
+            author_id=hikari.Snowflake(response["author_id"]),
+            muted_at=response["muted_at"],
+            why=response["why"],
+            duration=response["duration"],
+        )
 
-    @abc.abstractmethod
-    async def fetch_manga(
-        self, name: str, /
-    ) -> collections.Generator[hikari.Embed, None, None] | None:
-        ...
 
-    @abc.abstractmethod
-    async def fetch_definitions(
-        self, name: str
-    ) -> collections.Generator[hikari.Embed, None, None]:
-        ...
+@dataclasses.dataclass(slots=True)
+class Notes:
+    """Represents a fetched note database record."""
 
-    @abc.abstractmethod
-    async def fetch_git_user(self, name: str) -> GithubUser | None:
-        ...
+    id: int
+    name: str
+    content: str
+    author_id: hikari.Snowflake
+    created_at: datetime.datetime
 
-    @abc.abstractmethod
-    async def fetch_git_repo(
-        self, name: str
-    ) -> collections.Sequence[GithubRepo] | None:
-        ...
-
-    @abc.abstractmethod
-    async def git_release(
-        self, user: str, repo_name: str, limit: int | None = None
-    ) -> collections.Generator[hikari.Embed, None, None]:
-        ...
+    @classmethod
+    def into(cls, response: collections.Mapping[str, typing.Any]) -> Notes:
+        return Notes(
+            id=response["id"],
+            name=response["name"],
+            content=response["content"],
+            author_id=hikari.Snowflake(response["author_id"]),
+            created_at=response["created_at"],
+        )
 
 
 @dataclasses.dataclass(kw_only=True, slots=True, repr=False)
 class GithubRepo:
+    """Minimal representation of a GitHub repository information."""
+
     owner: GithubUser | None = dataclasses.field(repr=True)
     id: int
     name: str
@@ -105,6 +127,8 @@ class GithubRepo:
 
 @dataclasses.dataclass(kw_only=True, repr=False, slots=True)
 class GithubUser:
+    """Minimal representation of a GitHub user information."""
+
     name: hikari.UndefinedOr[str] = dataclasses.field(repr=True)
     id: int = dataclasses.field(repr=True, hash=True)
     avatar_url: typing.Optional[str]

@@ -30,7 +30,7 @@ import tanjun
 import yuyo
 
 from core.psql import pool as pgpool
-from core.utils import consts
+from core.utils import boxed, traits
 
 note = tanjun.slash_command_group("note", "Create notes.")
 
@@ -43,7 +43,7 @@ async def create_note(
     ctx: tanjun.abc.SlashContext,
     name: str,
     content: str,
-    pool: pgpool.PgxPool = tanjun.inject(type=pgpool.PoolT),
+    pool: traits.PoolRunner = tanjun.inject(type=traits.PoolRunner),
 ) -> None:
 
     try:
@@ -64,7 +64,7 @@ async def create_note(
 async def get_note(
     ctx: tanjun.abc.SlashContext,
     name: str,
-    pool: pgpool.PgxPool = tanjun.inject(type=pgpool.PoolT),
+    pool: traits.PoolRunner = tanjun.inject(type=traits.PoolRunner),
 ) -> None:
 
     try:
@@ -87,7 +87,7 @@ async def get_note(
 
     origin = notes_[0]
     embed = hikari.Embed(title=f"{origin.name}", description=origin.content)
-    embed.set_footer(f"ID({origin.id})")
+    embed.set_footer(f"ID: {origin.id}")
     await ctx.respond(embed=embed)
 
 
@@ -101,7 +101,7 @@ async def delete_note(
     ctx: tanjun.abc.SlashContext,
     name: str | None,
     strict: bool,
-    pool: pgpool.PgxPool = tanjun.inject(type=pgpool.PoolT),
+    pool: traits.PoolRunner = tanjun.inject(type=traits.PoolRunner),
 ) -> None:
 
     try:
@@ -116,7 +116,7 @@ async def delete_note(
 @tanjun.as_slash_command("all", "Get all the notes you created.")
 async def get_all_notes(
     ctx: tanjun.abc.SlashContext,
-    pool: pgpool.PgxPool = tanjun.inject(type=pgpool.PoolT),
+    pool: traits.PoolRunner = tanjun.inject(type=traits.PoolRunner),
     component_client: yuyo.ComponentClient = tanjun.inject(type=yuyo.ComponentClient),
 ) -> None:
 
@@ -132,13 +132,13 @@ async def get_all_notes(
             .add_field("Creator", f"<@!{n.author_id}>")
             .add_field(
                 "Created at",
-                f"{tanjun.conversion.from_datetime(consts.naive_datetime(n.created_at))}",
+                f"{tanjun.conversion.from_datetime(boxed.naive_datetime(n.created_at))}",
             )
-            .set_footer(f"ID({n.id})"),
+            .set_footer(f"ID: {n.id}"),
         )
         for n in notes
     )
-    await consts.generate_component(ctx, component, component_client)
+    await boxed.generate_component(ctx, component, component_client)
 
 
 @note.with_command
@@ -149,7 +149,7 @@ async def update_note_(
     ctx: tanjun.abc.SlashContext,
     name: str,
     content: str,
-    pool: pgpool.PgxPool = tanjun.inject(type=pgpool.PoolT),
+    pool: traits.PoolRunner = tanjun.inject(type=traits.PoolRunner),
 ) -> None:
     await pool.update_note(name, content, ctx.author.id)
     await ctx.respond("\U0001f44d")

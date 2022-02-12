@@ -33,8 +33,7 @@ import hikari
 import tanjun
 import yuyo
 
-from core.utils import cache, consts
-from core.utils import net as net_
+from core.utils import boxed, cache, net
 
 git_group = tanjun.slash_command_group("git", "Commands related to github.")
 
@@ -45,18 +44,17 @@ git_group = tanjun.slash_command_group("git", "Commands related to github.")
 async def git_user(
     ctx: tanjun.abc.SlashContext,
     name: str,
-    net: net_.HTTPNet = tanjun.inject(type=net_.HTTPNet),
+    git: net.Wrapper = tanjun.inject(type=net.Wrapper),
     cache: cache.Memory[str, hikari.Embed] = tanjun.inject(type=cache.Memory),
 ) -> None:
     if cached_user := cache.get(name):
         await ctx.respond(embed=cached_user)
         return
 
-    git = net_.Wrapper(net)
     await ctx.defer()
     try:
         user = await git.fetch_git_user(name)
-    except net_.NotFound:
+    except net.NotFound:
         raise tanjun.CommandError(f"User {name} was not found.")
 
     if user is not None:
@@ -87,14 +85,13 @@ async def git_user(
 async def git_repo(
     ctx: tanjun.abc.SlashContext,
     name: str,
-    net: net_.HTTPNet = tanjun.inject(type=net_.HTTPNet),
+    git: net.Wrapper = tanjun.inject(type=net.Wrapper),
     component_client: yuyo.ComponentClient = tanjun.inject(type=yuyo.ComponentClient),
 ) -> None:
-    git = net_.Wrapper(net)
 
     try:
         repos = await git.fetch_git_repo(name)
-    except net_.NotFound:
+    except net.NotFound:
         raise tanjun.CommandError("Nothing was found.")
 
     if repos:
@@ -129,7 +126,7 @@ async def git_repo(
                 for repo in repos
             )
         )
-        await consts.generate_component(ctx, pages, component_client)
+        await boxed.generate_component(ctx, pages, component_client)
 
 
 @git_group.with_command
@@ -144,17 +141,16 @@ async def get_release(
     user: str,
     repo: str,
     limit: int | None,
-    net: net_.HTTPNet = tanjun.inject(type=net_.HTTPNet),
+    git: net.Wrapper = tanjun.inject(type=net.Wrapper),
     component_client: yuyo.ComponentClient = tanjun.inject(type=yuyo.ComponentClient),
 ) -> None:
-    git = net_.Wrapper(net)
 
     try:
         embeds = await git.git_release(user, repo, limit)
-    except net_.Error as exc:
+    except net.Error as exc:
         raise tanjun.CommandError(f"`{exc.data['message']}`")
 
-    await consts.generate_component(
+    await boxed.generate_component(
         ctx, ((hikari.UNDEFINED, embed) for embed in embeds), component_client
     )
 

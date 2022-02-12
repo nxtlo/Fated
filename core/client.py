@@ -73,10 +73,15 @@ def _build_bot() -> hikari.impl.GatewayBot:
 def _build_client(
     bot: hikari_traits.GatewayBotAware, config: __config.Config
 ) -> tanjun.Client:
+    # Database pool.
     pg_pool = pool_.PgxPool()
+    # Networking.
     client_session = net.HTTPNet()
+    wrapper = net.Wrapper(client_session)
+    # Cache
     redis_hash = cache.Hash()
     mem_cache = cache.Memory[typing.Any, typing.Any]()
+    # yuyo client
     yuyo_client = yuyo.ComponentClient.from_gateway_bot(bot, event_managed=False)
 
     client = (
@@ -86,10 +91,11 @@ def _build_client(
             declare_global_commands=True,
         )
         # pg pool
-        .set_type_dependency(pool_.PoolT, pg_pool)
+        .set_type_dependency(traits.PoolRunner, pg_pool)
         .add_client_callback(tanjun.ClientCallbackNames.STARTING, pg_pool.create_pool)  # type: ignore asyncpg :)
-        # own aiohttp client session.
+        # own aiohttp client session and API wrapper.
         .set_type_dependency(net.HTTPNet, client_session)
+        .set_type_dependency(net.Wrapper, wrapper)
         # Cache. This is kinda overkill but we need the memory cache for api requests
         # And the redis hash for stuff that are not worth storing in a database for the sake of speed.
         # i.e., OAuth2 tokens
@@ -131,34 +137,50 @@ def _build_client(
         )
         client.load_modules("core.components.destiny")
 
+    for dep_type, cls_ in client._type_dependencies.items():  # type: ignore
+        logging.debug("Injected: %s with: %s", repr(dep_type), repr(cls_))  # type: ignore
+
     return client
 
 
 def _enable_logging(
+    *,
     hikari: bool = False,
     tanjun: bool = False,
-    net: bool = False,
+    us: bool = False,
     aiobungie: bool = False,
 ) -> None:
     logging.getLogger("hikari.gateway").setLevel(logging.CRITICAL)
+
     if hikari:
         logging.getLogger("hikari.rest").setLevel(ux.TRACE)
         logging.getLogger("hikari.cache").setLevel(logging.DEBUG)
-    if net:
-        logging.getLogger("core.net").setLevel(logging.DEBUG)
+
+    if us:
+        for logger in [
+            logging.getLogger("core.net"),
+            logging.getLogger("fated.cache"),
+            logging.getLogger("fated.pool"),
+        ]:
+            logger.setLevel(logging.DEBUG)
+
     if aiobungie:
         logging.getLogger("aiobungie.rest").setLevel(logging.DEBUG)
+
     if tanjun:
-        logging.getLogger("hikari.tanjun").setLevel(logging.DEBUG)
-        logging.getLogger("hikari.tanjun.context").setLevel(logging.DEBUG)
-        logging.getLogger("hikari.tanjun.clients").setLevel(logging.DEBUG)
-        logging.getLogger("hikari.tanjun.components").setLevel(logging.DEBUG)
+        for logger in [
+            logging.getLogger("hikari.tanjun"),
+            logging.getLogger("hikari.tanjun.context"),
+            logging.getLogger("hikari.tanjun.clients"),
+            logging.getLogger("hikari.tanjun.components"),
+        ]:
+            logger.setLevel(logging.DEBUG)
 
 
 @click.group(name="main", invoke_without_command=True, options_metavar="[options]")
 @click.pass_context
 def main(ctx: click.Context) -> None:
-    _enable_logging(hikari=False, tanjun=True, net=True, aiobungie=True)
+    _enable_logging(hikari=False, tanjun=True, us=True, aiobungie=True)
     if ctx.invoked_subcommand is None:
         _build_bot().run(status=hikari.Status.DO_NOT_DISTURB)
 
@@ -171,8 +193,9 @@ def db() -> None:
 @db.command(name="init", short_help="Build the database tables.")
 def init() -> None:
     loop = aio.get_or_make_loop()
+    pool = pool_.PartialPool()
     try:
-        loop.run_until_complete(pool_.PgxPool.create_pool(build=True))  # type: ignore
+        loop.run_until_complete(pool.create_pool(build=True))  # type: ignore
     except Exception:
         click.echo("Couldn't build the daatabse tables.", err=True, color=True)
         traceback.print_exc()

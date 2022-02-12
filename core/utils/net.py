@@ -50,14 +50,13 @@ from hikari.internal.time import (
 )
 from yuyo import backoff
 
-from . import consts, format, interfaces, traits
+from .. import models
+from . import boxed, traits
 
 if typing.TYPE_CHECKING:
     import collections.abc as collections
     import types
 
-
-    _GETTER_TYPE = typing.TypeVar("_GETTER_TYPE", covariant=True)
     DATA_TYPE = dict[str, typing.Any] | multidict.CIMultiDictProxy[str]
 
 _LOG: typing.Final[logging.Logger] = logging.getLogger("core.net")
@@ -100,12 +99,12 @@ class HTTPNet(traits.NetRunner):
         self,
         method: typing.Literal["GET", "POST", "PUT", "DELETE", "PATCH"],
         url: str | yarl.URL,
-        getter: _GETTER_TYPE | None = None,
+        getter: str | None = None,
         json: typing.Optional[data_binding.JSONObjectBuilder] = None,
         auth: typing.Optional[str] = None,
         unwrap_bytes: bool = False,
         **kwargs: typing.Any,
-    ) -> data_binding.JSONObject | data_binding.JSONArray | hikari.Resourceish | _GETTER_TYPE | None:
+    ) -> data_binding.JSONObject | data_binding.JSONArray | hikari.Resourceish | None:
         if not self._lock:
             self._lock = asyncio.Lock()
 
@@ -125,14 +124,14 @@ class HTTPNet(traits.NetRunner):
         self,
         method: typing.Literal["GET", "POST", "PUT", "DELETE", "PATCH"],
         url: str | yarl.URL,
-        getter: _GETTER_TYPE |  None = None,
+        getter: str | None = None,
         json: typing.Optional[data_binding.JSONObjectBuilder] = None,
         auth: typing.Optional[str] = None,
         unwrap_bytes: bool = False,
         **kwargs: typing.Any,
-    ) -> data_binding.JSONObject | data_binding.JSONArray | hikari.Resourceish | _GETTER_TYPE | None:
+    ) -> data_binding.JSONObject | data_binding.JSONArray | hikari.Resourceish | None:
 
-        data: data_binding.JSONObject | data_binding.JSONArray | hikari.Resourceish | _GETTER_TYPE | None = None
+        data: data_binding.JSONObject | data_binding.JSONArray | hikari.Resourceish | None = None
         backoff_ = backoff.Backoff(max_retries=6)
         response: aiohttp.ClientResponse
 
@@ -178,7 +177,7 @@ class HTTPNet(traits.NetRunner):
                                     )
 
                             return data
-                        await self.error_handle(response)
+                        await self.acquire_errors(response)
 
                 # Handle the ratelimiting.
                 except RateLimited as exc:
@@ -193,6 +192,7 @@ class HTTPNet(traits.NetRunner):
 
     async def __aenter__(self):
         await self.acquire()
+        _LOG.debug("Acquired client session %s", datetime.datetime.now().astimezone())
         return self
 
     async def __aexit__(
@@ -202,21 +202,25 @@ class HTTPNet(traits.NetRunner):
         ___: types.TracebackType | None,
     ) -> None:
         await self.close()
+        _LOG.debug("Closed client session %s", datetime.datetime.now().astimezone())
 
     def __repr__(self) -> str:
         return f'HTTPNet(session: {self._session!r})'
 
     @staticmethod
-    async def error_handle(response: aiohttp.ClientResponse, /) -> typing.NoReturn:
-        raise await acquire_errors(response)
+    async def acquire_errors(response: aiohttp.ClientResponse, /) -> typing.NoReturn:
+        raise await _acquire_errors(response)
 
-class Wrapper(interfaces.APIAware):
-    """A wrapper around different apis."""
+class Wrapper:
+    """An API wrapper around different apis."""
 
     __slots__ = ("_net",)
 
     def __init__(self, client: HTTPNet) -> None:
         self._net = client
+
+    def __repr__(self) -> str:
+        return f'Wrapper(net: {self._net!r})'
 
     @staticmethod
     def _make_anime_embed(anime_payload: data_binding.JSONObject, date_key: str) -> hikari.Embed:
@@ -224,14 +228,14 @@ class Wrapper(interfaces.APIAware):
         start_date: hikari.UndefinedOr[str] = hikari.UNDEFINED
         if (raw_start_date := anime_payload.get(date_key)):
             start_date = tanjun.conversion.from_datetime(
-                consts.naive_datetime(fast_datetime(raw_start_date)),  # type: ignore
+                boxed.naive_datetime(fast_datetime(raw_start_date)),  # type: ignore
                     style='R'
                 )
 
         end_date: hikari.UndefinedOr[str] = hikari.UNDEFINED
         if (raw_end_date := anime_payload.get("end_date")):
             end_date = tanjun.conversion.from_datetime(
-                consts.naive_datetime(fast_datetime(raw_end_date)),  # type: ignore
+                boxed.naive_datetime(fast_datetime(raw_end_date)),  # type: ignore
                     style='R'
                 )
 
@@ -262,12 +266,12 @@ class Wrapper(interfaces.APIAware):
         )
 
     @staticmethod
-    def _set_repo_owner_attrs(payload: dict[str, typing.Any]) -> interfaces.GithubUser:
+    def _set_repo_owner_attrs(payload: dict[str, typing.Any]) -> models.GithubUser:
         user: dict[str, typing.Any] = payload
         created_at: datetime.datetime | None = None
         if(raw_created := user.get('created_at')):
             created_at = fast_datetime(raw_created)  # type: ignore
-        user_obj = interfaces.GithubUser(
+        user_obj = models.GithubUser(
             name=user.get("login", hikari.UNDEFINED),
             id=user["id"],
             url=user['html_url'],
@@ -284,14 +288,14 @@ class Wrapper(interfaces.APIAware):
         )
         return user_obj
 
-    def _set_repo_attrs(self, payload: dict[str, list[dict[str, typing.Any]]]) -> typing.Sequence[interfaces.GithubRepo]:
-        repos: typing.Sequence[interfaces.GithubRepo] = []
+    def _set_repo_attrs(self, payload: dict[str, list[dict[str, typing.Any]]]) -> typing.Sequence[models.GithubRepo]:
+        repos: typing.Sequence[models.GithubRepo] = []
 
         for repo in payload['items']:
             license_name = "UNDEFINED"
             if(repo_license := repo.get("license")):
                 license_name = repo_license['name']
-            repo_obj = interfaces.GithubRepo(
+            repo_obj = models.GithubRepo(
                 id=repo['id'],
                 name=repo['full_name'],
                 description=repo.get("description", None),
@@ -322,7 +326,7 @@ class Wrapper(interfaces.APIAware):
         )
 
         if (body := repo.get("body", hikari.UNDEFINED)) and len(str(body)) <= 4096: 
-            embed.description = format.with_block(body, lang='md')
+            embed.description = boxed.with_block(body, lang='md')
 
         embed.timestamp = fast_datetime(repo['published_at'])  # type: ignore
         (
@@ -357,9 +361,9 @@ class Wrapper(interfaces.APIAware):
 
             if random and name is None:
                 # This is True by default in case the name is None.
-                path = f"{consts.API['anime']}/genre/anime/{consts.GENRES[genre]}/1"
+                path = f"{boxed.API['anime']}/genre/anime/{boxed.GENRES[genre]}/1"
             else:
-                path = f'{consts.API["anime"]}/search/anime?q={str(name).lower()}/Zero&page=1&limit=1'
+                path = f'{boxed.API["anime"]}/search/anime?q={str(name).lower()}/Zero&page=1&limit=1'
 
             # This kinda brain fuck but it will raise KeyError
             # error if we don't check before we make the actual request.
@@ -393,7 +397,7 @@ class Wrapper(interfaces.APIAware):
             if not (
                 raw_mangas := await cli.request(
                     "GET",
-                    f'{consts.API["anime"]}/search/manga?q={name}/Zero&page=1&limit=1',
+                    f'{boxed.API["anime"]}/search/manga?q={name}/Zero&page=1&limit=1',
                     getter="results",
                 )
             ):
@@ -403,7 +407,7 @@ class Wrapper(interfaces.APIAware):
 
             embeds = (
                 hikari.Embed(
-                    colour=consts.COLOR["invis"],
+                    colour=boxed.COLOR["invis"],
                     description=manga.get("synopsis", hikari.UNDEFINED)
                 )
                 .set_author(url=manga.get("url", str(hikari.UNDEFINED)), name=manga.get("title", hikari.UNDEFINED))
@@ -431,7 +435,7 @@ class Wrapper(interfaces.APIAware):
 
             resp = (
                 await cli.request(
-                    "GET", consts.API["urban"], params={"term": name.lower()}, getter="list"
+                    "GET", boxed.API["urban"], params={"term": name.lower()}, getter="list"
                 ) or []
             )
 
@@ -445,7 +449,7 @@ class Wrapper(interfaces.APIAware):
 
             embeds = (
                 hikari.Embed(
-                    colour=consts.COLOR["invis"],
+                    colour=boxed.COLOR["invis"],
                     title=f"Definition for {name}",
                     description=_replace(defn.get("definition", hikari.UNDEFINED)),
                     timestamp=fast_datetime(defn.get("written_on")) or None  # type: ignore
@@ -459,20 +463,20 @@ class Wrapper(interfaces.APIAware):
             )
         return embeds
 
-    async def fetch_git_user(self, name: str, /) -> interfaces.GithubUser | None:
+    async def fetch_git_user(self, name: str, /) -> models.GithubUser | None:
         async with self._net as cli:
             if(raw_user := await cli.request(
                 "GET",
-                yarl.URL(consts.API['git']['user']) / name)):
+                yarl.URL(boxed.API['git']['user']) / name)):
                 assert isinstance(raw_user, dict)
                 return self._set_repo_owner_attrs(raw_user)
             return
 
-    async def fetch_git_repo(self, name: str) -> collections.Sequence[interfaces.GithubRepo] | None:
+    async def fetch_git_repo(self, name: str) -> collections.Sequence[models.GithubRepo] | None:
         async with self._net as cli:
             if raw_repo := await cli.request(
                 "GET",
-                consts.API['git']['repo'].format(name)
+                boxed.API['git']['repo'].format(name)
             ):
                 assert isinstance(raw_repo, dict)
                 return self._set_repo_attrs(raw_repo)
@@ -516,7 +520,7 @@ class Forbidden(Error):
 class InternalError(Error):
     data: DATA_TYPE
 
-async def acquire_errors(response: aiohttp.ClientResponse, /) -> Error:
+async def _acquire_errors(response: aiohttp.ClientResponse, /) -> Error:
     if response.content_type != "application/json":
         raise RuntimeError(f"Expected JSON data but got: {response.content_type}")
     json_data = await response.json()

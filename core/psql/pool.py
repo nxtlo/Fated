@@ -23,7 +23,7 @@
 
 from __future__ import annotations
 
-__all__: tuple[str, ...] = ("PgxPool", "PoolT")
+__all__: tuple[str, ...] = ("PgxPool", "PartialPool")
 
 import datetime
 import logging
@@ -34,9 +34,8 @@ import asyncpg
 import asyncpg.exceptions
 from hikari import iterators
 
+from core import models
 from core.utils import traits
-
-from . import models
 
 if typing.TYPE_CHECKING:
     import collections.abc as collections
@@ -44,10 +43,8 @@ if typing.TYPE_CHECKING:
     import aiobungie
     from hikari import snowflakes
 
-
 _LOG: typing.Final[logging.Logger] = logging.getLogger("fated.pool")
-_LOG.setLevel(logging.INFO)
-
+logging.basicConfig(level=logging.DEBUG)
 
 class ExistsError(RuntimeError):
     """A runtime error raised when either the data exists or not found."""
@@ -62,8 +59,8 @@ class ExistsError(RuntimeError):
         return self.message
 
 
-class PgxPool(traits.PoolRunner):
-    """An asyncpg pool impl."""
+class PartialPool(traits.PartialPool):
+    """Partial pool implementation. This pool is just a wrapper around asyncpg.Pool."""
 
     __slots__: tuple[str, ...] = ("_pool",)
 
@@ -75,6 +72,9 @@ class PgxPool(traits.PoolRunner):
 
     def __await__(self) -> collections.Generator[typing.Any, None, asyncpg.Pool]:
         return self.create_pool().__await__()
+
+    def __repr__(self) -> str:
+        return f"<{type(self).__name__}({''.join(repr(type(self).__subclasses__()))})>"
 
     @classmethod
     async def create_pool(
@@ -93,7 +93,6 @@ class PgxPool(traits.PoolRunner):
             host=config_.DB_HOST,
             port=config_.DB_PORT,
         )
-        assert pool is not None
 
         if build:
             tables = cls.tables(schema_path)
@@ -167,7 +166,6 @@ class PgxPool(traits.PoolRunner):
 
     async def close(self) -> None:
         self._pool = None
-        # This does the same thing as await pool.close()
         del self._pool
         _LOG.debug("Pool closed.")
 
@@ -178,8 +176,21 @@ class PgxPool(traits.PoolRunner):
         if not p.exists():
             raise FileNotFoundError(f"Tables file not found in {p!r}")
 
-        with p.open() as table:
-            return table.read()
+        with p.open() as schema:
+            return schema.read()
+
+
+@typing.final
+class PgxPool(PartialPool, traits.PoolRunner):
+    """Core database pool implementation."""
+
+    __slots__: tuple[str, ...] = ()
+
+    def __init__(self) -> None:
+        super().__init__()
+
+    def __repr__(self) -> str:
+        return f"<{type(self).__name__}({''.join(repr(type(self).__subclasses__()))})>"
 
     async def fetch_destiny_member(
         self, user_id: snowflakes.Snowflake
@@ -333,9 +344,3 @@ class PgxPool(traits.PoolRunner):
         if name is not None:
             sql += " AND name = $2"
             await self._execute("".join(sql), author_id, name)
-
-
-PoolT = typing.NewType("PoolT", PgxPool)
-"""A new type hint for the Pool class it self.
-This only used as a type hint for injecting and type dependencies.
-"""

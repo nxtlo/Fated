@@ -37,14 +37,14 @@ import tanjun
 import yuyo
 
 from core.psql import pool
-from core.utils import cache, consts, traits
+from core.utils import boxed, cache, traits
 
 if typing.TYPE_CHECKING:
     import collections.abc as collections
 
 destiny_group = tanjun.slash_command_group("destiny", "Commands related to Destiny 2.")
 
-# Consts usually used as slash options key -> val.
+# boxed usually used as slash options key -> val.
 _PLATFORMS: dict[str, aiobungie.MembershipType] = {
     "Steam": aiobungie.MembershipType.STEAM,
     "Psn": aiobungie.MembershipType.PSN,
@@ -127,7 +127,7 @@ def _build_inventory_item_embed(
         hikari.Embed(
             title=entity.name,
             url=sets,
-            colour=consts.COLOR["invis"],
+            colour=boxed.COLOR["invis"],
             description=(
                 entity.description
                 if entity.description is not aiobungie.Undefined
@@ -169,7 +169,7 @@ async def sync_command(
     redis: traits.HashRunner = tanjun.inject(type=traits.HashRunner),
     client: aiobungie.Client = tanjun.inject(type=aiobungie.Client),
     bot: hikari.GatewayBot = tanjun.inject(type=hikari.GatewayBot),
-    pool_: pool.PoolT = tanjun.inject(type=pool.PoolT),
+    pool_: traits.PoolRunner = tanjun.inject(type=traits.PoolRunner),
 ) -> None:
     url = client.rest.build_oauth2_url()
     assert url
@@ -253,7 +253,7 @@ async def sync_command(
 @tanjun.as_slash_command("desync", "Desync your destiny membership with this bot.")
 async def desync(
     ctx: tanjun.abc.SlashContext,
-    pool_: pool.PoolT = tanjun.inject(type=pool.PoolT),
+    pool_: traits.PoolRunner = tanjun.inject(type=traits.PoolRunner),
     redis: traits.HashRunner = tanjun.inject(type=traits.HashRunner)
 ) -> None:
 
@@ -313,7 +313,7 @@ async def user_command(
             "Memberships",
             '\n'.join([f'[{m.type}: {m.unique_name}]({m.link})' for m in user.destiny])
         )
-        .set_footer(f'{consts.naive_datetime(user.bungie.created_at)}')
+        .set_footer(f'{boxed.naive_datetime(user.bungie.created_at)}')
     )
     await ctx.respond(embed=embed)
 
@@ -388,7 +388,7 @@ async def characters(
     member: hikari.InteractionMember | None,
     query: str | int | None,
     client: aiobungie.Client = tanjun.inject(type=aiobungie.Client),
-    pool_: pool.PoolT = tanjun.inject(type=pool.PoolT),
+    pool_: traits.PoolRunner = tanjun.inject(type=traits.PoolRunner),
     component_client: yuyo.ComponentClient = tanjun.inject(type=yuyo.ComponentClient),
 ) -> None:
 
@@ -431,7 +431,7 @@ async def characters(
                     hikari.UNDEFINED,
                     hikari.Embed(
                         title=str(char.class_type),
-                        colour=consts.COLOR["invis"]
+                        colour=boxed.COLOR["invis"]
                     )
                     .set_image(char.emblem.url)
                     .set_thumbnail(char.emblem_icon.url)
@@ -443,7 +443,7 @@ async def characters(
                         f"Gender: {char.gender}\n"
                         f"Race: {char.race}\n"
                         f"Played Time: {char.total_played_time}\n"
-                        f"Last played: {tanjun.conversion.from_datetime(consts.naive_datetime(char.last_played), style='R')}\n"
+                        f"Last played: {tanjun.conversion.from_datetime(boxed.naive_datetime(char.last_played), style='R')}\n"
                         f"Title hash: {char.title_hash if char.title_hash else 'N/A'}\n"
                         f"Member ID: {char.member_id}\nMember Type: {char.member_type}\n",
                     )
@@ -461,17 +461,17 @@ async def characters(
                 for char in (c for c in characters.values())
             )
         )
-        await consts.generate_component(ctx, pages, component_client)
+        await boxed.generate_component(ctx, pages, component_client)
 
 @destiny_group.with_command
 @tanjun.with_str_slash_option(
-    "activity", "The activity to look for.", choices=consts.iter(_ACTIVITIES)
+    "activity", "The activity to look for.", choices=boxed.iter(_ACTIVITIES)
 )
 @tanjun.with_str_slash_option(
     "platform",
     "Specify a platform to filter the results.",
     default=aiobungie.FireteamPlatform.ANY,
-    choices=consts.iter(_PLATFORMS),
+    choices=boxed.iter(_PLATFORMS),
 )
 @tanjun.as_slash_command("lfg", "Look for fireteams to play with.")
 async def lfg_command(
@@ -509,7 +509,7 @@ async def lfg_command(
             hikari.Embed(
                 title=fireteam.title,
                 url=fireteam.url,
-                timestamp=consts.naive_datetime(fireteam.date_created),
+                timestamp=boxed.naive_datetime(fireteam.date_created),
             )
             .set_thumbnail(_ACTIVITIES[activity][0])
             .add_field(
@@ -522,7 +522,7 @@ async def lfg_command(
         )
         for fireteam in fireteams
     )
-    await consts.generate_component(ctx, pages, component_client)
+    await boxed.generate_component(ctx, pages, component_client)
 
 # last_group = destiny_group.with_command(
 #     tanjun.slash_command_group("last", "Commands that returns the last thing occurred.")
@@ -571,7 +571,7 @@ async def search_players(
         )
         for player in results
     )
-    await consts.generate_component(ctx, iters, component_client)
+    await boxed.generate_component(ctx, iters, component_client)
 
 @search_group.with_command
 @tanjun.with_str_slash_option("name", "The entity name to search for.")
@@ -606,7 +606,7 @@ async def search_entities(
         )
         for entity in results
     )
-    await consts.generate_component(ctx, iters, component_client)
+    await boxed.generate_component(ctx, iters, component_client)
 
 
 @search_group.with_command
@@ -630,7 +630,7 @@ async def get_clan(
     except aiobungie.NotFound as e:
         raise tanjun.CommandError(f"{e.message}")
 
-    embed = hikari.Embed(description=f"{clan.about}", colour=consts.COLOR["invis"], url=clan.url)
+    embed = hikari.Embed(description=f"{clan.about}", colour=boxed.COLOR["invis"], url=clan.url)
     (
         embed.set_author(name=clan.name, url=clan.url, icon=str(clan.avatar))
         .set_thumbnail(str(clan.avatar))
@@ -641,7 +641,7 @@ async def get_clan(
             f"Total members: `{clan.member_count}`\n"
             f"About: {clan.motto}\n"
             f"Public: `{clan.is_public}`\n"
-            f"Creation date: {tanjun.conversion.from_datetime(consts.naive_datetime(clan.created_at), style='R')}\n"
+            f"Creation date: {tanjun.conversion.from_datetime(boxed.naive_datetime(clan.created_at), style='R')}\n"
             f"Type: {clan.type.name.title()}",
             inline=False,
         )
@@ -653,8 +653,8 @@ async def get_clan(
             f"Owner",
             f"Name: [{clan.owner.unique_name}]({clan.owner.link})\n"
             f"ID: `{clan.owner.id}`\n"
-            f"Joined at: {tanjun.conversion.from_datetime(consts.naive_datetime(clan.owner.joined_at), style='R')}\n"
-            f"Last seen: {tanjun.conversion.from_datetime(consts.naive_datetime(clan.owner.last_online), style='R')}\n"
+            f"Joined at: {tanjun.conversion.from_datetime(boxed.naive_datetime(clan.owner.joined_at), style='R')}\n"
+            f"Last seen: {tanjun.conversion.from_datetime(boxed.naive_datetime(clan.owner.last_online), style='R')}\n"
             f"Membership: `{clan.owner.type.name.title()}`"
         )
     await ctx.respond(embed=embed)
@@ -721,7 +721,7 @@ async def post_activity_command(
             f"Reference id: {post.refrence_id}\n"
             f"Membership: {post.membership_type}\n"
             f"Starting phase: {post.starting_phase}\n"
-            f"Date: {tanjun.conversion.from_datetime(consts.naive_datetime(post.occurred_at), style='R')}\n"
+            f"Date: {tanjun.conversion.from_datetime(boxed.naive_datetime(post.occurred_at), style='R')}\n"
         )
     )
 
@@ -775,7 +775,7 @@ async def acquired_items_command(
     member: hikari.InteractionMember | hikari.User | None,
     username: str | None,
     client: aiobungie.Client = tanjun.inject(type=aiobungie.Client),
-    pool_: pool.PgxPool = tanjun.inject(type=pool.PoolT),
+    pool_: traits.PoolRunner = tanjun.inject(type=traits.PoolRunner),
     component_client: yuyo.ComponentClient = tanjun.inject(type=yuyo.ComponentClient)
 ) -> None:
 
@@ -802,7 +802,7 @@ async def acquired_items_command(
             if not (recent_items := collectibles.recent_collectibles):
                 raise tanjun.CommandError(f"No items found for {membership.name}")
 
-            items = await consts.spawn(*[client.rest.fetch_entity("DestinyCollectibleDefinition", item) for item in recent_items])
+            items = await boxed.spawn(*[client.rest.fetch_entity("DestinyCollectibleDefinition", item) for item in recent_items])
             pages = (
                 (
                     hikari.UNDEFINED,
@@ -820,6 +820,6 @@ async def acquired_items_command(
                 )
                 for entity in reversed(items)
             )
-            await consts.generate_component(ctx, pages, component_client)
+            await boxed.generate_component(ctx, pages, component_client)
 
 destiny = tanjun.Component(name="Destiny/Bungie", strict=True).load_from_scope().make_loader()

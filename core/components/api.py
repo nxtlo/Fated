@@ -33,7 +33,7 @@ import hikari
 import tanjun
 import yuyo
 
-from core.utils import consts, format
+from core.utils import boxed
 from core.utils import net as net_
 
 
@@ -42,8 +42,8 @@ from core.utils import net as net_
 @tanjun.with_str_slash_option(
     "genre",
     "The anime genre. This can be used with the random option.",
-    choices=consts.iter(consts.GENRES),
-    default=consts.randomize(),
+    choices=boxed.iter(boxed.GENRES),
+    default=boxed.randomize_genres(),
 )
 @tanjun.as_slash_command("anime", "Returns basic information about an anime.")
 async def get_anime(
@@ -51,12 +51,11 @@ async def get_anime(
     name: str,
     random: bool | None,
     genre: str,
-    net: net_.HTTPNet = tanjun.inject(type=net_.HTTPNet),
+    jian: net_.Wrapper = tanjun.inject(type=net_.Wrapper),
     component_client: yuyo.ComponentClient = tanjun.inject(type=yuyo.ComponentClient),
 ) -> None:
     await ctx.defer()
 
-    jian = net_.Wrapper(net)
     try:
         anime_embed = await jian.fetch_anime(name, random=random, genre=genre)
     except net_.Error as e:
@@ -67,7 +66,7 @@ async def get_anime(
         await ctx.respond(embed=anime_embed)
         return
 
-    await consts.generate_component(
+    await boxed.generate_component(
         ctx, ((hikari.UNDEFINED, embed) for embed in anime_embed), component_client
     )
 
@@ -77,14 +76,14 @@ async def get_anime(
 async def get_manga(
     ctx: tanjun.abc.SlashContext,
     name: str,
-    net: net_.HTTPNet = tanjun.inject(type=net_.HTTPNet),
+    jian: net_.Wrapper = tanjun.inject(type=net_.Wrapper),
     component_client: yuyo.ComponentClient = tanjun.inject(type=yuyo.ComponentClient),
 ) -> None:
     await ctx.defer()
-    jian = net_.Wrapper(net)
+
     manga_embeds = await jian.fetch_manga(name)
     if manga_embeds:
-        await consts.generate_component(
+        await boxed.generate_component(
             ctx, ((hikari.UNDEFINED, embed) for embed in manga_embeds), component_client
         )
 
@@ -94,16 +93,15 @@ async def get_manga(
 async def define(
     ctx: tanjun.abc.SlashContext,
     name: str,
-    net: net_.HTTPNet = tanjun.inject(type=net_.HTTPNet),
+    urban: net_.Wrapper = tanjun.inject(type=net_.Wrapper),
     component_client: yuyo.ComponentClient = tanjun.inject(type=yuyo.ComponentClient),
 ) -> None:
-    urban = net_.Wrapper(net)
     definitions = await urban.fetch_definitions(name)
 
     if definitions:
         pages = ((hikari.UNDEFINED, embed) for embed in definitions)
 
-        await consts.generate_component(ctx, pages, component_client)
+        await boxed.generate_component(ctx, pages, component_client)
 
 
 # Fun stuff.
@@ -118,10 +116,9 @@ async def doggo(
                 "GET",
                 "https://some-random-api.ml/animal/dog",
             )
-            if resp:
-                assert isinstance(resp, dict)
-                embed = hikari.Embed(description=resp["fact"])
-                embed.set_image(resp["image"])
+            assert isinstance(resp, dict)
+            embed = hikari.Embed(description=resp["fact"])
+            embed.set_image(resp["image"])
     except net_.Error:
         pass
 
@@ -139,10 +136,9 @@ async def kittie(
                 "GET",
                 "https://some-random-api.ml/animal/cat",
             )
-            if resp:
-                assert isinstance(resp, dict)
-                embed = hikari.Embed(description=resp["fact"])
-                embed.set_image(resp["image"])
+            assert isinstance(resp, dict)
+            embed = hikari.Embed(description=resp["fact"])
+            embed.set_image(resp["image"])
     except net_.Error:
         pass
     await ctx.respond(embed=embed)
@@ -161,12 +157,11 @@ async def wink(
             resp = await client.request(
                 "GET", "https://some-random-api.ml/animu/wink", getter="link"
             )
-            if resp:
-                assert isinstance(resp, str)
-                embed = hikari.Embed(
-                    description=f"{ctx.author.username} winked at {member.username if member else 'their self'} UwU!"
-                )
-                embed.set_image(resp)
+            assert isinstance(resp, str)
+            embed = hikari.Embed(
+                description=f"{ctx.author.username} winked at {member.username if member else 'their self'} UwU!"
+            )
+            embed.set_image(resp)
     except net_.Error:
         pass
     await ctx.respond(embed=embed)
@@ -185,12 +180,11 @@ async def pat(
             resp = await client.request(
                 "GET", "https://some-random-api.ml/animu/pat", getter="link"
             )
-            if resp:
-                assert isinstance(resp, str)
-                embed = hikari.Embed(
-                    description=f"{ctx.author.username} pats {member.username if member else 'their self'} UwU!"
-                )
-                embed.set_image(resp)
+            assert isinstance(resp, str)
+            embed = hikari.Embed(
+                description=f"{ctx.author.username} pats {member.username if member else 'their self'} UwU!"
+            )
+            embed.set_image(resp)
     except net_.Error:
         pass
     await ctx.respond(embed=embed)
@@ -213,12 +207,11 @@ async def jail(
                 f"https://some-random-api.ml/canvas/jail?avatar={member.avatar_url}",
                 read_bytes=True,
             )
-            if resp:
-                assert isinstance(resp, bytes)
-                embed = hikari.Embed(
-                    description=f"{ctx.author.username} jails {member.username if member else 'their self'}"
-                )
-                embed.set_image(resp)
+            assert isinstance(resp, bytes)
+            embed = hikari.Embed(
+                description=f"{ctx.author.username} jails {member.username if member else 'their self'}"
+            )
+            embed.set_image(hikari.Bytes(resp, "jail"))
     except net_.Error:
         pass
     await ctx.respond(embed=embed)
@@ -241,9 +234,9 @@ async def run_net(
         try:
             result = await cli.request(method, url, getter=getter)
         except net_.Error:
-            await ctx.respond(format.error(str=True))
+            await ctx.respond(boxed.error(str=True))
             return
-        formatted = format.with_block(result, lang="json")
+        formatted = boxed.with_block(result, lang="json")
         await ctx.respond(formatted)
 
 

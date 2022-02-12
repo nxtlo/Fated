@@ -20,7 +20,7 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-"""Constants used globally."""
+"""Boxed constants and methods used globally."""
 
 from __future__ import annotations
 
@@ -33,18 +33,25 @@ __all__: list[str] = [
     "generate_component",
     "naive_datetime",
     "spawn",
+    "error",
+    "parse_code",
+    "with_block",
 ]
 
 import datetime
 import random
+import sys
 import typing
 
 import hikari
 import tanjun
 import yuyo
+from hikari.internal import aio
 
 if typing.TYPE_CHECKING:
+    import builtins
     import collections.abc as collections
+    import types
 
     _T = typing.TypeVar("_T")
 
@@ -122,15 +129,56 @@ def iter(map: collections.Mapping[str, typing.Any]) -> collections.Sequence[typi
     return [k for k in map.keys()]
 
 
-def randomize(seq: collections.Sequence[str] | None = None) -> str:
-    if not seq or seq is None:
-        return random.choice(list(GENRES.keys()))
+def randomize(seq: collections.Sequence[_T]) -> _T:
+    """Return a random element from a sequence."""
     return random.choice(list(seq))
 
 
-# Since this file is mostly imported everywhere its worth
-# having this here.
-async def spawn(*coros: collections.Awaitable[_T]) -> collections.Sequence[_T]:
-    from hikari.internal import aio
+def randomize_genres() -> str:
+    """Return a random anime genre."""
+    return random.choice(list(GENRES.keys()))
 
-    return await aio.all_of(*coros)
+
+# Since this module is mostly imported everywhere its worth
+# having this here.
+async def spawn(
+    *coros: collections.Awaitable[_T], timeout: float | None = None
+) -> collections.Sequence[_T]:
+    """Spawn a sequence awaitables and return their results."""
+    return await aio.all_of(*coros, timeout=timeout)
+
+
+def parse_code(*, code: str, lang: str = "sql") -> str:
+    """Parse and replace a language specific code.
+
+    Example
+    -------
+    ```sql
+    SELECT * FROM table WHERE id = $1
+    ```
+    This removes the ```sql``` code blocks and returns the original code.
+    """
+    if code.startswith(f"```{lang}") and code.endswith("```"):
+        code = code.replace("```", "").replace(lang, "")
+    return code
+
+
+def with_block(data: typing.Any, *, lang: str = "hs") -> str:
+    """Adds code blocks to a any text."""
+    return f"```{lang}\n{data}\n```"
+
+
+def error(
+    source: tuple[
+        type[builtins.BaseException], builtins.BaseException, types.TracebackType
+    ]
+    | tuple[None, None, None]
+    | None = None,
+    str: bool = False,
+) -> BaseException | str | None:
+    """Return the last detected exception"""
+    if source is None:
+        if str:
+            return with_block(sys.exc_info()[1])
+        return sys.exc_info()[1]
+    return source[1]
