@@ -66,3 +66,10 @@ class Config:
             REDIS_PORT=int(_os.environ.get("REDIS_PORT", cls.REDIS_PORT)),
             REDIS_PASSWORD=_os.environ.get("REDIS_PASSWORD"),
         )
+
+    def verify_bungie_tokens(self) -> bool:
+        return (
+            self.BUNGIE_CLIENT_ID is not None
+            and self.BUNGIE_CLIENT_SECRET is not None
+            and self.BUNGIE_TOKEN is not None
+        )

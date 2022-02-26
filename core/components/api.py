@@ -205,13 +205,13 @@ async def jail(
             resp = await client.request(
                 "GET",
                 f"https://some-random-api.ml/canvas/jail?avatar={member.avatar_url}",
-                read_bytes=True,
+                unwrap_bytes=True,
             )
             assert isinstance(resp, bytes)
             embed = hikari.Embed(
                 description=f"{ctx.author.username} jails {member.username if member else 'their self'}"
             )
-            embed.set_image(hikari.Bytes(resp, "jail"))
+            embed.set_image(resp)
     except net_.Error:
         pass
     await ctx.respond(embed=embed)

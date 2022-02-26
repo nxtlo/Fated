@@ -137,9 +137,6 @@ def _build_client(
         )
         client.load_modules("core.components.destiny")
 
-    for dep_type, cls_ in client._type_dependencies.items():  # type: ignore
-        logging.debug("Injected: %s with: %s", repr(dep_type), repr(cls_))  # type: ignore
-
     return client
 
 
@@ -148,7 +145,7 @@ def _enable_logging(
     hikari: bool = False,
     tanjun: bool = False,
     us: bool = False,
-    aiobungie: bool = False,
+    aiobungie_: bool = False,
 ) -> None:
     logging.getLogger("hikari.gateway").setLevel(logging.CRITICAL)
 
@@ -164,8 +161,8 @@ def _enable_logging(
         ]:
             logger.setLevel(logging.DEBUG)
 
-    if aiobungie:
-        logging.getLogger("aiobungie.rest").setLevel(logging.DEBUG)
+    if aiobungie_:
+        logging.getLogger("aiobungie.rest").setLevel(aiobungie.REST_DEBUG)
 
     if tanjun:
         for logger in [
@@ -180,7 +177,7 @@ def _enable_logging(
 @click.group(name="main", invoke_without_command=True, options_metavar="[options]")
 @click.pass_context
 def main(ctx: click.Context) -> None:
-    _enable_logging(hikari=False, tanjun=True, us=True, aiobungie=True)
+    _enable_logging(hikari=False, tanjun=True, us=True, aiobungie_=True)
     if ctx.invoked_subcommand is None:
         _build_bot().run(status=hikari.Status.DO_NOT_DISTURB)
 
