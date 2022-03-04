@@ -27,7 +27,6 @@ from __future__ import annotations
 
 __all__: tuple[str, ...] = ("git",)
 
-import datetime
 
 import hikari
 import tanjun
@@ -75,7 +74,7 @@ async def git_user(
             )
             .add_field("User type", user.type, inline=True)
         )
-        cache.put(name, embed).set_expiry(datetime.timedelta(hours=6))
+        cache.put(name, embed)
     await ctx.respond(embed=embed)
 
 

@@ -27,7 +27,6 @@ __all__: tuple[str, ...] = ("Memory", "Hash")
 
 import asyncio
 import datetime
-import inspect
 import logging
 import math
 import time
@@ -226,126 +225,35 @@ class Hash(traits.HashRunner):
         return response
 
 
-class Memory(hikari_collections.ExtendedMutableMapping[MKT, MVT]):
-    """A standard in-memory cache that we use it for APIs responses, embeds, etc.
+class Memory(hikari_collections.FreezableDict[MKT, MVT]):
+    """In-Memory cache."""
 
-    This implements hikari's `TimedCacheMap` with more functionality.
-    It will pop entries after 12 hours by default `"IF"` new entries are inserted into the cache.
-    This can be modified by changing `expire_after`.
-    """
+    _data: dict[MKT, MVT]
 
-    __slots__ = ("_map", "expire_after", "on_expire")
-    _map: hikari_collections.ExtendedMutableMapping[MKT, MVT]
-
-    def __init__(
-        self,
-        expire_after: datetime.timedelta | float | None = None,
-        *,
-        on_expire: collections.Callable[..., typing.Any] | None = None,
-    ) -> None:
-
-        if isinstance(expire_after, float):
-            expire_after = datetime.timedelta(seconds=expire_after)
-
-        if expire_after is None:
-            # By default we only need to cache stuff
-            # for 12 hours.
-            expire_after = datetime.timedelta(hours=12)
-
-        if on_expire:
-            on_expire.__doc__ = (
-                f"{type(on_expire).__name__}({inspect.getargs(on_expire.__code__).args}) "
-                f'-> {on_expire.__annotations__.get("return")}'
-            )
-        self.on_expire = on_expire
-        self.expire_after = expire_after
+    def __init__(self) -> None:
         super().__init__()
 
-        self._map = hikari_collections.TimedCacheMap[MKT, MVT](
-            expiry=expire_after, on_expire=on_expire
-        )
-
-    def clear(self) -> None:
-        self._map.clear()
-        self.expire_after = None
-        self.on_expire = None
-
-    def copy(self) -> hikari_collections.ExtendedMutableMapping[MKT, MVT]:
-        return self._map.copy()
-
-    clone = copy
-    """An alias to `Memory.copy()"""
-
-    # Technically, We can use into_iter().for_each(...) but we want to iter through k, v.
-    def for_each(
-        self, devours: collections.Callable[[MKT, MVT], typing.Any]
-    ) -> Memory[MKT, MVT]:
-        """Performs an inline for loop for each key, value cached and devours/maps it to a callable."""
-        for k, v in self._map.items():
-            devours(k, v)
-        return self
-
-    def into_iter(
+    def iter(
         self, predicate: collections.Callable[[MKT], typing.Any], /
     ) -> hikari.LazyIterator[MVT]:
         """Returns a flat lazy iterator of this cache's values based on the predicate keys."""
-        for k, _ in self._map.items():
+        for k, _ in self._data.items():
             if predicate(k):
-                return hikari.FlatLazyIterator(list(self._map.values()))
+                return hikari.FlatLazyIterator(list(self._data.values()))
         return hikari.FlatLazyIterator([])
-
-    def freeze(self) -> collections.MutableMapping[MKT, MVT]:
-        return self._map.freeze()
-
-    # Do we actually need all this...
 
     def view(self) -> str:
         return repr(self)
 
-    def values(self) -> collections.ValuesView[MVT]:
-        return self._map.values()
-
-    def keys(self) -> collections.KeysView[MKT]:
-        return self._map.keys()
-
-    def get(self, key: MKT, default: _T | None = None, /) -> MVT | _T | None:
-        return self._map.get(key, default)
-
     def put(self, key: MKT, value: MVT) -> typing_extensions.Self:
-        self._map[key] = value
+        self[key] = value
         return self
-
-    def set_expiry(self, date: datetime.timedelta) -> typing_extensions.Self:
-        self.expire_after = date
-        return self
-
-    def set_on_expire(self, obj: collections.Callable[..., _T]) -> _T:
-        self.on_expire = obj
-        return typing.cast(_T, obj)
 
     def __repr__(self) -> str:
-        if not self._map:
+        if not self._data:
             return "`EmptyCache`"
 
-        docs = inspect.getdoc(self.on_expire)
         return "\n".join(
-            boxed.with_block(
-                f"MemoryCache({k}={v!r}, expires_at={self.expire_after}, on_expire={docs})"
-            )
-            for k, v in self._map.items()
+            boxed.with_block(f"MemoryCache({k}={v!r})")
+            for k, v in self._data.items()
         )
-
-    def __iter__(self) -> collections.Iterator[MKT]:
-        return iter(self._map)
-
-    def __getitem__(self, k: MKT) -> MVT:
-        return self._map[k]
-
-    def __setitem__(self, k: MKT, v: MVT) -> None:
-        self._map[k] = v
-
-    def __delitem__(self, k: MKT) -> None:
-        del self._map[k]
-
-    def __len__(self) -> int:
-        return len(self._map)

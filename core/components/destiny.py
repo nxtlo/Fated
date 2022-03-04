@@ -220,10 +220,10 @@ async def sync_command(
                 # They don't have a Destiny membership aperantly ¯\_(ツ)_/¯
                 raise tanjun.CommandError("You don't have any Destiny 2 memberships!")
 
+            primary_id = membership.id
+
             if (primary_id_ := user.primary_membership_id) is not None:
                 primary_id = primary_id_
-            else:
-                primary_id = membership.id
 
             await redis.set_bungie_tokens(ctx.author.id, response)
 
@@ -350,9 +350,13 @@ async def friend_list_command(
             ]
         )
     )
-    filtered_length = list(filter(lambda f: f.online_status is aiobungie.Presence.ONLINE, friend_list))
+    filtered_length = (
+        aiobungie
+        .into_iter(friend_list)
+        .filter(lambda friend: friend.online_status is aiobungie.Presence.ONLINE)
+    )
 
-    embed = hikari.Embed(title=f"({len(filtered_length)}/{len(friend_list)}) Online.")
+    embed = hikari.Embed(title=f"({filtered_length.count()}/{len(friend_list)}) Online.")
     if friend_list:
         embed.add_field("Friends",build_friends(friend_list))
 
@@ -418,7 +422,7 @@ async def characters(
 
     try:
         char_resp = await client.fetch_profile(
-            id, _PLATFORMS[platform], aiobungie.ComponentType.CHARACTERS
+            id, _PLATFORMS[platform], [aiobungie.ComponentType.CHARACTERS]
         )
 
     except aiobungie.MembershipTypeError as exc:
@@ -718,7 +722,7 @@ async def post_activity_command(
         hikari.Embed(title=post.mode, url=rr)
         .add_field(
             "Information",
-            f"Reference id: {post.refrence_id}\n"
+            f"Reference id: {post.reference_id}\n"
             f"Membership: {post.membership_type}\n"
             f"Starting phase: {post.starting_phase}\n"
             f"Date: {tanjun.conversion.from_datetime(boxed.naive_datetime(post.occurred_at), style='R')}\n"
@@ -726,7 +730,7 @@ async def post_activity_command(
     )
 
     try:
-        activity = await client.rest.fetch_entity("DestinyActivityDefinition", post.refrence_id)
+        activity = await client.rest.fetch_entity("DestinyActivityDefinition", post.reference_id)
     except aiobungie.HTTPError:
         pass
     else:
@@ -796,7 +800,7 @@ async def acquired_items_command(
             except pool.ExistsError as e:
                 raise tanjun.CommandError(e.message)
 
-        profile = await client.fetch_profile(id_, _PLATFORMS[platform], aiobungie.ComponentType.COLLECTIBLES)
+        profile = await client.fetch_profile(id_, _PLATFORMS[platform], [aiobungie.ComponentType.COLLECTIBLES])
 
         if collectibles := profile.profile_collectibles:
             if not (recent_items := collectibles.recent_collectibles):
