@@ -118,7 +118,7 @@ def _build_client(
             str(config.BUNGIE_TOKEN),
             config.BUNGIE_CLIENT_SECRET,
             config.BUNGIE_CLIENT_ID,
-            max_retries=2,
+            max_retries=1,
         )
         redis_hash.set_aiobungie_client(aiobungie_client)
         client.set_type_dependency(aiobungie.Client, aiobungie_client)

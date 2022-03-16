@@ -102,7 +102,7 @@ class Notes:
         )
 
 
-@dataclasses.dataclass(kw_only=True, slots=True, repr=False)
+@dataclasses.dataclass(kw_only=True, repr=False, slots=True)
 class GithubRepo:
     """Minimal representation of a GitHub repository information."""
 

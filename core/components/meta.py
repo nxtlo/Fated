@@ -31,6 +31,8 @@ import datetime
 import logging
 import sys
 import typing
+import time
+import aiobungie
 
 import hikari
 import tanjun
@@ -244,6 +246,35 @@ async def avatar_view(ctx: tanjun.abc.SlashContext, /, member: hikari.Member) ->
     avatar = member.avatar_url or member.default_avatar_url
     embed = hikari.Embed(title=member.username).set_image(avatar)
     await ctx.respond(embed=embed)
+
+
+@tanjun.as_message_command("ping")
+async def ping_command(
+    ctx: tanjun.abc.MessageContext,
+    client: aiobungie.Client = tanjun.inject(type=aiobungie.Client),
+) -> None:
+
+    aiobungie_start = time.perf_counter()
+    _ = await client.rest.fetch_common_settings()
+    aiobungie_stop = (time.perf_counter() - aiobungie_start) * 1_000
+
+    rest_start = time.perf_counter()
+    _ = await ctx.rest.fetch_my_user()
+    rest_stop = (time.perf_counter() - rest_start) * 1_000
+
+    gateway_time = ctx.shards.heartbeat_latency * 1_000 if ctx.shards else float("NAN")
+
+    await ctx.respond(
+        embed=(
+            hikari.Embed(
+                description=(
+                    f"Bungie: {aiobungie_stop:.0f}ms\n"
+                    f"Discord REST: {rest_stop:.0f}ms\n"
+                    f"Discord Gateway: {gateway_time:.0f}ms"
+                ).replace("_", "")
+            )
+        )
+    )
 
 
 meta = (

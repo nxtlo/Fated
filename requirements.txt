@@ -1,4 +1,4 @@
-aiobungie~=0.2.6a1
+aiobungie~=0.2.6a2
 hikari[speedups]==2.0.0.dev107
 hikari-tanjun~=2.4.2a1
 hikari-yuyo~=1.0.5a1.post1

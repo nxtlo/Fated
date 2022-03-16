@@ -254,6 +254,5 @@ class Memory(hikari_collections.FreezableDict[MKT, MVT]):
             return "`EmptyCache`"
 
         return "\n".join(
-            boxed.with_block(f"MemoryCache({k}={v!r})")
-            for k, v in self._data.items()
+            boxed.with_block(f"MemoryCache({k}={v!r})") for k, v in self._data.items()
         )

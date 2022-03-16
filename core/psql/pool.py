@@ -46,6 +46,7 @@ if typing.TYPE_CHECKING:
 _LOG: typing.Final[logging.Logger] = logging.getLogger("fated.pool")
 logging.basicConfig(level=logging.DEBUG)
 
+
 class ExistsError(RuntimeError):
     """A runtime error raised when either the data exists or not found."""
 

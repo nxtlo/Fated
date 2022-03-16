@@ -42,7 +42,6 @@ from core.utils import boxed, cache, traits
 if typing.TYPE_CHECKING:
     import collections.abc as collections
 
-destiny_group = tanjun.slash_command_group("destiny", "Commands related to Destiny 2.")
 
 # boxed usually used as slash options key -> val.
 _PLATFORMS: dict[str, aiobungie.MembershipType] = {
@@ -61,13 +60,17 @@ _PLATFORMS: dict[str, aiobungie.MembershipType] = {
 # Fireteam activities for quick LFGs
 _ACTIVITIES: dict[str, tuple[str | None, aiobungie.FireteamActivity]] = {
     "Any": (None, aiobungie.FireteamActivity.ANY),
-    "VoG": (
+    "Vault of Glass": (
         "https://www.bungie.net/img/destiny_content/pgcr/vault_of_glass.jpg",
         aiobungie.FireteamActivity.RAID_VOG,
     ),
-    "DSC": (
+    "Deep Stone Crypt": (
         "https://www.bungie.net/img/destiny_content/pgcr/europa-raid-deep-stone-crypt.jpg",
         aiobungie.FireteamActivity.RAID_DSC,
+    ),
+    "Vow of the Discpile": (
+        "https://www.bungie.net/img/destiny_content/pgcr/raid_nemesis.jpg",
+        aiobungie.FireteamActivity.VOW_OF_THE_DISCPILE,
     ),
     "Nightfall": (
         "https://www.bungie.net/img/theme/destiny/bgs/stats/banner_strikes_1.jpg",
@@ -82,24 +85,53 @@ _ACTIVITIES: dict[str, tuple[str | None, aiobungie.FireteamActivity]] = {
         "https://www.bungie.net/img/destiny_content/pgcr/season_14_expunge_tartarus.jpg",
         aiobungie.FireteamActivity.S14_EXPUNGE,
     ),
-    "GoE": (
+    "Grasp of Avarice": (
         "https://www.bungie.net/img/destiny_content/pgcr/30th-anniversary-grasp-of-avarice.jpg",
-        aiobungie.FireteamActivity.DUNGEON_GOA
+        aiobungie.FireteamActivity.DUNGEON_GOA,
     ),
-    "DoE": (
+    "Dares of Eternity": (
         "https://www.bungie.net/img/destiny_content/pgcr/30th-anniversary-dares-of-eternity.jpg",
-        aiobungie.FireteamActivity.DOE
-    )
+        aiobungie.FireteamActivity.DOE,
+    ),
+    "Wellspring": (
+        "https://www.bungie.net/img/destiny_content/pgcr/wellspring_attack_two.jpg",
+        aiobungie.FireteamActivity.WELLSPRING,
+    ),
 }
 
+# Core group.
+destiny_group = tanjun.slash_command_group("destiny", "Commands related to Destiny 2.")
+
+# Subgroups.
+search_group = destiny_group.with_command(
+    tanjun.slash_command_group("search", "Commands search for stuff in the API.")
+)
+
+last_group = destiny_group.with_command(
+    tanjun.slash_command_group("last", "Commands that returns the last thing occurred.")
+)
+
 D2_SETS: typing.Final[str] = "https://data.destinysets.com/i/InventoryItem:{hash}"
-STAR: typing.Final[str] = '⭐'
+STAR: typing.Final[str] = "⭐"
 
 _slots: collections.Callable[[aiobungie.crate.Fireteam], str] = (
     lambda fireteam: "Full"
     if fireteam.available_player_slots == 0
     else f"{fireteam.available_player_slots}/{fireteam.player_slot_count}"
 )
+
+# This is sent when the API is down.
+async def _handle_errors(
+    ctx: tanjun.abc.Context, exc: aiobungie.InternalServerError, /
+) -> None:
+    if exc.error_status == "SystemDisabled":
+        msg = (
+            exc.message
+            if exc.message
+            else "An unknown error has occurred while making the request."
+        )
+        await ctx.respond(msg)
+
 
 async def _get_destiny_player(
     client: aiobungie.Client,
@@ -117,6 +149,64 @@ async def _get_destiny_player(
         ) from None
 
     return player[0]
+
+
+async def _fetch_instance(client: aiobungie.Client, instance_id: int) -> hikari.Embed:
+    try:
+        post = await client.fetch_post_activity(instance_id)
+    except aiobungie.HTTPError as e:
+        raise tanjun.CommandError(e.message)
+
+    features: list[str] = []
+
+    if post.is_solo_flawless:
+        features.append(f"Solo Flawless: {STAR}")
+
+    elif post.is_flawless:
+        features.append(f"Flawless: {STAR}")
+
+    elif post.is_solo:
+        features.append(f"Solo: {STAR}")
+
+    rr = f"https://raid.report/pgcr/{instance_id}"
+    embed = hikari.Embed(title=post.mode, url=rr).add_field(
+        "Information",
+        f"Reference id: {post.reference_id}\n"
+        f"Membership: {post.membership_type}\n"
+        f"Starting phase: {post.starting_phase}\n"
+        f"Date: {tanjun.conversion.from_datetime(boxed.naive_datetime(post.occurred_at), style='R')}\n",
+    )
+
+    try:
+        activity = await client.rest.fetch_entity(
+            "DestinyActivityDefinition", post.reference_id
+        )
+    except aiobungie.HTTPError:
+        pass
+    else:
+        if raw_image := activity["pgcrImage"]:
+            embed.set_thumbnail(aiobungie.url.BASE + str(raw_image))
+
+        if raw_props := activity["displayProperties"]:
+            embed.description = raw_props["description"]
+            embed.title = raw_props["name"]
+
+    for player in post.players:
+        embed.add_field(
+            f"{player.destiny_user.last_seen_name}#{player.destiny_user.code}",
+            f"`Class`: [{player.character_class}]({player.destiny_user.link})\n"
+            f"Light level: {player.light_level}\n"
+            f"`Time`: {player.values.played_time}\n"
+            f"`Kills`: {player.values.kills}\n"
+            f"`Deaths`: {player.values.deaths}\n",
+            inline=True,
+        )
+
+    if features:
+        embed.add_field("Features", "\n".join(features))
+
+    return embed
+
 
 def _build_inventory_item_embed(
     entity: aiobungie.crate.InventoryEntity,
@@ -144,12 +234,12 @@ def _build_inventory_item_embed(
             "Metadata",
             f"Source: {entity.display_source}\n"
             f"Type: {entity.type_and_tier_name}\n"
-            f"Class type: {entity.item_class or 'N/A'}"
+            f"Class type: {entity.item_class or 'N/A'}",
         )
     )
 
     if entity.has_icon:
-        embed.set_thumbnail(str(entity.icon))
+        embed.set_thumbnail(entity.icon.url)
 
     if entity.type is aiobungie.ItemType.EMBLEM:
         if entity.secondary_icon is not aiobungie.Undefined:
@@ -161,9 +251,15 @@ def _build_inventory_item_embed(
 
     return embed
 
+
+# * Core Destiny commands.
+
+
 @tanjun.with_concurrency_limit("destiny")
 @destiny_group.with_command
-@tanjun.as_slash_command("sync", "Sync your Bungie account with this bot.", default_to_ephemeral=True)
+@tanjun.as_slash_command(
+    "sync", "Sync your Bungie account with this bot.", default_to_ephemeral=True
+)
 async def sync_command(
     ctx: tanjun.abc.SlashContext,
     redis: traits.HashRunner = tanjun.inject(type=traits.HashRunner),
@@ -182,7 +278,7 @@ async def sync_command(
                 "2) Login with your Bungie account and accept to authorize.\n"
                 "3) After accepting you'll get redirected to Bungie's website. "
                 "Simply copy the website URL link and send it here."
-            )
+            ),
         )
     )
 
@@ -192,7 +288,8 @@ async def sync_command(
             90,
             lambda m: m.channel_id == ctx.channel_id
             and m.author_id == ctx.author.id
-            and m.content is not None and 'code=' in m.content
+            and m.content is not None
+            and "code=" in m.content,
         )
     except asyncio.TimeoutError:
         raise tanjun.CommandError("Time is up! Try again.")
@@ -210,7 +307,9 @@ async def sync_command(
             try:
                 response = await client.rest.fetch_oauth2_tokens(parse_code)
             except aiobungie.BadRequest:
-                raise tanjun.CommandError("Invalid URL. Please run the command again and send the URL.")
+                raise tanjun.CommandError(
+                    "Invalid URL. Please run the command again and send the URL."
+                )
 
             user = await client.fetch_current_user_memberships(response.access_token)
 
@@ -233,17 +332,18 @@ async def sync_command(
                     primary_id,
                     str(membership.name),
                     membership.code if membership.code else 0,
-                    membership.type
+                    membership.type,
                 )
             except pool.ExistsError:
                 # They already exists in the DB.
                 pass
 
             await ctx.respond(
-                embed=(hikari.Embed(
-                    title=membership.unique_name,
-                    description=f"Synced successfully.",
-                    url=user.bungie.profile_url
+                embed=(
+                    hikari.Embed(
+                        title=membership.unique_name,
+                        description=f"Synced successfully.",
+                        url=user.bungie.profile_url,
                     ).set_thumbnail(str(user.bungie.picture))
                 )
             )
@@ -254,7 +354,7 @@ async def sync_command(
 async def desync(
     ctx: tanjun.abc.SlashContext,
     pool_: traits.PoolRunner = tanjun.inject(type=traits.PoolRunner),
-    redis: traits.HashRunner = tanjun.inject(type=traits.HashRunner)
+    redis: traits.HashRunner = tanjun.inject(type=traits.HashRunner),
 ) -> None:
 
     # Redis will remove if the tokens exists and fallback if not
@@ -267,8 +367,9 @@ async def desync(
 
     await ctx.respond("Successfully desynced your membership.")
 
+
 @destiny_group.with_command
-@tanjun.as_slash_command("user", "Return authorized user information.")
+@tanjun.as_slash_command("my-user", "Show information about your synced user.")
 async def user_command(
     ctx: tanjun.abc.SlashContext,
     redis: traits.HashRunner = tanjun.inject(type=traits.HashRunner),
@@ -278,9 +379,11 @@ async def user_command(
     try:
         tokens = await redis.get_bungie_tokens(ctx.author.id)
     except LookupError:
-        raise tanjun.CommandError("Youre not authorized. Type `/destiny sync` to sync your account.")
+        raise tanjun.CommandError(
+            "Youre not authorized. Type `/destiny sync` to sync your account."
+        )
 
-    access_token = str(tokens['access'])
+    access_token = str(tokens["access"])
     try:
         user = await client.fetch_current_user_memberships(access_token)
     except aiobungie.Unauthorized:
@@ -289,7 +392,7 @@ async def user_command(
     bungie = user.bungie
 
     embed = hikari.Embed(
-        title=f'{bungie.unique_name} - {bungie.id}', description=bungie.about
+        title=f"{bungie.unique_name} - {bungie.id}", description=bungie.about
     )
 
     connections: list[str] = []
@@ -303,23 +406,20 @@ async def user_command(
         connections.append(f"PSN name: {bungie.psn_name}")
 
     (
-        embed
-        .set_thumbnail(str(bungie.picture))
-        .add_field(
-            "Connections",
-            "\n".join(connections)
-        )
+        embed.set_thumbnail(str(bungie.picture))
+        .add_field("Connections", "\n".join(connections))
         .add_field(
             "Memberships",
-            '\n'.join([f'[{m.type}: {m.unique_name}]({m.link})' for m in user.destiny])
+            "\n".join([f"[{m.type}: {m.unique_name}]({m.link})" for m in user.destiny]),
         )
-        .set_footer(f'{boxed.naive_datetime(user.bungie.created_at)}')
+        .set_footer(f"{boxed.naive_datetime(user.bungie.created_at)}")
     )
     await ctx.respond(embed=embed)
 
+
 @tanjun.with_cooldown("destiny")
 @destiny_group.with_command
-@tanjun.as_slash_command("friends", "View your Bungie friend list")
+@tanjun.as_slash_command("friends", "View your Bungie friend list.")
 async def friend_list_command(
     ctx: tanjun.abc.SlashContext,
     redis: traits.HashRunner = tanjun.inject(type=traits.HashRunner),
@@ -329,50 +429,47 @@ async def friend_list_command(
     try:
         tokens = await redis.get_bungie_tokens(ctx.author.id)
     except LookupError:
-        raise tanjun.CommandError("Youre not authorized. Type `/destiny sync` to sync your account.")
+        raise tanjun.CommandError(
+            "Youre not authorized. Type `/destiny sync` to sync your account."
+        )
 
-    access = str(tokens['access'])
+    access = str(tokens["access"])
     try:
         friend_list = await client.fetch_friends(access)
     except aiobungie.HTTPError as e:
         raise tanjun.CommandError(e.message)
 
     check_status: collections.Callable[[aiobungie.Presence], str] = (
-        lambda status: '<:online2:464520569975603200>'
-        if status is aiobungie.Presence.ONLINE else '<:offline2:464520569929334784>'
+        lambda status: "<:online2:464520569975603200>"
+        if status is aiobungie.Presence.ONLINE
+        else "<:offline2:464520569929334784>"
     )
-    build_friends: collections.Callable[[collections.Sequence[aiobungie.crate.Friend]], str] = (
-        lambda friend_list_: 
-            "\n".join(
-                [
-                    f"{check_status(friend.online_status)} `{friend.unique_name}`"
-                    for friend in friend_list_[:15]
-            ]
-        )
+    build_friends: collections.Callable[
+        [collections.Sequence[aiobungie.crate.Friend]], str
+    ] = lambda friend_list_: "\n".join(
+        [
+            f"{check_status(friend.online_status)} `{friend.unique_name}`"
+            for friend in friend_list_[:15]
+        ]
     )
-    filtered_length = (
-        aiobungie
-        .into_iter(friend_list)
-        .filter(lambda friend: friend.online_status is aiobungie.Presence.ONLINE)
+    filtered_length = aiobungie.into_iter(friend_list).filter(
+        lambda friend: friend.online_status is aiobungie.Presence.ONLINE
     )
 
-    embed = hikari.Embed(title=f"({filtered_length.count()}/{len(friend_list)}) Online.")
+    embed = hikari.Embed(
+        title=f"({filtered_length.count()}/{len(friend_list)}) Online."
+    )
     if friend_list:
-        embed.add_field("Friends",build_friends(friend_list))
+        embed.add_field("Friends", build_friends(friend_list))
 
     requests = await client.fetch_friend_requests(access)
     if incoming := requests.incoming:
-        embed.add_field(
-            "Incoming requests",
-            build_friends(incoming)
-        )
+        embed.add_field("Incoming requests", build_friends(incoming))
 
     if outgoing := requests.outgoing:
-        embed.add_field(
-            "Sent requests",
-            build_friends(outgoing)
-        )
+        embed.add_field("Sent requests", build_friends(outgoing))
     await ctx.respond(embed=embed)
+
 
 # I don't want to force authorizing so we also allow to search for players
 # either with their name or id.
@@ -384,10 +481,8 @@ async def friend_list_command(
 @tanjun.with_str_slash_option(
     "query", "An optional player id or full name to search for.", default=None
 )
-@tanjun.as_slash_command(
-    "character", "Information about a member's Destiny characters."
-)
-async def characters(
+@tanjun.as_slash_command("guardians", "Information about a member's Destiny guardians.")
+async def guardians(
     ctx: tanjun.abc.SlashContext,
     member: hikari.InteractionMember | None,
     query: str | int | None,
@@ -400,14 +495,14 @@ async def characters(
     assert member, "This command should be ran in a Guild."
 
     if query:
-        if isinstance(query, str) and '#' in query:
+        if isinstance(query, str) and "#" in query:
             # We fetch the player by their name and get their id.
             try:
                 player = await _get_destiny_player(client, query)
             except LookupError as e:
-                raise tanjun.CommandError(f'{e!s}')
+                raise tanjun.CommandError(f"{e!s}")
 
-            id = player.id 
+            id = player.id
             platform = player.type.name.title()
 
     else:
@@ -426,46 +521,38 @@ async def characters(
         )
 
     except aiobungie.MembershipTypeError as exc:
-        raise tanjun.CommandError(f'{exc!s}')
+        raise tanjun.CommandError(f"{exc!s}")
 
     if characters := char_resp.characters:
-        pages = iter(
+        pages = (
             (
-                (
-                    hikari.UNDEFINED,
-                    hikari.Embed(
-                        title=str(char.class_type),
-                        colour=boxed.COLOR["invis"]
-                    )
-                    .set_image(char.emblem.url)
-                    .set_thumbnail(char.emblem_icon.url)
-                    .set_author(name=str(char.id), url=char.url)
-                    .add_field(
-                        "Information",
-                        f"Power: {char.light}\n"
-                        f"Class: {char.class_type}\n"
-                        f"Gender: {char.gender}\n"
-                        f"Race: {char.race}\n"
-                        f"Played Time: {char.total_played_time}\n"
-                        f"Last played: {tanjun.conversion.from_datetime(boxed.naive_datetime(char.last_played), style='R')}\n"
-                        f"Title hash: {char.title_hash if char.title_hash else 'N/A'}\n"
-                        f"Member ID: {char.member_id}\nMember Type: {char.member_type}\n",
-                    )
-                    .add_field(
-                        "Stats",
-                        "\n".join(
-                            [
-                                f"{key.name.replace('_', '').title()}: {val} {STAR if val >= 90 and key.name != 'LIGHT_POWER' else ''}"
-                                for key, val in char.stats.items()
-                            ]
-                        ),
-                    ),
-                    # We dont need char_id since its in the object itself.
+                hikari.UNDEFINED,
+                hikari.Embed(
+                    title=f"{membership.name}'s {char.class_type.name.title()}",
+                    colour=boxed.COLOR["invis"],
                 )
-                for char in (c for c in characters.values())
+                .set_thumbnail(char.emblem_icon.url)
+                .set_author(name=str(char.id), url=char.url, icon=char.emblem_icon.url)
+                .add_field(
+                    "Information",
+                    f"{char.race.name.title()} {char.gender.name.title()} {char.class_type.name.title()}\n"
+                    f"Total hours {char.total_played_time}\n"
+                    f"Last played: {tanjun.conversion.from_datetime(boxed.naive_datetime(char.last_played), style='R')}\n",
+                )
+                .add_field(
+                    "Stats",
+                    "\n".join(
+                        [
+                            f"{key.name.replace('_', '').title()}: {val} {STAR if val >= 90 and key.name != 'LIGHT_POWER' else ''}"
+                            for key, val in char.stats.items()
+                        ]
+                    ),
+                ),
             )
+            for char in (c for c in characters.values())
         )
         await boxed.generate_component(ctx, pages, component_client)
+
 
 @destiny_group.with_command
 @tanjun.with_str_slash_option(
@@ -528,50 +615,121 @@ async def lfg_command(
     )
     await boxed.generate_component(ctx, pages, component_client)
 
-# last_group = destiny_group.with_command(
-#     tanjun.slash_command_group("last", "Commands that returns the last thing occurred.")
-# )
-# 
+
+@tanjun.with_concurrency_limit("destiny")
+@destiny_group.with_command
+@tanjun.with_member_slash_option(
+    "member", "An optional member or get their collectibles.", default=None
+)
+@tanjun.with_str_slash_option(
+    "username", "An optional Bungie membership username to fetch.", default=None
+)
+@tanjun.as_slash_command(
+    "last-items", "Take a look at your last acquired items in Destiny 2."
+)
+async def acquired_items_command(
+    ctx: tanjun.abc.SlashContext,
+    member: hikari.InteractionMember | hikari.User | None,
+    username: str | None,
+    client: aiobungie.Client = tanjun.inject(type=aiobungie.Client),
+    pool_: traits.PoolRunner = tanjun.inject(type=traits.PoolRunner),
+    component_client: yuyo.ComponentClient = tanjun.inject(type=yuyo.ComponentClient),
+) -> None:
+
+    member = member or ctx.author
+    # This is kinda repeatable :\.
+    if username is not None and "#" in username:
+        try:
+            membership = await _get_destiny_player(client, username)
+            id_ = membership.id
+            platform = membership.type.name.title()
+        except LookupError as err:
+            raise tanjun.CommandError(f"{err}")
+    else:
+        try:
+            membership = await pool_.fetch_destiny_member(member.id)
+            id_ = membership.membership_id
+            platform = membership.membership_type
+        except pool.ExistsError as e:
+            raise tanjun.CommandError(e.message)
+
+    profile = await client.fetch_profile(
+        id_, _PLATFORMS[platform], [aiobungie.ComponentType.COLLECTIBLES]
+    )
+
+    if collectibles := profile.profile_collectibles:
+        if not (recent_items := collectibles.recent_collectibles):
+            raise tanjun.CommandError(f"No items found for {membership.name}")
+
+        items = await boxed.spawn(
+            *[
+                client.rest.fetch_entity("DestinyCollectibleDefinition", item)
+                for item in recent_items
+            ]
+        )
+        pages = (
+            (
+                hikari.UNDEFINED,
+                hikari.Embed(
+                    title=entity["displayProperties"]["name"],
+                    description=(
+                        entity["displayProperties"]["description"]
+                        if entity["displayProperties"]["description"]
+                        else hikari.UNDEFINED
+                    ),
+                )
+                .set_thumbnail(aiobungie.Image(entity["displayProperties"]["icon"]).url)
+                .add_field("Source", entity.get("sourceString", "Unknown"))
+                .add_field("Hash", entity["itemHash"]),
+            )
+            for entity in reversed(items)
+        )
+        await boxed.generate_component(ctx, pages, component_client)
+
+
+# * Last commands.
+
 # @last_group.with_command
 # @tanjun.as_slash_command("raid", "Returns information about the last raid you played.")
 # async def last_raid(
 #     ctx: tanjun.abc.SlashContext,
 #     client: aiobungie.Client = tanjun.inject(type=aiobungie.Client),
-#     pool: pool.PgxPool = tanjun.inject(type=pool.PoolT)
+#     pool: traits.PoolRunner = tanjun.inject(type=traits.PoolRunner),
+#     cache: cache.Memory[int, hikari.Embed] = tanjun.inject(type=cache.Memory)
 # ) -> None:
 #     ...
-# 
 
-search_group = destiny_group.with_command(
-    tanjun.slash_command_group("search", "Commands search for stuff in the API.")
-)
+# * Search commands.
+
 
 @search_group.with_command
 @tanjun.with_str_slash_option("name", "The player names to search for.")
-@tanjun.as_slash_command("player", "Search for Destiny 2 players.")
+@tanjun.as_slash_command("guardians", "Search for Destiny 2 guardians.")
 async def search_players(
     ctx: tanjun.abc.SlashContext,
     name: str,
     client: aiobungie.Client = tanjun.inject(type=aiobungie.Client),
-    component_client: yuyo.ComponentClient = tanjun.inject(type=yuyo.ComponentClient)
+    component_client: yuyo.ComponentClient = tanjun.inject(type=yuyo.ComponentClient),
 ) -> None:
-    ...
-    results = await client.search_users(name)
+
+    results = (await client.search_users(name)).collect()
 
     if not results:
         raise tanjun.CommandError("No players found.")
-    
+
     iters = (
         (
             hikari.UNDEFINED,
-            hikari.Embed(title=player.memberships[0].unique_name, url=player.memberships[0].link)
+            hikari.Embed(
+                title=player.memberships[0].unique_name, url=player.memberships[0].link
+            )
             .add_field(
                 "Information",
                 f"Membershiptype: {player.memberships[0].type}\n"
                 f"ID: {player.memberships[0].id}\n"
-                f"Crossave-override: {str(player.memberships[0].crossave_override).title()}"
+                f"Crossave-override: {str(player.memberships[0].crossave_override).title()}",
             )
-            .set_thumbnail(str(player.memberships[0].icon))
+            .set_thumbnail(player.memberships[0].icon.url),
         )
         for player in results
     )
@@ -579,18 +737,24 @@ async def search_players(
 
 @search_group.with_command
 @tanjun.with_str_slash_option("name", "The entity name to search for.")
-@tanjun.with_str_slash_option("definition", "The definition of the entity. Default to inventory item", default=None)
+@tanjun.with_str_slash_option(
+    "definition",
+    "The definition of the entity. Default to inventory item",
+    default=None,
+)
 @tanjun.as_slash_command("entity", "Search for Destiny 2 entity given its definition.")
 async def search_entities(
     ctx: tanjun.abc.SlashContext,
     name: str,
     definition: str | None,
     client: aiobungie.Client = tanjun.inject(type=aiobungie.Client),
-    component_client: yuyo.ComponentClient = tanjun.inject(type=yuyo.ComponentClient)
+    component_client: yuyo.ComponentClient = tanjun.inject(type=yuyo.ComponentClient),
 ) -> None:
 
     try:
-        results = await client.search_entities(name, definition or "DestinyInventoryItemDefinition")
+        results = await client.search_entities(
+            name, definition or "DestinyInventoryItemDefinition"
+        )
     except aiobungie.NotFound as exc:
         raise tanjun.CommandError(exc.message)
 
@@ -601,12 +765,10 @@ async def search_entities(
             hikari.UNDEFINED,
             hikari.Embed(title=entity.name, description=entity.description)
             .add_field(
-                "Information",
-                f"Hash: {entity.hash}\n"
-                f"Type: {entity.entity_type}\n"
+                "Information", f"Hash: {entity.hash}\n" f"Type: {entity.entity_type}\n"
             )
-            .set_thumbnail(str(entity.icon) if entity.has_icon else None)
-            .set_footer(text=", ".join(entity.suggested_words))
+            .set_thumbnail(entity.icon.url if entity.has_icon else None)
+            .set_footer(text=", ".join(entity.suggested_words)),
         )
         for entity in results
     )
@@ -615,28 +777,32 @@ async def search_entities(
 
 @search_group.with_command
 @tanjun.with_str_slash_option(
-    "query", "The clan name or id.", converters=(str, int), default=4389205
+    "query", "The clan name or ID.", converters=str, default=4389205
 )
 @tanjun.as_slash_command("clan", "Searches for Destiny clans by their name.")
 async def get_clan(
     ctx: tanjun.abc.SlashContext,
-    query: str | int,
+    query: str,
     client: aiobungie.Client = tanjun.inject(type=aiobungie.Client),
 ) -> None:
 
     await ctx.defer()
+
     try:
         # Allow the command to search for both methods.
-        if isinstance(query, int):
-            clan = await client.fetch_clan_from_id(query)
+        if query.isdigit():
+            clan = await client.fetch_clan_from_id(int(query))
         else:
             clan = await client.fetch_clan(query)
+
     except aiobungie.NotFound as e:
         raise tanjun.CommandError(f"{e.message}")
 
-    embed = hikari.Embed(description=f"{clan.about}", colour=boxed.COLOR["invis"], url=clan.url)
+    embed = hikari.Embed(
+        description=f"{clan.about}", colour=boxed.COLOR["invis"], url=clan.url
+    )
     (
-        embed.set_author(name=clan.name, url=clan.url, icon=str(clan.avatar))
+        embed.set_author(name=clan.name, url=clan.url, icon=clan.avatar.url)
         .set_thumbnail(str(clan.avatar))
         .set_image(str(clan.banner))
         .add_field(
@@ -659,20 +825,21 @@ async def get_clan(
             f"ID: `{clan.owner.id}`\n"
             f"Joined at: {tanjun.conversion.from_datetime(boxed.naive_datetime(clan.owner.joined_at), style='R')}\n"
             f"Last seen: {tanjun.conversion.from_datetime(boxed.naive_datetime(clan.owner.last_online), style='R')}\n"
-            f"Membership: `{clan.owner.type.name.title()}`"
+            f"Membership: `{clan.owner.type.name.title()}`",
         )
     await ctx.respond(embed=embed)
 
 
 @search_group.with_command
 @tanjun.with_int_slash_option("item_hash", "The item hash to get.")
-@tanjun.as_slash_command("item", "Fetch a Bungie inventory item by its hash.")
+@tanjun.as_slash_command("get-item", "Fetch a Bungie inventory item by its hash.")
 async def item_definition_command(
     ctx: tanjun.abc.SlashContext,
     item_hash: int,
     client: aiobungie.Client = tanjun.inject(type=aiobungie.Client),
     cache_: cache.Memory[int, hikari.Embed] = tanjun.inject(type=cache.Memory),
 ) -> None:
+
     if cached_item := cache_.get(item_hash):
         await ctx.respond(embed=cached_item)
         return
@@ -680,150 +847,39 @@ async def item_definition_command(
     try:
         entity = await client.fetch_inventory_item(item_hash)
     except aiobungie.HTTPError as exc:
-        raise tanjun.CommandError(f'{exc!s}')
+        raise tanjun.CommandError(exc.message)
 
     embed = _build_inventory_item_embed(entity)
     cache_.put(item_hash, embed)
     await ctx.respond(embed=embed)
 
+
 @tanjun.with_concurrency_limit("destiny")
 @search_group.with_command
 @tanjun.with_int_slash_option("instance", "The instance id of the activity.")
-@tanjun.as_slash_command("post_activity", "Get post activity information given the activity's instance id.")
+@tanjun.as_slash_command(
+    "post-activity", "Get post activity information given the activity's instance id."
+)
 async def post_activity_command(
     ctx: tanjun.abc.SlashContext,
     instance: int,
     client: aiobungie.Client = tanjun.inject(type=aiobungie.Client),
-    cache: cache.Memory[int, hikari.Embed] = tanjun.inject(type=cache.Memory)
+    cache: cache.Memory[int, hikari.Embed] = tanjun.inject(type=cache.Memory),
 ) -> None:
 
     if cached_instance := cache.get(instance):
         await ctx.respond(embed=cached_instance)
         return
 
-    try:
-        post = await client.fetch_post_activity(instance)
-    except aiobungie.HTTPError as e:
-        raise tanjun.CommandError(e.message)
-
-    features: list[str] = []
-
-    if post.is_solo_flawless:
-        features.append(f"Solo Flawless: {STAR}")
-
-    elif post.is_flawless:
-        features.append(f"Flawless: {STAR}")
-
-    elif post.is_solo:
-        features.append(f"Solo: {STAR}")
-
-    rr = f'https://raid.report/pgcr/{instance}'
-    embed = (
-        hikari.Embed(title=post.mode, url=rr)
-        .add_field(
-            "Information",
-            f"Reference id: {post.reference_id}\n"
-            f"Membership: {post.membership_type}\n"
-            f"Starting phase: {post.starting_phase}\n"
-            f"Date: {tanjun.conversion.from_datetime(boxed.naive_datetime(post.occurred_at), style='R')}\n"
-        )
-    )
-
-    try:
-        activity = await client.rest.fetch_entity("DestinyActivityDefinition", post.reference_id)
-    except aiobungie.HTTPError:
-        pass
-    else:
-        if raw_image := activity['pgcrImage']:
-            embed.set_thumbnail(aiobungie.url.BASE + str(raw_image))
-
-        if raw_props := activity['displayProperties']:
-            embed.description = raw_props['description']
-            embed.title = raw_props['name']
-
-    for player in post.players:
-        embed.add_field(
-            f"{player.destiny_user.last_seen_name}#{player.destiny_user.code}",
-            f"`Class`: [{player.character_class}]({player.destiny_user.link})\n"
-            f"Light level: {player.light_level}\n"
-            f"`Time`: {player.values.played_time}\n"
-            f"`Kills`: {player.values.kills}\n"
-            f"`Deaths`: {player.values.deaths}\n",
-            inline=True
-        )
-
-    if features:
-        embed.add_field(
-            "Features",
-            '\n'.join(features)
-        )
+    embed = await _fetch_instance(client, instance)
 
     cache.put(instance, embed)
     await ctx.respond(embed=embed)
 
-@tanjun.with_concurrency_limit("destiny")
-@destiny_group.with_command
-@tanjun.with_member_slash_option(
-    "member",
-    "An optional member or get their collectibles.",
-    default=None
+
+destiny = (
+    tanjun.Component(name="Destiny", strict=True)
+    .set_hooks(tanjun.AnyHooks().add_on_error(_handle_errors))
+    .load_from_scope()
+    .make_loader()
 )
-@tanjun.with_str_slash_option(
-    "username",
-    "An optional Bungie membership username to fetch.",
-    default=None
-)
-@tanjun.as_slash_command("collectibles", "Take a look at your last acquired items in Destiny 2.")
-async def acquired_items_command(
-    ctx: tanjun.abc.SlashContext,
-    member: hikari.InteractionMember | hikari.User | None,
-    username: str | None,
-    client: aiobungie.Client = tanjun.inject(type=aiobungie.Client),
-    pool_: traits.PoolRunner = tanjun.inject(type=traits.PoolRunner),
-    component_client: yuyo.ComponentClient = tanjun.inject(type=yuyo.ComponentClient)
-) -> None:
-
-        member = member or ctx.author
-        # This is kinda repeatable :\.
-        if username is not None and '#' in username:
-            try:
-                membership = await _get_destiny_player(client, username)
-                id_ = membership.id
-                platform = membership.type.name.title()
-            except LookupError as err:
-                raise tanjun.CommandError(f'{err}')
-        else:
-            try:
-                membership = await pool_.fetch_destiny_member(member.id)
-                id_ = membership.membership_id
-                platform = membership.membership_type
-            except pool.ExistsError as e:
-                raise tanjun.CommandError(e.message)
-
-        profile = await client.fetch_profile(id_, _PLATFORMS[platform], [aiobungie.ComponentType.COLLECTIBLES])
-
-        if collectibles := profile.profile_collectibles:
-            if not (recent_items := collectibles.recent_collectibles):
-                raise tanjun.CommandError(f"No items found for {membership.name}")
-
-            items = await boxed.spawn(*[client.rest.fetch_entity("DestinyCollectibleDefinition", item) for item in recent_items])
-            pages = (
-                (
-                    hikari.UNDEFINED,
-                    hikari.Embed(
-                        title=entity['displayProperties']['name'],
-                        description=(
-                            entity['displayProperties']['description']
-                            if entity['displayProperties']['description']
-                            else hikari.UNDEFINED
-                        )
-                    )
-                    .set_thumbnail(aiobungie.url.BASE + entity['displayProperties']['icon'])
-                    .add_field("Source", entity.get('sourceString', "Unknown"))
-                    .add_field("Hash", entity['itemHash'])
-                )
-                for entity in reversed(items)
-            )
-            await boxed.generate_component(ctx, pages, component_client)
-
-destiny = tanjun.Component(name="Destiny/Bungie", strict=True).load_from_scope().make_loader()
