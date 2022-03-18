@@ -50,7 +50,7 @@ if typing.TYPE_CHECKING:
 
 
 _LOG: typing.Final[logging.Logger] = logging.getLogger("fated.cache")
-logging.basicConfig(level=logging.DEBUG)
+_LOG.setLevel(logging.DEBUG)
 
 MKT = typing.TypeVar("MKT")
 MVT = typing.TypeVar("MVT")
@@ -128,7 +128,7 @@ class Hash(traits.HashRunner):
         await self.__connection.hdel("mutes", str(guild_id))
 
     async def set_bungie_tokens(
-        self, user: hikari.Snowflake, respons: aiobungie.OAuth2Response
+        self, user: hikari.Snowflake, respons: aiobungie.builders.OAuth2Response
     ) -> None:
         await self.__dump_tokens(
             user, respons.access_token, respons.refresh_token, respons.expires_in
@@ -202,7 +202,7 @@ class Hash(traits.HashRunner):
 
     async def __refresh_token(
         self, owner: hikari.Snowflake
-    ) -> aiobungie.OAuth2Response:
+    ) -> aiobungie.builders.OAuth2Response:
         assert (
             self._aiobungie_client is not None
         ), "Aiobungie client should never be `None` to refresh the tokens."
