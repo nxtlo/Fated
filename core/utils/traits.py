@@ -81,7 +81,7 @@ class HashRunner(fast.FastProtocolChecking, typing.Protocol):
         """Removes the cached mute role id for the given snowflake guild."""
 
     async def set_bungie_tokens(
-        self, user: snowflakes.Snowflake, respons: aiobungie.OAuth2Response
+        self, user: snowflakes.Snowflake, respons: aiobungie.builders.OAuth2Response
     ) -> None:
         """Cache a hikari snowflake to the returned OAuth2 response object tokens."""
 

@@ -45,13 +45,21 @@ from core.utils import net as net_
     choices=boxed.iter(boxed.GENRES),
     default=boxed.randomize_genres(),
 )
+@boxed.add_help(
+    "Get a random information about the anime!",
+    options={
+        "name": "An anime name to lookup",
+        "random": "Whether to get you a random anime or not.",
+        "genre": "The genre of the anime to return information about.",
+    }
+)
 @tanjun.as_slash_command("anime", "Returns basic information about an anime.")
 async def get_anime(
     ctx: tanjun.abc.SlashContext,
     name: str,
     random: bool | None,
     genre: str,
-    jian: net_.Wrapper = tanjun.inject(type=net_.Wrapper),
+    jian: net_.AnyWrapper = tanjun.inject(type=net_.AnyWrapper),
     component_client: yuyo.ComponentClient = tanjun.inject(type=yuyo.ComponentClient),
 ) -> None:
     await ctx.defer()
@@ -70,13 +78,23 @@ async def get_anime(
         ctx, ((hikari.UNDEFINED, embed) for embed in anime_embed), component_client
     )
 
+@tanjun.as_slash_command("help", "Get help about the bot.")
+async def help_(ctx: tanjun.abc.SlashContext) -> None:
+    emb = hikari.Embed(title="Bot help menu.")
+    for command in ctx.client.iter_slash_commands():
+        summary: str = command.metadata.get("summary", "No Summary")
+        options: str = command.metadata.get("options", "No Options")
+
+        emb.add_field(command.name, '\n'.join([f"{summary}\n\n{options}"]))
+
+    await ctx.respond(embed=emb)
 
 @tanjun.with_str_slash_option("name", "The manga name")
 @tanjun.as_slash_command("manga", "Returns basic information about a manga.")
 async def get_manga(
     ctx: tanjun.abc.SlashContext,
     name: str,
-    jian: net_.Wrapper = tanjun.inject(type=net_.Wrapper),
+    jian: net_.AnyWrapper = tanjun.inject(type=net_.AnyWrapper),
     component_client: yuyo.ComponentClient = tanjun.inject(type=yuyo.ComponentClient),
 ) -> None:
     await ctx.defer()
@@ -93,7 +111,7 @@ async def get_manga(
 async def define(
     ctx: tanjun.abc.SlashContext,
     name: str,
-    urban: net_.Wrapper = tanjun.inject(type=net_.Wrapper),
+    urban: net_.AnyWrapper = tanjun.inject(type=net_.AnyWrapper),
     component_client: yuyo.ComponentClient = tanjun.inject(type=yuyo.ComponentClient),
 ) -> None:
     definitions = await urban.fetch_definitions(name)

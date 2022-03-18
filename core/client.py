@@ -77,7 +77,7 @@ def _build_client(
     pg_pool = pool_.PgxPool()
     # Networking.
     client_session = net.HTTPNet()
-    wrapper = net.Wrapper(client_session)
+    AnyWrapper = net.AnyWrapper()
     # Cache
     redis_hash = cache.Hash()
     mem_cache = cache.Memory[typing.Any, typing.Any]()
@@ -93,9 +93,9 @@ def _build_client(
         # pg pool
         .set_type_dependency(traits.PoolRunner, pg_pool)
         .add_client_callback(tanjun.ClientCallbackNames.STARTING, pg_pool.create_pool)  # type: ignore asyncpg :)
-        # own aiohttp client session and API wrapper.
+        # own aiohttp client session and API AnyWrapper.
         .set_type_dependency(net.HTTPNet, client_session)
-        .set_type_dependency(net.Wrapper, wrapper)
+        .set_type_dependency(net.AnyWrapper, AnyWrapper)
         # Cache. This is kinda overkill but we need the memory cache for api requests
         # And the redis hash for stuff that are not worth storing in a database for the sake of speed.
         # i.e., OAuth2 tokens
@@ -120,6 +120,7 @@ def _build_client(
             config.BUNGIE_CLIENT_ID,
             max_retries=1,
         )
+        aiobungie_client.rest.enable_debugging(True)
         redis_hash.set_aiobungie_client(aiobungie_client)
         client.set_type_dependency(aiobungie.Client, aiobungie_client)
         client.add_client_callback(
@@ -145,7 +146,6 @@ def _enable_logging(
     hikari: bool = False,
     tanjun: bool = False,
     us: bool = False,
-    aiobungie_: bool = False,
 ) -> None:
     logging.getLogger("hikari.gateway").setLevel(logging.CRITICAL)
 
@@ -161,9 +161,6 @@ def _enable_logging(
         ]:
             logger.setLevel(logging.DEBUG)
 
-    if aiobungie_:
-        logging.getLogger("aiobungie.rest").setLevel(aiobungie.REST_DEBUG)
-
     if tanjun:
         for logger in [
             logging.getLogger("hikari.tanjun"),
@@ -177,7 +174,7 @@ def _enable_logging(
 @click.group(name="main", invoke_without_command=True, options_metavar="[options]")
 @click.pass_context
 def main(ctx: click.Context) -> None:
-    _enable_logging(hikari=False, tanjun=True, us=True, aiobungie_=True)
+    _enable_logging(tanjun=True)
     if ctx.invoked_subcommand is None:
         _build_bot().run(status=hikari.Status.DO_NOT_DISTURB)
 

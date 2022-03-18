@@ -21,13 +21,13 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-"""An aiohttp client and a wrapper to make api requests."""
+"""An aiohttp client and a AnyWrapper to make api requests."""
 
 from __future__ import annotations
 
 __all__: tuple[str, ...] = (
     "HTTPNet",
-    "Wrapper",
+    "AnyWrapper",
 )
 
 import asyncio
@@ -42,9 +42,10 @@ import hikari
 import multidict
 import tanjun
 import yarl
+
 from aiobungie.internal import time
 from hikari import _about as about
-from hikari.internal import data_binding, net
+from hikari.internal import data_binding, net, ux
 from hikari.internal.time import (
     fast_iso8601_datetime_string_to_datetime as fast_datetime,
 )
@@ -62,7 +63,7 @@ if typing.TYPE_CHECKING:
 _LOG: typing.Final[logging.Logger] = logging.getLogger("core.net")
 _LOG.setLevel(logging.DEBUG)
 
-
+@typing.final
 class HTTPNet(traits.NetRunner):
     """A client to make HTTP requests with."""
 
@@ -165,9 +166,13 @@ class HTTPNet(traits.NetRunner):
 
                             data = await response.json(encoding="utf-8")
                             _LOG.debug(
-                                f"{method} Request Success from {response.real_url!s} "
-                                f"{self.__rest._stringify_http_message(response.headers, data)} "  # type: ignore
+                                "%s Success from %s\n%s",
+                                method,
+                                response.real_url.human_repr(),
+                                self.__rest._stringify_http_message(response.headers, data)  # type: ignore
+                                if _LOG.isEnabledFor(ux.TRACE) else ''
                             )
+
                             if data is None:
                                 return
 
@@ -216,17 +221,19 @@ class HTTPNet(traits.NetRunner):
     async def acquire_errors(response: aiohttp.ClientResponse, /) -> typing.NoReturn:
         raise await _acquire_errors(response)
 
+# We spawn a new client. AKA pooling.
+def _spawn_client() -> HTTPNet:
+    return HTTPNet()
 
-class Wrapper:
-    """An API wrapper around different apis."""
+@typing.final
+class AnyWrapper:
+    """An API AnyWrapper around different APIs."""
 
-    __slots__ = ("_net",)
-
-    def __init__(self, client: HTTPNet) -> None:
-        self._net = client
+    def __init__(self) -> None:
+        super().__init__()
 
     def __repr__(self) -> str:
-        return f"Wrapper(net: {self._net!r})"
+        return f"AnyWrapper(net: {_spawn_client()!r})"
 
     @staticmethod
     def _make_anime_embed(
@@ -373,7 +380,7 @@ class Wrapper:
         genre: str,
     ) -> hikari.Embed | collections.Generator[hikari.Embed, None, None] | None:
 
-        async with self._net as cli:
+        async with _spawn_client() as cli:
 
             if random and name is None:
                 # This is True by default in case the name is None.
@@ -411,7 +418,7 @@ class Wrapper:
         self, name: str, /
     ) -> collections.Generator[hikari.Embed, None, None] | None:
 
-        async with self._net as cli:
+        async with _spawn_client() as cli:
             if not (
                 raw_mangas := await cli.request(
                     "GET",
@@ -454,8 +461,8 @@ class Wrapper:
     async def fetch_definitions(
         self, name: str
     ) -> collections.Generator[hikari.Embed, None, None]:
-        async with self._net as cli:
 
+        async with _spawn_client() as cli:
             resp = (
                 await cli.request(
                     "GET",
@@ -493,7 +500,7 @@ class Wrapper:
         return embeds
 
     async def fetch_git_user(self, name: str, /) -> models.GithubUser | None:
-        async with self._net as cli:
+        async with _spawn_client() as cli:
             if raw_user := await cli.request(
                 "GET", yarl.URL(boxed.API["git"]["user"]) / name
             ):
@@ -504,7 +511,7 @@ class Wrapper:
     async def fetch_git_repo(
         self, name: str
     ) -> collections.Sequence[models.GithubRepo] | None:
-        async with self._net as cli:
+        async with _spawn_client() as cli:
             if raw_repo := await cli.request(
                 "GET", boxed.API["git"]["repo"].format(name)
             ):
@@ -515,7 +522,7 @@ class Wrapper:
     async def git_release(
         self, user: str, repo_name: str, limit: int | None = None
     ) -> collections.Generator[hikari.Embed, None, None]:
-        async with self._net as cli:
+        async with _spawn_client() as cli:
             repos = await cli.request(
                 "GET", f"https://api.github.com/repos/{user}/{repo_name}/releases"
             )

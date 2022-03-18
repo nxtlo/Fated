@@ -61,7 +61,7 @@ class ExistsError(RuntimeError):
 
 
 class PartialPool(traits.PartialPool):
-    """Partial pool implementation. This pool is just a wrapper around asyncpg.Pool."""
+    """Partial pool implementation. This pool is just a AnyWrapper around asyncpg.Pool."""
 
     __slots__: tuple[str, ...] = ("_pool",)
 

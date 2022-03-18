@@ -43,7 +43,7 @@ git_group = tanjun.slash_command_group("git", "Commands related to github.")
 async def git_user(
     ctx: tanjun.abc.SlashContext,
     name: str,
-    git: net.Wrapper = tanjun.inject(type=net.Wrapper),
+    git: net.AnyWrapper = tanjun.inject(type=net.AnyWrapper),
     cache: cache.Memory[str, hikari.Embed] = tanjun.inject(type=cache.Memory),
 ) -> None:
     if cached_user := cache.get(name):
@@ -84,7 +84,7 @@ async def git_user(
 async def git_repo(
     ctx: tanjun.abc.SlashContext,
     name: str,
-    git: net.Wrapper = tanjun.inject(type=net.Wrapper),
+    git: net.AnyWrapper = tanjun.inject(type=net.AnyWrapper),
     component_client: yuyo.ComponentClient = tanjun.inject(type=yuyo.ComponentClient),
 ) -> None:
 
@@ -140,7 +140,7 @@ async def get_release(
     user: str,
     repo: str,
     limit: int | None,
-    git: net.Wrapper = tanjun.inject(type=net.Wrapper),
+    git: net.AnyWrapper = tanjun.inject(type=net.AnyWrapper),
     component_client: yuyo.ComponentClient = tanjun.inject(type=yuyo.ComponentClient),
 ) -> None:
 
