@@ -77,7 +77,7 @@ def _build_client(
     pg_pool = pool_.PgxPool()
     # Networking.
     client_session = net.HTTPNet()
-    AnyWrapper = net.AnyWrapper()
+    wrapper = net.AnyWrapper()
     # Cache
     redis_hash = cache.Hash()
     mem_cache = cache.Memory[typing.Any, typing.Any]()
@@ -95,7 +95,7 @@ def _build_client(
         .add_client_callback(tanjun.ClientCallbackNames.STARTING, pg_pool.create_pool)  # type: ignore asyncpg :)
         # own aiohttp client session and API AnyWrapper.
         .set_type_dependency(net.HTTPNet, client_session)
-        .set_type_dependency(net.AnyWrapper, AnyWrapper)
+        .set_type_dependency(net.AnyWrapper, wrapper)
         # Cache. This is kinda overkill but we need the memory cache for api requests
         # And the redis hash for stuff that are not worth storing in a database for the sake of speed.
         # i.e., OAuth2 tokens
