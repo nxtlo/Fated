@@ -41,6 +41,7 @@ from core.utils import boxed, cache, traits
 
 STDOUT: typing.Final[hikari.Snowflake] = hikari.Snowflake(789614938247266305)
 
+
 @tanjun.with_owner_check
 @tanjun.as_message_command("reload")
 async def reload(ctx: tanjun.abc.MessageContext) -> None:

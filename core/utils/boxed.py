@@ -36,7 +36,7 @@ __all__: list[str] = [
     "error",
     "parse_code",
     "with_block",
-    "add_help"
+    "add_help",
 ]
 
 import datetime
@@ -96,19 +96,24 @@ GENRES: dict[str, int] = {
 def naive_datetime(datetime_: datetime.datetime) -> datetime.datetime:
     return datetime_.astimezone(datetime.timezone.utc)
 
+
 _SlashT = tanjun.commands.SlashCommand[typing.Any]
 
-def add_help(summary: str, *, options: dict[str, str] | None = None) -> collections.Callable[[_SlashT], _SlashT]:
+
+def add_help(
+    summary: str, *, options: dict[str, str] | None = None
+) -> collections.Callable[[_SlashT], _SlashT]:
     def AnyWrapper(command: _SlashT) -> _SlashT:
-        command.set_metadata("summary", f'**Summary**: {summary}')
+        command.set_metadata("summary", f"**Summary**: {summary}")
 
         if options is not None:
-            ok_options = [f'**Options**:\n{oname}: {osumm}' for oname, osumm in options.items()]
-            command.set_metadata(
-                "options", '\n'.join(ok_options)
-            )
+            ok_options = [
+                f"**Options**:\n{oname}: {osumm}" for oname, osumm in options.items()
+            ]
+            command.set_metadata("options", "\n".join(ok_options))
 
         return command
+
     return AnyWrapper
 
 

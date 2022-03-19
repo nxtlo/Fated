@@ -54,8 +54,7 @@ prefix_group = (
 
 
 async def on_ready(
-    _: hikari.ShardReadyEvent,
-    client: alluka.Injected[tanjun.Client]
+    _: hikari.ShardReadyEvent, client: alluka.Injected[tanjun.Client]
 ) -> None:
     client.metadata["uptime"] = datetime.datetime.now()
     _LOGGER.info("Bot ready.")

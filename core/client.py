@@ -147,7 +147,7 @@ def _enable_logging(
     hikari: bool = False,
     tanjun: bool = False,
     us: bool = False,
-    aiobungie: bool = False
+    aiobungie: bool = False,
 ) -> None:
 
     if hikari:

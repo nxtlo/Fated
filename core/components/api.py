@@ -52,7 +52,7 @@ from core.utils import net as net_
         "name": "An anime name to lookup",
         "random": "Whether to get you a random anime or not.",
         "genre": "The genre of the anime to return information about.",
-    }
+    },
 )
 @tanjun.as_slash_command("anime", "Returns basic information about an anime.")
 async def get_anime(
@@ -79,6 +79,7 @@ async def get_anime(
         ctx, ((hikari.UNDEFINED, embed) for embed in anime_embed), component_client
     )
 
+
 @tanjun.as_slash_command("help", "Get help about the bot.")
 async def help_(ctx: tanjun.abc.SlashContext) -> None:
     emb = hikari.Embed(title="Bot help menu.")
@@ -86,9 +87,10 @@ async def help_(ctx: tanjun.abc.SlashContext) -> None:
         summary: str = command.metadata.get("summary", "No Summary")
         options: str = command.metadata.get("options", "No Options")
 
-        emb.add_field(command.name, '\n'.join([f"{summary}\n\n{options}"]))
+        emb.add_field(command.name, "\n".join([f"{summary}\n\n{options}"]))
 
     await ctx.respond(embed=emb)
+
 
 @tanjun.with_str_slash_option("name", "The manga name")
 @tanjun.as_slash_command("manga", "Returns basic information about a manga.")

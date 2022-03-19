@@ -62,6 +62,7 @@ if typing.TYPE_CHECKING:
 
 _LOG: typing.Final[logging.Logger] = logging.getLogger("core.net")
 
+
 @typing.final
 class HTTPNet(traits.NetRunner):
     """A client to make HTTP requests with."""
@@ -169,7 +170,8 @@ class HTTPNet(traits.NetRunner):
                                 method,
                                 response.real_url.human_repr(),
                                 self.__rest._stringify_http_message(response.headers, data)  # type: ignore
-                                if _LOG.isEnabledFor(ux.TRACE) else ''
+                                if _LOG.isEnabledFor(ux.TRACE)
+                                else "",
                             )
 
                             if data is None:
@@ -220,9 +222,11 @@ class HTTPNet(traits.NetRunner):
     async def acquire_errors(response: aiohttp.ClientResponse, /) -> typing.NoReturn:
         raise await _acquire_errors(response)
 
+
 # We spawn a new client. AKA pooling.
 def _spawn_client() -> HTTPNet:
     return HTTPNet()
+
 
 @typing.final
 class AnyWrapper:

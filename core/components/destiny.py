@@ -110,7 +110,9 @@ search_group = destiny_group.with_command(
 )
 
 raid_group = destiny_group.with_command(
-    tanjun.slash_command_group("raid", "Commands that shows information about your raids.")
+    tanjun.slash_command_group(
+        "raid", "Commands that shows information about your raids."
+    )
 )
 
 D2_SETS: typing.Final[str] = "https://data.destinysets.com/i/InventoryItem:{hash}"
@@ -147,10 +149,42 @@ async def _get_destiny_player(
     if not player:
         raise LookupError(
             f"Player name `{name}` not found. "
-            "Make sure you include the full name looks like this `Fate#123`"
+            "Make sure you include the full name looks like this `Fate#1234`"
         ) from None
 
     return player[0]
+
+
+async def _pool_or_rest(
+    client: aiobungie.Client,
+    pool_: traits.PoolRunner,
+    author_id: hikari.Snowflake,
+    name: str | None = None,
+) -> tuple[int, aiobungie.MembershipType, str]:
+
+    if name is not None:
+        try:
+            membership = await _get_destiny_player(client, name)
+            id = membership.id
+            platform = _PLATFORMS[membership.type.name.title()]
+            name = membership.unique_name
+        except LookupError as e:
+            raise tanjun.CommandError(f"{e!s}")
+
+    else:
+        try:
+            membership = await pool_.fetch_destiny_member(author_id)
+            id = membership.membership_id
+            platform = _PLATFORMS[membership.membership_type]
+            name = membership.name + f"{membership.code}"
+
+        except pool.ExistsError:
+            if name is None:
+                raise tanjun.CommandError(
+                    "You must either provide a Bungie username or type `/destiny sync`"
+                )
+
+    return id, platform, name
 
 
 async def _fetch_instance(client: aiobungie.Client, instance_id: int) -> hikari.Embed:
@@ -477,49 +511,29 @@ async def friend_list_command(
 # either with their name or id.
 @tanjun.with_concurrency_limit("destiny")
 @destiny_group.with_command
-@tanjun.with_member_slash_option(
-    "member", "An optional discord member to get their characters.", default=None
+@tanjun.with_user_slash_option(
+    "user", "An optional Discord user to get their characters.", default=None
 )
 @tanjun.with_str_slash_option(
-    "query", "An optional player id or full name to search for.", default=None
+    "username", "An optional player full name to search for.", default=None
 )
 @tanjun.as_slash_command("guardians", "Information about a member's Destiny guardians.")
 async def guardians(
     ctx: tanjun.abc.SlashContext,
-    member: hikari.InteractionMember | None,
-    query: str | int | None,
+    user: hikari.User | hikari.InteractionMember | None,
+    username: str | None,
     client: alluka.Injected[aiobungie.Client],
     pool_: alluka.Injected[traits.PoolRunner],
     component_client: alluka.Injected[yuyo.ComponentClient],
 ) -> None:
 
-    member = member or ctx.member
-    assert member, "This command should be ran in a Guild."
+    user = user or ctx.author
 
-    if query:
-        if isinstance(query, str) and "#" in query:
-            # We fetch the player by their name and get their id.
-            try:
-                player = await _get_destiny_player(client, query)
-            except LookupError as e:
-                raise tanjun.CommandError(f"{e!s}")
-
-            id = player.id
-            platform = player.type.name.title()
-
-    else:
-        try:
-            membership = await pool_.fetch_destiny_member(member.id)
-        except pool.ExistsError:
-            raise tanjun.CommandError(
-                f"Member `{member.user.username}` is not synced yet. If that was you type `/destiny sync` first."
-            )
-        id = membership.membership_id
-        platform = membership.membership_type
+    id, platform, name = await _pool_or_rest(client, pool_, user.id, username)
 
     try:
         char_resp = await client.fetch_profile(
-            id, _PLATFORMS[platform], [aiobungie.ComponentType.CHARACTERS]
+            id, platform, [aiobungie.ComponentType.CHARACTERS]
         )
 
     except aiobungie.MembershipTypeError as exc:
@@ -530,7 +544,7 @@ async def guardians(
             (
                 hikari.UNDEFINED,
                 hikari.Embed(
-                    title=f"{membership.name}'s {char.class_type.name.title()}",
+                    title=f"{name}'s {char.class_type.name.title()}",
                     colour=boxed.COLOR["invis"],
                 )
                 .set_thumbnail(char.emblem_icon.url)
@@ -688,21 +702,20 @@ async def acquired_items_command(
         )
         await boxed.generate_component(ctx, pages, component_client)
 
-def _low_namespace(value: int) -> str:
-    return 'Trio' if value == 3 else "Duo" if value == 2 else ''
-
 @functools.cache
 def _calc_time(millis: int) -> str:
     secs, _ = divmod(millis, 1000)
     mins, seconds = divmod(secs, 60)
-    return f'{mins:02d}:{seconds:02d}'
+    return f"{mins:02d}:{seconds:02d}"
+
 
 def _this_or_0(obj: int | None) -> int:
     return 0 if obj is None else obj
 
+
 async def _get_metrics(component: aiobungie.crate.Component) -> list[str]:
     # Fastest -> Total clears -> sherpas
-    crypt_hashes: list[int] = [3679202587, 954805812, 2330596844]
+    crypt_hashes: set[int] = {3679202587, 954805812, 2330596844}
     buffer: list[aiobungie.crate.Objective] = []
 
     if metrics := component.metrics:
@@ -730,75 +743,53 @@ async def _get_metrics(component: aiobungie.crate.Component) -> list[str]:
 
     return fields
 
-async def _get_dsc_activities(component: aiobungie.crate.Component):
-    activity_fields: list[str] = []
-
-    if character_component := component.characters:
-        try:
-            activities = await boxed.spawn(
-                *[char.fetch_activities(aiobungie.GameMode.RAID)
-                for char in character_component.values()]
-            )
-        except aiobungie.HTTPError as e:
-            raise tanjun.CommandError(e.message)
-
-
-        for seq_activity in activities:
-            for activity in seq_activity.filter(lambda act: act.hash == aiobungie.Raid.DSC):
-
-                if activity.is_flawless:
-                    activity_fields.append(f"Flawless: {STAR}")
-
-                elif activity.is_flawless and (name := _low_namespace(activity.values.player_count)):
-                    activity_fields.append(f"{name} Flawless: {STAR}")
-
-                if activity.is_solo:
-                    activity_fields.append(f"Solo: {STAR}")
-
-    return activity_fields
-
 # * Raids commands.
 
 # Can we speed things up here?
 @tanjun.with_cooldown("destiny")
 @raid_group.with_command
-@tanjun.with_user_slash_option("user", "An optional member to see their stats.", default=None)
-@tanjun.as_slash_command("dsc", "Returns information about your Deep Stone Crypt journy.")
+@tanjun.with_user_slash_option(
+    "user", "An optional Discord user to see their stats.", default=None
+)
+@tanjun.with_str_slash_option(
+    "username", "An optional Bungie username to search for.", default=None
+)
+@tanjun.as_slash_command(
+    "dsc", "Returns information about your Deep Stone Crypt journy."
+)
 async def dsc(
     ctx: tanjun.abc.SlashContext,
     user: hikari.Member | hikari.User | None,
+    username: str | None,
     client: alluka.Injected[aiobungie.Client],
     pool_: alluka.Injected[traits.PoolRunner],
 ) -> None:
 
-    user = user or ctx.member or ctx.author
-    try:
-        membership = await pool_.fetch_destiny_member(user.id)
-    except pool.ExistsError as e:
-        raise tanjun.CommandError(e.message)
+    user = user or ctx.author
+
+    id, platform, name = await _pool_or_rest(client, pool_, user.id, username)
 
     try:
         profile = await client.fetch_profile(
-            membership.membership_id,
-            _PLATFORMS[membership.membership_type],
-            components=[aiobungie.ComponentType.METRICS, aiobungie.ComponentType.CHARACTERS]
+            id,
+            platform,
+            components=[aiobungie.ComponentType.METRICS],
         )
     except aiobungie.HTTPError as e:
         raise tanjun.CommandError(e.message)
 
-    embed = hikari.Embed(
-        title="Deep Stone Crypt information.").set_thumbnail(_ACTIVITIES['Deep Stone Crypt'][0]
+    embed = hikari.Embed(title=name, description="Deep Stone Crypt information.").set_thumbnail(
+        _ACTIVITIES["Deep Stone Crypt"][0]
     )
 
     if metrics := await _get_metrics(profile):
         embed.add_field("Clear Information", "\n".join(metrics))
 
-    if activity_fields := await _get_dsc_activities(profile):
-        embed.add_field("Challenges", "\n".join(activity_fields))
-
     await ctx.respond(embed=embed)
 
+
 # * Search commands.
+
 
 @search_group.with_command
 @tanjun.with_str_slash_option("name", "The player names to search for.")
@@ -832,6 +823,7 @@ async def search_players(
         for player in results
     )
     await boxed.generate_component(ctx, iters, component_client)
+
 
 @search_group.with_command
 @tanjun.with_str_slash_option("name", "The entity name to search for.")

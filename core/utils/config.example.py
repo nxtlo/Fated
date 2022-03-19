@@ -25,11 +25,11 @@ class Config:
     DB_PORT: int = 5432
 
     CACHE: hikari_config.CacheComponents = (
-            hikari_config.CacheComponents.GUILD_CHANNELS
-            | hikari_config.CacheComponents.GUILDS
-            | hikari_config.CacheComponents.MEMBERS
-            | hikari_config.CacheComponents.ROLES
-        )
+        hikari_config.CacheComponents.GUILD_CHANNELS
+        | hikari_config.CacheComponents.GUILDS
+        | hikari_config.CacheComponents.MEMBERS
+        | hikari_config.CacheComponents.ROLES
+    )
 
     REDIS_HOST: str = "127.0.0.1"
     REDIS_PORT: int = 6379
@@ -64,5 +64,6 @@ class Config:
         )
 
     def verify_bungie_tokens(self) -> bool:
-        return all((self.BUNGIE_CLIENT_ID, self.BUNGIE_TOKEN, self.BUNGIE_CLIENT_SECRET))
-
+        return all(
+            (self.BUNGIE_CLIENT_ID, self.BUNGIE_TOKEN, self.BUNGIE_CLIENT_SECRET)
+        )
