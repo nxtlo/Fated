@@ -44,8 +44,6 @@ if typing.TYPE_CHECKING:
     from hikari import snowflakes
 
 _LOG: typing.Final[logging.Logger] = logging.getLogger("fated.pool")
-_LOG.setLevel(logging.DEBUG)
-
 
 class ExistsError(RuntimeError):
     """A runtime error raised when either the data exists or not found."""

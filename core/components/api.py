@@ -32,6 +32,7 @@ import typing
 import hikari
 import tanjun
 import yuyo
+import alluka
 
 from core.utils import boxed
 from core.utils import net as net_
@@ -59,8 +60,8 @@ async def get_anime(
     name: str,
     random: bool | None,
     genre: str,
-    jian: net_.AnyWrapper = tanjun.inject(type=net_.AnyWrapper),
-    component_client: yuyo.ComponentClient = tanjun.inject(type=yuyo.ComponentClient),
+    jian: alluka.Injected[net_.AnyWrapper],
+    component_client: alluka.Injected[yuyo.ComponentClient],
 ) -> None:
     await ctx.defer()
 
@@ -94,8 +95,8 @@ async def help_(ctx: tanjun.abc.SlashContext) -> None:
 async def get_manga(
     ctx: tanjun.abc.SlashContext,
     name: str,
-    jian: net_.AnyWrapper = tanjun.inject(type=net_.AnyWrapper),
-    component_client: yuyo.ComponentClient = tanjun.inject(type=yuyo.ComponentClient),
+    jian: alluka.Injected[net_.AnyWrapper],
+    component_client: alluka.Injected[yuyo.ComponentClient],
 ) -> None:
     await ctx.defer()
 
@@ -111,8 +112,8 @@ async def get_manga(
 async def define(
     ctx: tanjun.abc.SlashContext,
     name: str,
-    urban: net_.AnyWrapper = tanjun.inject(type=net_.AnyWrapper),
-    component_client: yuyo.ComponentClient = tanjun.inject(type=yuyo.ComponentClient),
+    urban: alluka.Injected[net_.AnyWrapper],
+    component_client: alluka.Injected[yuyo.ComponentClient],
 ) -> None:
     definitions = await urban.fetch_definitions(name)
 
@@ -126,7 +127,7 @@ async def define(
 @tanjun.as_message_command("dog")
 async def doggo(
     ctx: tanjun.abc.MessageContext,
-    net: net_.HTTPNet = tanjun.inject(type=net_.HTTPNet),
+    net: alluka.Injected[net_.HTTPNet],
 ) -> None:
     try:
         async with net as client:
@@ -146,7 +147,7 @@ async def doggo(
 @tanjun.as_message_command("cat")
 async def kittie(
     ctx: tanjun.abc.MessageContext,
-    net: net_.HTTPNet = tanjun.inject(type=net_.HTTPNet),
+    net: alluka.Injected[net_.HTTPNet],
 ) -> None:
     try:
         async with net as client:
@@ -168,7 +169,7 @@ async def kittie(
 async def wink(
     ctx: tanjun.abc.MessageContext,
     member: hikari.Member | None,
-    net: net_.HTTPNet = tanjun.inject(type=net_.HTTPNet),
+    net: alluka.Injected[net_.HTTPNet],
 ) -> None:
     try:
         async with net as client:
@@ -191,7 +192,7 @@ async def wink(
 async def pat(
     ctx: tanjun.abc.MessageContext,
     member: hikari.Member | None,
-    net: net_.HTTPNet = tanjun.inject(type=net_.HTTPNet),
+    net: alluka.Injected[net_.HTTPNet],
 ) -> None:
     try:
         async with net as client:
@@ -214,7 +215,7 @@ async def pat(
 async def jail(
     ctx: tanjun.abc.MessageContext,
     member: hikari.Member | None,
-    net: net_.HTTPNet = tanjun.inject(type=net_.HTTPNet),
+    net: alluka.Injected[net_.HTTPNet],
 ) -> None:
     member = member or ctx.member
     try:
@@ -245,8 +246,8 @@ async def run_net(
     ctx: tanjun.abc.MessageContext,
     url: str,
     getter: str | None,
-    method: typing.Literal["GET", "POST"] = "GET",
-    net: net_.HTTPNet = tanjun.inject(type=net_.HTTPNet),
+    net: alluka.Injected[net_.HTTPNet],
+    method: typing.Literal["GET", "POST"],
 ) -> None:
     async with net as cli:
         try:

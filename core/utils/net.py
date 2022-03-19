@@ -61,7 +61,6 @@ if typing.TYPE_CHECKING:
     DATA_TYPE = dict[str, typing.Any] | multidict.CIMultiDictProxy[str]
 
 _LOG: typing.Final[logging.Logger] = logging.getLogger("core.net")
-_LOG.setLevel(logging.DEBUG)
 
 @typing.final
 class HTTPNet(traits.NetRunner):

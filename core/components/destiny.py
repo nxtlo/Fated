@@ -30,10 +30,12 @@ __all__: tuple[str, ...] = ("destiny",)
 import asyncio
 import typing
 import urllib.parse
+import functools
 
 import aiobungie
 import hikari
 import tanjun
+import alluka
 import yuyo
 
 from core.psql import pool
@@ -107,8 +109,8 @@ search_group = destiny_group.with_command(
     tanjun.slash_command_group("search", "Commands search for stuff in the API.")
 )
 
-last_group = destiny_group.with_command(
-    tanjun.slash_command_group("last", "Commands that returns the last thing occurred.")
+raid_group = destiny_group.with_command(
+    tanjun.slash_command_group("raid", "Commands that shows information about your raids.")
 )
 
 D2_SETS: typing.Final[str] = "https://data.destinysets.com/i/InventoryItem:{hash}"
@@ -262,10 +264,10 @@ def _build_inventory_item_embed(
 )
 async def sync_command(
     ctx: tanjun.abc.SlashContext,
-    redis: traits.HashRunner = tanjun.inject(type=traits.HashRunner),
-    client: aiobungie.Client = tanjun.inject(type=aiobungie.Client),
-    bot: hikari.GatewayBot = tanjun.inject(type=hikari.GatewayBot),
-    pool_: traits.PoolRunner = tanjun.inject(type=traits.PoolRunner),
+    redis: alluka.Injected[traits.HashRunner],
+    client: alluka.Injected[aiobungie.Client],
+    bot: alluka.Injected[hikari.GatewayBot],
+    pool_: alluka.Injected[traits.PoolRunner],
 ) -> None:
     url = client.rest.build_oauth2_url()
     assert url
@@ -353,8 +355,8 @@ async def sync_command(
 @tanjun.as_slash_command("desync", "Desync your destiny membership with this bot.")
 async def desync(
     ctx: tanjun.abc.SlashContext,
-    pool_: traits.PoolRunner = tanjun.inject(type=traits.PoolRunner),
-    redis: traits.HashRunner = tanjun.inject(type=traits.HashRunner),
+    pool_: alluka.Injected[traits.PoolRunner],
+    redis: alluka.Injected[traits.HashRunner],
 ) -> None:
 
     # Redis will remove if the tokens exists and fallback if not
@@ -372,8 +374,8 @@ async def desync(
 @tanjun.as_slash_command("my-user", "Show information about your synced user.")
 async def user_command(
     ctx: tanjun.abc.SlashContext,
-    redis: traits.HashRunner = tanjun.inject(type=traits.HashRunner),
-    client: aiobungie.Client = tanjun.inject(type=aiobungie.Client),
+    redis: alluka.Injected[traits.HashRunner],
+    client: alluka.Injected[aiobungie.Client],
 ) -> None:
 
     try:
@@ -422,8 +424,8 @@ async def user_command(
 @tanjun.as_slash_command("friends", "View your Bungie friend list.")
 async def friend_list_command(
     ctx: tanjun.abc.SlashContext,
-    redis: traits.HashRunner = tanjun.inject(type=traits.HashRunner),
-    client: aiobungie.Client = tanjun.inject(type=aiobungie.Client),
+    redis: alluka.Injected[traits.HashRunner],
+    client: alluka.Injected[aiobungie.Client],
 ) -> None:
 
     try:
@@ -486,9 +488,9 @@ async def guardians(
     ctx: tanjun.abc.SlashContext,
     member: hikari.InteractionMember | None,
     query: str | int | None,
-    client: aiobungie.Client = tanjun.inject(type=aiobungie.Client),
-    pool_: traits.PoolRunner = tanjun.inject(type=traits.PoolRunner),
-    component_client: yuyo.ComponentClient = tanjun.inject(type=yuyo.ComponentClient),
+    client: alluka.Injected[aiobungie.Client],
+    pool_: alluka.Injected[traits.PoolRunner],
+    component_client: alluka.Injected[yuyo.ComponentClient],
 ) -> None:
 
     member = member or ctx.member
@@ -569,8 +571,8 @@ async def lfg_command(
     ctx: tanjun.abc.SlashContext,
     activity: str,
     platform: str,
-    client: aiobungie.Client = tanjun.inject(type=aiobungie.Client),
-    component_client: yuyo.ComponentClient = tanjun.inject(type=yuyo.ComponentClient),
+    client: alluka.Injected[aiobungie.Client],
+    component_client: alluka.Injected[yuyo.ComponentClient],
 ) -> None:
 
     # Different platforms from the normal ones.
@@ -631,9 +633,9 @@ async def acquired_items_command(
     ctx: tanjun.abc.SlashContext,
     member: hikari.InteractionMember | hikari.User | None,
     username: str | None,
-    client: aiobungie.Client = tanjun.inject(type=aiobungie.Client),
-    pool_: traits.PoolRunner = tanjun.inject(type=traits.PoolRunner),
-    component_client: yuyo.ComponentClient = tanjun.inject(type=yuyo.ComponentClient),
+    client: alluka.Injected[aiobungie.Client],
+    pool_: alluka.Injected[traits.PoolRunner],
+    component_client: alluka.Injected[yuyo.ComponentClient],
 ) -> None:
 
     member = member or ctx.author
@@ -686,21 +688,117 @@ async def acquired_items_command(
         )
         await boxed.generate_component(ctx, pages, component_client)
 
+def _low_namespace(value: int) -> str:
+    return 'Trio' if value == 3 else "Duo" if value == 2 else ''
 
-# * Last commands.
+@functools.cache
+def _calc_time(millis: int) -> str:
+    secs, _ = divmod(millis, 1000)
+    mins, seconds = divmod(secs, 60)
+    return f'{mins:02d}:{seconds:02d}'
 
-# @last_group.with_command
-# @tanjun.as_slash_command("raid", "Returns information about the last raid you played.")
-# async def last_raid(
-#     ctx: tanjun.abc.SlashContext,
-#     client: aiobungie.Client = tanjun.inject(type=aiobungie.Client),
-#     pool: traits.PoolRunner = tanjun.inject(type=traits.PoolRunner),
-#     cache: cache.Memory[int, hikari.Embed] = tanjun.inject(type=cache.Memory)
-# ) -> None:
-#     ...
+def _this_or_0(obj: int | None) -> int:
+    return 0 if obj is None else obj
+
+async def _get_metrics(component: aiobungie.crate.Component) -> list[str]:
+    # Fastest -> Total clears -> sherpas
+    crypt_hashes: list[int] = [3679202587, 954805812, 2330596844]
+    buffer: list[aiobungie.crate.Objective] = []
+
+    if metrics := component.metrics:
+        for metric in metrics:
+            for metric_id, metric_obj in metric.items():
+
+                if metric_id in crypt_hashes:
+                    objective = metric_obj[1]
+
+                    if objective is not None:
+                        buffer.append(objective)
+
+    fields: list[str] = []
+
+    for objective in buffer:
+        match objective.hash:
+            case 2824062586:
+                fields.append(f"Fastest: {_calc_time(_this_or_0(objective.progress))}")
+            case 1428773193:
+                fields.append(f"Total Clears: {_this_or_0(objective.progress)}")
+            case 806830593:
+                fields.append(f"Sherpas: {_this_or_0(objective.progress)}")
+            case _:
+                pass
+
+    return fields
+
+async def _get_dsc_activities(component: aiobungie.crate.Component):
+    activity_fields: list[str] = []
+
+    if character_component := component.characters:
+        try:
+            activities = await boxed.spawn(
+                *[char.fetch_activities(aiobungie.GameMode.RAID)
+                for char in character_component.values()]
+            )
+        except aiobungie.HTTPError as e:
+            raise tanjun.CommandError(e.message)
+
+
+        for seq_activity in activities:
+            for activity in seq_activity.filter(lambda act: act.hash == aiobungie.Raid.DSC):
+
+                if activity.is_flawless:
+                    activity_fields.append(f"Flawless: {STAR}")
+
+                elif activity.is_flawless and (name := _low_namespace(activity.values.player_count)):
+                    activity_fields.append(f"{name} Flawless: {STAR}")
+
+                if activity.is_solo:
+                    activity_fields.append(f"Solo: {STAR}")
+
+    return activity_fields
+
+# * Raids commands.
+
+# Can we speed things up here?
+@tanjun.with_cooldown("destiny")
+@raid_group.with_command
+@tanjun.with_user_slash_option("user", "An optional member to see their stats.", default=None)
+@tanjun.as_slash_command("dsc", "Returns information about your Deep Stone Crypt journy.")
+async def dsc(
+    ctx: tanjun.abc.SlashContext,
+    user: hikari.Member | hikari.User | None,
+    client: alluka.Injected[aiobungie.Client],
+    pool_: alluka.Injected[traits.PoolRunner],
+) -> None:
+
+    user = user or ctx.member or ctx.author
+    try:
+        membership = await pool_.fetch_destiny_member(user.id)
+    except pool.ExistsError as e:
+        raise tanjun.CommandError(e.message)
+
+    try:
+        profile = await client.fetch_profile(
+            membership.membership_id,
+            _PLATFORMS[membership.membership_type],
+            components=[aiobungie.ComponentType.METRICS, aiobungie.ComponentType.CHARACTERS]
+        )
+    except aiobungie.HTTPError as e:
+        raise tanjun.CommandError(e.message)
+
+    embed = hikari.Embed(
+        title="Deep Stone Crypt information.").set_thumbnail(_ACTIVITIES['Deep Stone Crypt'][0]
+    )
+
+    if metrics := await _get_metrics(profile):
+        embed.add_field("Clear Information", "\n".join(metrics))
+
+    if activity_fields := await _get_dsc_activities(profile):
+        embed.add_field("Challenges", "\n".join(activity_fields))
+
+    await ctx.respond(embed=embed)
 
 # * Search commands.
-
 
 @search_group.with_command
 @tanjun.with_str_slash_option("name", "The player names to search for.")
@@ -708,8 +806,8 @@ async def acquired_items_command(
 async def search_players(
     ctx: tanjun.abc.SlashContext,
     name: str,
-    client: aiobungie.Client = tanjun.inject(type=aiobungie.Client),
-    component_client: yuyo.ComponentClient = tanjun.inject(type=yuyo.ComponentClient),
+    client: alluka.Injected[aiobungie.Client],
+    component_client: alluka.Injected[yuyo.ComponentClient],
 ) -> None:
 
     results = (await client.search_users(name)).collect()
@@ -747,8 +845,8 @@ async def search_entities(
     ctx: tanjun.abc.SlashContext,
     name: str,
     definition: str | None,
-    client: aiobungie.Client = tanjun.inject(type=aiobungie.Client),
-    component_client: yuyo.ComponentClient = tanjun.inject(type=yuyo.ComponentClient),
+    client: alluka.Injected[aiobungie.Client],
+    component_client: alluka.Injected[yuyo.ComponentClient],
 ) -> None:
 
     try:
@@ -783,7 +881,7 @@ async def search_entities(
 async def get_clan(
     ctx: tanjun.abc.SlashContext,
     query: str,
-    client: aiobungie.Client = tanjun.inject(type=aiobungie.Client),
+    client: alluka.Injected[aiobungie.Client],
 ) -> None:
 
     await ctx.defer()
@@ -836,8 +934,8 @@ async def get_clan(
 async def item_definition_command(
     ctx: tanjun.abc.SlashContext,
     item_hash: int,
-    client: aiobungie.Client = tanjun.inject(type=aiobungie.Client),
-    cache_: cache.Memory[int, hikari.Embed] = tanjun.inject(type=cache.Memory),
+    client: alluka.Injected[aiobungie.Client],
+    cache_: alluka.Injected[cache.Memory[int, hikari.Embed]],
 ) -> None:
 
     if cached_item := cache_.get(item_hash):
@@ -863,8 +961,8 @@ async def item_definition_command(
 async def post_activity_command(
     ctx: tanjun.abc.SlashContext,
     instance: int,
-    client: aiobungie.Client = tanjun.inject(type=aiobungie.Client),
-    cache: cache.Memory[int, hikari.Embed] = tanjun.inject(type=cache.Memory),
+    client: alluka.Injected[aiobungie.Client],
+    cache: alluka.Injected[cache.Memory[int, hikari.Embed]],
 ) -> None:
 
     if cached_instance := cache.get(instance):

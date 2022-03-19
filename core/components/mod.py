@@ -27,7 +27,6 @@ from yuyo import backoff
 
 __all__: tuple[str, ...] = ("mod",)
 
-import asyncio
 import datetime
 import sys
 import typing
@@ -35,220 +34,17 @@ import typing
 import asyncpg
 import hikari
 import tanjun
+import alluka
 import yuyo
 
-from core.psql import pool as pool_
 from core.utils import boxed, cache, traits
 
 STDOUT: typing.Final[hikari.Snowflake] = hikari.Snowflake(789614938247266305)
-DURATIONS: dict[str, int] = {
-    "Seconds": 1,
-    "Minutes": 60,
-    "Hours": 3600,
-    "Days": 86400,
-    "Weeks": 604800,
-    "Months": 2629800,
-    "Years": 31557600,
-}
-
 
 @tanjun.with_owner_check
 @tanjun.as_message_command("reload")
 async def reload(ctx: tanjun.abc.MessageContext) -> None:
     await ctx.client.clear_application_commands()
-
-
-async def _sleep_for(
-    timer: datetime.timedelta,
-    ctx: tanjun.abc.SlashContext,
-    member: hikari.InteractionMember,
-    pool: traits.PoolRunner,
-    hash: traits.HashRunner,
-) -> None:
-    assert ctx.guild_id is not None
-    await asyncio.sleep(timer.total_seconds())
-    await pool.remove_mute(member.id)
-    mute_role = await hash.get_mute_role(ctx.guild_id)
-    await member.remove_role(mute_role)
-    await ctx.respond(f"{member.mention} has been unmuted.")
-
-
-async def _set_channel_perms(
-    ctx: tanjun.abc.SlashContext, role_id: hikari.Snowflake
-) -> None:
-    assert ctx.guild_id
-
-    async with ctx.rest.trigger_typing(ctx.channel_id):
-        channels = await ctx.rest.fetch_guild_channels(ctx.guild_id)
-        try:
-            await asyncio.gather(
-                *(
-                    channel.edit_overwrite(
-                        role_id,
-                        target_type=hikari.PermissionOverwriteType.ROLE,
-                        deny=(
-                            hikari.Permissions.SEND_MESSAGES
-                            | hikari.Permissions.SEND_MESSAGES_IN_THREADS
-                            | hikari.Permissions.SPEAK
-                            | hikari.Permissions.ADD_REACTIONS
-                            | hikari.Permissions.CONNECT
-                            | hikari.Permissions.CREATE_PUBLIC_THREADS
-                            | hikari.Permissions.CREATE_PRIVATE_THREADS
-                        ),
-                    )
-                    for channel in channels
-                )
-            )
-        except hikari.HikariError as err:
-            raise tanjun.CommandError(f"Couldn't change channels permissions. {err!s}")
-
-
-async def _done(
-    ctx: tanjun.abc.SlashContext,
-    role: hikari.Role,
-    guild: hikari.Guild,
-    hash: traits.HashRunner,
-) -> tuple[None]:
-    pendings: list[asyncio.Future[None]] = []
-    for task in (
-        _set_channel_perms(ctx, role.id),
-        hash.set_mute_roles(guild.id, role.id),
-    ):
-        pendings.append(asyncio.create_task(task))
-    return await asyncio.gather(*pendings)
-
-
-async def _create_mute_role(
-    ctx: tanjun.abc.SlashContext,
-    bot: hikari.GatewayBot,
-    hash: traits.HashRunner,
-) -> None:
-    assert ctx.guild_id is not None
-
-    # TODO: Check cache first?
-    guild = await ctx.rest.fetch_guild(ctx.guild_id)
-    if not guild:
-        # DMs
-        return
-
-    roles = await guild.fetch_roles()
-
-    if any((r := role) and r.name == "Muted" for role in roles):
-        await ctx.respond(
-            "A role named `Muted` already exists, You want to set it as default mute role?"
-            f" Yes, Or No"
-        )
-
-        try:
-            maybe_setit = await bot.wait_for(
-                hikari.GuildMessageCreateEvent,
-                20,
-                lambda m: m.channel_id == ctx.channel_id
-                and m.author_id == ctx.author.id,
-            )
-        except asyncio.TimeoutError:
-            pass
-
-        if maybe_setit.content in {"Yes", "yes", "y"}:
-            await _done(ctx, r, guild, hash)
-            await ctx.respond(f"Set mute role to {r.mention}.")
-            return
-
-        elif maybe_setit.content in {"No", "no", "n"}:
-            await ctx.respond("Returning.", delete_after=4.0)
-            return
-
-        else:
-            raise tanjun.CommandError("Unrecognized answer..")
-
-    # No muted role.
-    else:
-        try:
-            role = await ctx.rest.create_role(
-                guild.id,
-                name="Muted",
-            )
-        except hikari.HTTPError as exc:
-            raise tanjun.CommandError(f"Couldn't create role: {exc.message}")
-
-        await _done(ctx, role, guild, hash)
-        await ctx.respond("Created the mute role.")
-        return
-
-
-# mutes = (
-#     tanjun.slash_command_group("mute", "Commands related to muting members.")
-#     .add_check(tanjun.GuildCheck())
-#     .add_check(tanjun.AuthorPermissionCheck(hikari.Permissions.MUTE_MEMBERS))
-# )
-# mute_roles_group = mutes.with_command(
-#     tanjun.slash_command_group("role", "Commands to manages the mute role.")
-# ).add_check(tanjun.AuthorPermissionCheck(hikari.Permissions.MANAGE_ROLES))
-#
-#
-# @mute_roles_group.with_command
-# @tanjun.as_slash_command("create", "Creates the mute role.")
-async def create_mute_role(
-    ctx: tanjun.abc.SlashContext,
-    hash: traits.HashRunner = tanjun.inject(type=traits.HashRunner),
-    bot: hikari.GatewayBot = tanjun.inject(type=hikari.GatewayBot),
-) -> None:
-    await _create_mute_role(ctx, bot, hash)
-
-
-# @mutes.with_command
-# @tanjun.with_member_slash_option("member", "The member to mute.")
-# @tanjun.with_str_slash_option(
-#     "unit", "The duration unit to be muted.", choices=boxed.iter(DURATIONS)
-# )
-# @tanjun.with_float_slash_option("duration", "The time duration to be muted")
-# @tanjun.with_str_slash_option(
-#     "reason", "A reason given for why the member was muted.", default="UNDEFINED"
-# )
-# @tanjun.as_slash_command("member", "Mute someone given a duration.")
-async def mute(
-    ctx: tanjun.abc.SlashContext,
-    member: hikari.InteractionMember,
-    unit: str,
-    duration: float,
-    reason: str,
-    pool: traits.PoolRunner = tanjun.inject(type=traits.PoolRunner),
-    hash: traits.HashRunner = tanjun.inject(type=traits.HashRunner),
-) -> None:
-    assert ctx.guild_id is not None
-
-    try:
-        mute_role = await hash.get_mute_role(ctx.guild_id)
-    except LookupError:
-        raise tanjun.CommandError(
-            "No mute role found. Type `/mute role create` to create one."
-        )
-
-    try:
-        total_time = DURATIONS[unit] * duration
-        await pool.put_mute(
-            member.id,
-            ctx.guild_id,
-            ctx.author.id,
-            total_time,
-            reason,
-        )
-
-    except pool_.ExistsError:
-        mutes = await pool.fetch_mutes()
-
-        async for mute in mutes.filter(lambda m: m.member_id == member.id):
-            unlock_date = tanjun.conversion.from_datetime(mute.muted_at, style="R")
-            raise tanjun.CommandError(
-                f"This member muted. Will unlock in {unlock_date}."
-            )
-
-    await member.add_role(mute_role)
-    d = datetime.timedelta(seconds=total_time)
-    await ctx.respond(
-        f"Member {member.user.username} has been muted for {duration} {unit}"
-    )
-    asyncio.create_task(_sleep_for(d, ctx, member, pool, hash))
 
 
 @tanjun.with_owner_check(halt_execution=True)
@@ -258,7 +54,7 @@ async def mute(
 async def run_sql(
     ctx: tanjun.abc.MessageContext,
     query: str,
-    pool: traits.PoolRunner = tanjun.inject(type=traits.PoolRunner),
+    pool: alluka.Injected[traits.PoolRunner],
 ) -> None:
     """Run sql code to the database pool."""
 
@@ -381,7 +177,7 @@ async def ban(
 @tanjun.as_message_command("close", "shutdown")
 async def close_bot(
     _: tanjun.abc.MessageContext,
-    bot: hikari.GatewayBot = tanjun.inject(type=hikari.GatewayBot),
+    bot: alluka.Injected[hikari.GatewayBot],
 ) -> None:
     try:
         await bot.close()
@@ -478,7 +274,7 @@ async def put(
     ctx: tanjun.abc.MessageContext,
     key: typing.Any,
     value: typing.Any,
-    cache_: cache.Memory[typing.Any, typing.Any] = tanjun.inject(type=cache.Memory),
+    cache_: alluka.Injected[cache.Memory[typing.Any, typing.Any]],
 ) -> None:
     cache_.put(key, value)
     await ctx.respond(f"Cached {key} to {value}")
@@ -491,7 +287,7 @@ async def put(
 async def get(
     ctx: tanjun.abc.MessageContext,
     key: typing.Any,
-    cache_: cache.Memory[typing.Any, typing.Any] = tanjun.inject(type=cache.Memory),
+    cache_: alluka.Injected[cache.Memory[typing.Any, typing.Any]],
 ) -> None:
     await ctx.respond(cache_.get(key, "NOT_FOUND"))
 
@@ -503,7 +299,7 @@ async def get(
 async def remove(
     ctx: tanjun.abc.MessageContext,
     key: typing.Any,
-    cache_: cache.Memory[typing.Any, typing.Any] = tanjun.inject(type=cache.Memory),
+    cache_: alluka.Injected[cache.Memory[typing.Any, typing.Any]],
 ) -> None:
     try:
         del cache_[key]
@@ -516,7 +312,7 @@ async def remove(
 @tanjun.as_message_command("items")
 async def cache_items(
     ctx: tanjun.abc.MessageContext,
-    cache_: cache.Memory[typing.Any, typing.Any] = tanjun.inject(type=cache.Memory),
+    cache_: alluka.Injected[cache.Memory[typing.Any, typing.Any]],
 ) -> None:
     await ctx.respond(cache_.view())
 
@@ -524,11 +320,10 @@ async def cache_items(
 @cacher.with_command
 @tanjun.as_message_command("clear")
 async def cache_clear(
-    ctx: tanjun.abc.MessageContext,
-    cache_: cache.Memory[typing.Any, typing.Any] = tanjun.inject(type=cache.Memory),
+    _: tanjun.abc.MessageContext,
+    cache_: alluka.Injected[cache.Memory[typing.Any, typing.Any]],
 ) -> None:
     cache_.clear()
-    await ctx.respond(cache_.view())
 
 
 async def when_join_guilds(event: hikari.GuildJoinEvent) -> None:

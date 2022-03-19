@@ -50,7 +50,6 @@ if typing.TYPE_CHECKING:
 
 
 _LOG: typing.Final[logging.Logger] = logging.getLogger("fated.cache")
-_LOG.setLevel(logging.DEBUG)
 
 MKT = typing.TypeVar("MKT")
 MVT = typing.TypeVar("MVT")

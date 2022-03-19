@@ -36,6 +36,7 @@ import aiobungie
 
 import hikari
 import tanjun
+import alluka
 
 from core.utils import boxed, traits
 
@@ -53,7 +54,8 @@ prefix_group = (
 
 
 async def on_ready(
-    _: hikari.ShardReadyEvent, client: tanjun.Client = tanjun.inject(type=tanjun.Client)
+    _: hikari.ShardReadyEvent,
+    client: alluka.Injected[tanjun.Client]
 ) -> None:
     client.metadata["uptime"] = datetime.datetime.now()
     _LOGGER.info("Bot ready.")
@@ -65,7 +67,7 @@ async def on_ready(
 async def set_prefix(
     ctx: tanjun.abc.SlashContext,
     prefix: str,
-    hash: traits.HashRunner = tanjun.inject(type=traits.HashRunner),
+    hash: alluka.Injected[traits.HashRunner],
 ) -> None:
 
     assert ctx.guild_id
@@ -86,7 +88,7 @@ async def set_prefix(
 @tanjun.as_slash_command("clear", "Clear the bot prefix to a custom one.")
 async def clear_prefix(
     ctx: tanjun.abc.SlashContext,
-    hash: traits.HashRunner = tanjun.inject(type=traits.HashRunner),
+    hash: alluka.Injected[traits.HashRunner],
 ) -> None:
 
     guild = ctx.get_guild() or await ctx.fetch_guild()
@@ -105,7 +107,7 @@ async def clear_prefix(
 @tanjun.as_slash_command("about", "Information about the bot itself.")
 async def about_command(
     ctx: tanjun.abc.SlashContext,
-    bot_: hikari.GatewayBot = tanjun.inject(type=hikari.GatewayBot),
+    bot_: alluka.Injected[hikari.GatewayBot],
 ) -> None:
     """Info about the bot itself."""
 
@@ -251,7 +253,7 @@ async def avatar_view(ctx: tanjun.abc.SlashContext, /, member: hikari.Member) ->
 @tanjun.as_message_command("ping")
 async def ping_command(
     ctx: tanjun.abc.MessageContext,
-    client: aiobungie.Client = tanjun.inject(type=aiobungie.Client),
+    client: alluka.Injected[aiobungie.Client],
 ) -> None:
 
     aiobungie_start = time.perf_counter()

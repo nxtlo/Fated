@@ -33,6 +33,8 @@ import click
 import hikari
 import tanjun
 import yuyo
+import alluka
+
 from hikari.internal import aio, ux
 
 from core.psql import pool as pool_
@@ -46,7 +48,7 @@ if typing.TYPE_CHECKING:
 
 async def get_prefix(
     ctx: tanjun.abc.MessageContext,
-    hash: traits.HashRunner = tanjun.inject(type=traits.HashRunner),
+    hash: alluka.Injected[traits.HashRunner],
 ) -> str:
     if ctx.guild_id:
         try:
@@ -120,7 +122,6 @@ def _build_client(
             config.BUNGIE_CLIENT_ID,
             max_retries=1,
         )
-        aiobungie_client.rest.enable_debugging(True)
         redis_hash.set_aiobungie_client(aiobungie_client)
         client.set_type_dependency(aiobungie.Client, aiobungie_client)
         client.add_client_callback(
@@ -146,8 +147,8 @@ def _enable_logging(
     hikari: bool = False,
     tanjun: bool = False,
     us: bool = False,
+    aiobungie: bool = False
 ) -> None:
-    logging.getLogger("hikari.gateway").setLevel(logging.CRITICAL)
 
     if hikari:
         logging.getLogger("hikari.rest").setLevel(ux.TRACE)
@@ -170,11 +171,14 @@ def _enable_logging(
         ]:
             logger.setLevel(logging.DEBUG)
 
+    if aiobungie:
+        logging.getLogger("aiobungie.rest").setLevel(logging.DEBUG)
+
 
 @click.group(name="main", invoke_without_command=True, options_metavar="[options]")
 @click.pass_context
 def main(ctx: click.Context) -> None:
-    _enable_logging(tanjun=True, us=True)
+    _enable_logging(tanjun=True, us=True, aiobungie=True)
     if ctx.invoked_subcommand is None:
         _build_bot().run(status=hikari.Status.DO_NOT_DISTURB)
 

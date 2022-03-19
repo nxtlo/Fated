@@ -31,6 +31,7 @@ __all__: tuple[str, ...] = ("git",)
 import hikari
 import tanjun
 import yuyo
+import alluka
 
 from core.utils import boxed, cache, net
 
@@ -43,8 +44,8 @@ git_group = tanjun.slash_command_group("git", "Commands related to github.")
 async def git_user(
     ctx: tanjun.abc.SlashContext,
     name: str,
-    git: net.AnyWrapper = tanjun.inject(type=net.AnyWrapper),
-    cache: cache.Memory[str, hikari.Embed] = tanjun.inject(type=cache.Memory),
+    git: alluka.Injected[net.AnyWrapper],
+    cache: alluka.Injected[cache.Memory[str, hikari.Embed]],
 ) -> None:
     if cached_user := cache.get(name):
         await ctx.respond(embed=cached_user)
@@ -84,8 +85,8 @@ async def git_user(
 async def git_repo(
     ctx: tanjun.abc.SlashContext,
     name: str,
-    git: net.AnyWrapper = tanjun.inject(type=net.AnyWrapper),
-    component_client: yuyo.ComponentClient = tanjun.inject(type=yuyo.ComponentClient),
+    git: alluka.Injected[net.AnyWrapper],
+    component_client: alluka.Injected[yuyo.ComponentClient],
 ) -> None:
 
     try:
@@ -140,8 +141,8 @@ async def get_release(
     user: str,
     repo: str,
     limit: int | None,
-    git: net.AnyWrapper = tanjun.inject(type=net.AnyWrapper),
-    component_client: yuyo.ComponentClient = tanjun.inject(type=yuyo.ComponentClient),
+    git: alluka.Injected[net.AnyWrapper],
+    component_client: alluka.Injected[yuyo.ComponentClient],
 ) -> None:
 
     try:

@@ -43,7 +43,7 @@ async def create_note(
     ctx: tanjun.abc.SlashContext,
     name: str,
     content: str,
-    pool: traits.PoolRunner = tanjun.inject(type=traits.PoolRunner),
+    pool: alluka.Injected[traits.PoolRunner],
 ) -> None:
 
     try:
@@ -64,7 +64,7 @@ async def create_note(
 async def get_note(
     ctx: tanjun.abc.SlashContext,
     name: str,
-    pool: traits.PoolRunner = tanjun.inject(type=traits.PoolRunner),
+    pool: alluka.Injected[traits.PoolRunner],
 ) -> None:
 
     try:
@@ -101,7 +101,7 @@ async def delete_note(
     ctx: tanjun.abc.SlashContext,
     name: str | None,
     strict: bool,
-    pool: traits.PoolRunner = tanjun.inject(type=traits.PoolRunner),
+    pool: alluka.Injected[traits.PoolRunner],
 ) -> None:
 
     try:
@@ -116,8 +116,8 @@ async def delete_note(
 @tanjun.as_slash_command("all", "Get all the notes you created.")
 async def get_all_notes(
     ctx: tanjun.abc.SlashContext,
-    pool: traits.PoolRunner = tanjun.inject(type=traits.PoolRunner),
-    component_client: yuyo.ComponentClient = tanjun.inject(type=yuyo.ComponentClient),
+    pool: alluka.Injected[traits.PoolRunner],
+    component_client: alluka.Injected[yuyo.ComponentClient],
 ) -> None:
 
     try:
@@ -149,7 +149,7 @@ async def update_note_(
     ctx: tanjun.abc.SlashContext,
     name: str,
     content: str,
-    pool: traits.PoolRunner = tanjun.inject(type=traits.PoolRunner),
+    pool: alluka.Injected[traits.PoolRunner],
 ) -> None:
     await pool.update_note(name, content, ctx.author.id)
     await ctx.respond("\U0001f44d")
