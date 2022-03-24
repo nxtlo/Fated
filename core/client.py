@@ -178,7 +178,7 @@ def _enable_logging(
 @click.group(name="main", invoke_without_command=True, options_metavar="[options]")
 @click.pass_context
 def main(ctx: click.Context) -> None:
-    _enable_logging(tanjun=True, us=True, aiobungie=True)
+    _enable_logging(tanjun=True, us=True, aiobungie=True, hikari=True)
     if ctx.invoked_subcommand is None:
         _build_bot().run(status=hikari.Status.DO_NOT_DISTURB)
 

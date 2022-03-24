@@ -28,6 +28,7 @@ __all__: tuple[str, ...] = ("notes_component",)
 import hikari
 import tanjun
 import yuyo
+import alluka
 
 from core.psql import pool as pgpool
 from core.utils import boxed, traits
