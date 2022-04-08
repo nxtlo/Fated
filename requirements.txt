@@ -1,5 +1,5 @@
 git+https://github.com/nxtlo/aiobungie@master
-hikari[speedups]==2.0.0.dev107
+hikari[speedups]==2.0.0.dev108
 hikari-tanjun~=2.4.3a1
 hikari-yuyo~=1.0.5a1.post1
 asyncpg~=0.25.0
