@@ -11,7 +11,7 @@ This was originally made for testing [aiobungie](https://github.com/nxtlo/aiobun
 You'll also need to make the user and database from psql yourself.
 
 ## Running
-- Configs found [here](https://github.com/nxtlo/Fated/blob/master/core/utils/config.example.py).
+- Configs found [here](https://github.com/nxtlo/Fated/blob/master/core/std/config.example.py).
 - Requirements `python -m pip install -r requirements.txt`
 - Init the database `python run.py db init`
 - Run redis `redis-server &`
