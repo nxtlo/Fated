@@ -35,7 +35,6 @@ import typing
 import aiobungie
 import aioredis
 import hikari
-import typing_extensions
 from hikari.internal import collections as hikari_collections
 
 from . import boxed, traits
@@ -43,7 +42,7 @@ from . import boxed, traits
 try:
     import ujson as json  # type: ignore
 except ImportError:
-    import json
+    import json  # type: ignore
 
 if typing.TYPE_CHECKING:
     import collections.abc as collections
@@ -53,7 +52,6 @@ _LOG: typing.Final[logging.Logger] = logging.getLogger("fated.cache")
 
 MKT = typing.TypeVar("MKT")
 MVT = typing.TypeVar("MVT")
-_T = typing.TypeVar("_T")
 
 
 class Hash(traits.HashRunner):
@@ -227,7 +225,8 @@ class Hash(traits.HashRunner):
 class Memory(hikari_collections.FreezableDict[MKT, MVT]):
     """In-Memory cache."""
 
-    _data: dict[MKT, MVT]
+    if typing.TYPE_CHECKING:
+        _data: dict[MKT, MVT]
 
     def __init__(self) -> None:
         super().__init__()
@@ -238,13 +237,13 @@ class Memory(hikari_collections.FreezableDict[MKT, MVT]):
         """Returns a flat lazy iterator of this cache's values based on the predicate keys."""
         for k, _ in self._data.items():
             if predicate(k):
-                return hikari.FlatLazyIterator(list(self._data.values()))
-        return hikari.FlatLazyIterator([])
+                return hikari.FlatLazyIterator(tuple(self._data.values()))
+        return hikari.FlatLazyIterator(())
 
     def view(self) -> str:
         return repr(self)
 
-    def put(self, key: MKT, value: MVT) -> typing_extensions.Self:
+    def put(self, key: MKT, value: MVT) -> Memory[MKT, MVT]:
         self[key] = value
         return self
 

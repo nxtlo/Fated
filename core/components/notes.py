@@ -25,13 +25,13 @@ from __future__ import annotations
 
 __all__: tuple[str, ...] = ("notes_component",)
 
+import alluka
 import hikari
 import tanjun
 import yuyo
-import alluka
 
 from core.psql import pool as pgpool
-from core.utils import boxed, traits
+from core.std import boxed, traits
 
 note = tanjun.slash_command_group("note", "Create notes.")
 
@@ -78,8 +78,7 @@ async def get_note(
         note
         async for note in (
             notes
-            .filter(lambda note_: note_.author_id == ctx.author.id)
-            .skip_until(lambda note_: note_.name != name)
+            .filter(lambda note_: note_.author_id == ctx.author.id and note_.name == name)
         )
     ]
     # fmt: on

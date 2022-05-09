@@ -29,24 +29,23 @@ import traceback
 import typing
 
 import aiobungie
+import alluka
 import click
 import hikari
 import tanjun
 import yuyo
-import alluka
-
 from hikari.internal import aio, ux
 
-from core.psql import pool as pool_
-from core.utils import cache
-from core.utils import config as __config
-from core.utils import net, traits
+from core.psql import pool
+from core.std import api, cache
+from core.std import config as __config
+from core.std import net, traits
 
 if typing.TYPE_CHECKING:
     from hikari import traits as hikari_traits
 
 
-async def get_prefix(
+async def _get_prefix(
     ctx: tanjun.abc.MessageContext,
     hash: alluka.Injected[traits.HashRunner],
 ) -> str:
@@ -59,45 +58,31 @@ async def get_prefix(
     return "."
 
 
-def _build_bot() -> hikari.impl.GatewayBot:
-    config = __config.Config()
-    intents = hikari.Intents.ALL_GUILDS | hikari.Intents.ALL_MESSAGES
-    bot = hikari.GatewayBot(
-        banner=None,
-        token=config.BOT_TOKEN,
-        intents=intents,
-        cache_settings=hikari.CacheSettings(components=config.CACHE),
-    )
-    _build_client(bot, config)
-    return bot
-
-
-def _build_client(
-    bot: hikari_traits.GatewayBotAware, config: __config.Config
-) -> tanjun.Client:
+def _setup_client(
+    client: tanjun.Client,
+    bot: hikari_traits.GatewayBotAware,
+    config: __config.Config,
+    /,
+) -> None:
     # Database pool.
-    pg_pool = pool_.PgxPool()
+    pg_pool = pool.PgxPool()
     # Networking.
     client_session = net.HTTPNet()
-    wrapper = net.AnyWrapper()
+    wrapper = api.AnyWrapper()
     # Cache
     redis_hash = cache.Hash()
     mem_cache = cache.Memory[typing.Any, typing.Any]()
     # yuyo client
     yuyo_client = yuyo.ComponentClient.from_gateway_bot(bot, event_managed=False)
 
-    client = (
-        tanjun.Client.from_gateway_bot(
-            bot,
-            mention_prefix=True,
-            declare_global_commands=True,
-        )
+    (
+        client
         # pg pool
         .set_type_dependency(traits.PoolRunner, pg_pool)
-        .add_client_callback(tanjun.ClientCallbackNames.STARTING, pg_pool.create_pool)  # type: ignore asyncpg :)
+        # .add_client_callback(tanjun.ClientCallbackNames.STARTING, pg_pool.create_pool)
         # own aiohttp client session and API AnyWrapper.
-        .set_type_dependency(net.HTTPNet, client_session)
-        .set_type_dependency(net.AnyWrapper, wrapper)
+        .set_type_dependency(traits.NetRunner, client_session)
+        .set_type_dependency(api.AnyWrapper, wrapper)
         # Cache. This is kinda overkill but we need the memory cache for api requests
         # And the redis hash for stuff that are not worth storing in a database for the sake of speed.
         # i.e., OAuth2 tokens
@@ -111,7 +96,7 @@ def _build_client(
         .load_modules("core.components")
         .set_human_only(True)
         # Prefix stuff.
-        .set_prefix_getter(get_prefix)
+        .set_prefix_getter(_get_prefix)
         .add_prefix(".")
     )
 
@@ -139,7 +124,28 @@ def _build_client(
         )
         client.load_modules("core.components.destiny")
 
+
+def _build_client(
+    bot: hikari_traits.GatewayBotAware, config: __config.Config
+) -> tanjun.Client:
+    client = tanjun.Client.from_gateway_bot(
+        bot, mention_prefix=True, declare_global_commands=True
+    )
+    _setup_client(client, bot, config)
     return client
+
+
+def _build_bot() -> hikari.impl.GatewayBot:
+    config = __config.Config.into_dotenv()
+    intents = hikari.Intents.ALL_GUILDS | hikari.Intents.ALL_MESSAGES
+    bot = hikari.GatewayBot(
+        banner=None,
+        token=config.BOT_TOKEN,
+        intents=intents,
+        cache_settings=hikari.impl.CacheSettings(components=config.cache_settings()),
+    )
+    _build_client(bot, config)
+    return bot
 
 
 def _enable_logging(
@@ -191,9 +197,9 @@ def db() -> None:
 @db.command(name="init", short_help="Build the database tables.")
 def init() -> None:
     loop = aio.get_or_make_loop()
-    pool = pool_.PartialPool()
+    pool_ = pool.PartialPool()
     try:
-        loop.run_until_complete(pool.create_pool(build=True))  # type: ignore
+        loop.run_until_complete(pool_.create_pool(build=True))  # type: ignore
     except Exception:
         click.echo("Couldn't build the daatabse tables.", err=True, color=True)
         traceback.print_exc()
@@ -201,16 +207,11 @@ def init() -> None:
 
 @main.command(name="format", short_help="Format the bot code.")
 def format_code() -> None:
-    command = subprocess.run(
+    subprocess.run(
         "black core; isort core; codespell core -w -L crate;",
         capture_output=True,
         shell=True,
     )
-    ok, err = command.stdout, command.stderr
-    if ok:
-        click.echo("Ok", color=True)
-    else:
-        click.echo(err, err=True, color=True)
 
 
 @main.command(name="install", short_help="Install the requirements")

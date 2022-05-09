@@ -22,3 +22,5 @@
 # SOFTWARE.
 
 from __future__ import annotations
+
+"""Portable glue between all modules."""

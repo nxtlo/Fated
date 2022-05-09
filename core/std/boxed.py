@@ -30,6 +30,7 @@ __all__: list[str] = [
     "GENRES",
     "iter",
     "randomize",
+    "randomize_genres",
     "generate_component",
     "naive_datetime",
     "spawn",
@@ -39,6 +40,7 @@ __all__: list[str] = [
     "add_help",
 ]
 
+import collections.abc as collections
 import datetime
 import random
 import sys
@@ -51,10 +53,10 @@ from hikari.internal import aio
 
 if typing.TYPE_CHECKING:
     import builtins
-    import collections.abc as collections
     import types
 
     _T = typing.TypeVar("_T")
+    _SlashT = tanjun.commands.SlashCommand[typing.Any]
 
 COLOR: typing.Final[
     collections.Mapping[typing.Literal["invis", "random"], hikari.Colourish]
@@ -64,7 +66,9 @@ COLOR: typing.Final[
 }
 """Colors."""
 
-API: collections.Mapping[typing.Literal["anime", "urban", "git"], typing.Any] = {
+API: typing.Final[
+    collections.Mapping[typing.Literal["anime", "urban", "git"], typing.Any]
+] = {
     "anime": "https://api.jikan.moe/v3",
     "urban": "https://api.urbandictionary.com/v0/define",
     "git": {
@@ -74,15 +78,15 @@ API: collections.Mapping[typing.Literal["anime", "urban", "git"], typing.Any] = 
 }
 """A dict that holds api endpoints."""
 
-GENRES: dict[str, int] = {
+GENRES: typing.Final[collections.Mapping[str, int]] = {
     "Action": 1,
     "Advanture": 2,
     "Drama": 8,
     "Daemons": 6,
-    "Ecchi": 9,  # :eyes:
+    "Ecchi": 9,
     "Sci-Fi": 24,
     "Shounen": 27,
-    "Harem": 35,  # :eyes:
+    "Harem": 35,
     "Seinen": 42,
     "Saumrai": 21,
     "Games": 11,
@@ -97,13 +101,10 @@ def naive_datetime(datetime_: datetime.datetime) -> datetime.datetime:
     return datetime_.astimezone(datetime.timezone.utc)
 
 
-_SlashT = tanjun.commands.SlashCommand[typing.Any]
-
-
 def add_help(
     summary: str, *, options: dict[str, str] | None = None
 ) -> collections.Callable[[_SlashT], _SlashT]:
-    def AnyWrapper(command: _SlashT) -> _SlashT:
+    def decorator(command: _SlashT) -> _SlashT:
         command.set_metadata("summary", f"**Summary**: {summary}")
 
         if options is not None:
@@ -114,7 +115,7 @@ def add_help(
 
         return command
 
-    return AnyWrapper
+    return decorator
 
 
 async def generate_component(
@@ -146,7 +147,7 @@ async def generate_component(
         component_client.set_executor(msg, pages)
 
 
-def iter(map: collections.Mapping[str, typing.Any]) -> collections.Sequence[typing.Any]:
+def iter(map: collections.Mapping[str, typing.Any]) -> collections.Sequence[str]:
     return [k for k in map.keys()]
 
 
@@ -155,9 +156,7 @@ def randomize(seq: collections.Sequence[_T]) -> _T:
     return random.choice(list(seq))
 
 
-def randomize_genres() -> str:
-    """Return a random anime genre."""
-    return random.choice(list(GENRES.keys()))
+randomize_genres: typing.Final[str] = randomize(iter(GENRES))
 
 
 # Since this module is mostly imported everywhere its worth
@@ -170,7 +169,7 @@ async def spawn(
 
 
 def parse_code(*, code: str, lang: str = "sql") -> str:
-    """Parse and replace a language specific code.
+    """Parse and replace a language specific codeblock.
 
     Example
     -------

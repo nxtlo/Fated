@@ -25,20 +25,20 @@
 
 from __future__ import annotations
 
-__all__: tuple[str, ...] = ("meta",)
+__all__: tuple[str] = ("meta",)
 
 import datetime
 import logging
 import sys
-import typing
 import time
-import aiobungie
+import typing
 
+import aiobungie
+import alluka
 import hikari
 import tanjun
-import alluka
 
-from core.utils import boxed, traits
+from core.std import boxed, traits
 
 _LOGGER: typing.Final[logging.Logger] = logging.getLogger("fated.meta")
 prefix_group = (

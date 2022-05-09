@@ -25,17 +25,17 @@
 
 from __future__ import annotations
 
-__all__: tuple[str, ...] = ("api",)
+__all__: tuple[str] = ("api",)
 
 import typing
 
+import alluka
 import hikari
 import tanjun
 import yuyo
-import alluka
 
-from core.utils import boxed
-from core.utils import net as net_
+from core.std import api as api_mod
+from core.std import boxed, traits
 
 
 @tanjun.with_str_slash_option("name", "The anime's name.", default=None)
@@ -44,7 +44,7 @@ from core.utils import net as net_
     "genre",
     "The anime genre. This can be used with the random option.",
     choices=boxed.iter(boxed.GENRES),
-    default=boxed.randomize_genres(),
+    default=boxed.randomize_genres,
 )
 @boxed.add_help(
     "Get a random information about the anime!",
@@ -60,15 +60,12 @@ async def get_anime(
     name: str,
     random: bool | None,
     genre: str,
-    jian: alluka.Injected[net_.AnyWrapper],
+    jian: alluka.Injected[api_mod.AnyWrapper],
     component_client: alluka.Injected[yuyo.ComponentClient],
 ) -> None:
     await ctx.defer()
 
-    try:
-        anime_embed = await jian.fetch_anime(name, random=random, genre=genre)
-    except net_.Error as e:
-        raise tanjun.CommandError(e.data["message"])
+    anime_embed = await jian.fetch_anime(name, random=random, genre=genre)
 
     assert anime_embed is not None
     if not isinstance(anime_embed, typing.Generator):
@@ -97,7 +94,7 @@ async def help_(ctx: tanjun.abc.SlashContext) -> None:
 async def get_manga(
     ctx: tanjun.abc.SlashContext,
     name: str,
-    jian: alluka.Injected[net_.AnyWrapper],
+    jian: alluka.Injected[api_mod.AnyWrapper],
     component_client: alluka.Injected[yuyo.ComponentClient],
 ) -> None:
     await ctx.defer()
@@ -114,7 +111,7 @@ async def get_manga(
 async def define(
     ctx: tanjun.abc.SlashContext,
     name: str,
-    urban: alluka.Injected[net_.AnyWrapper],
+    urban: alluka.Injected[api_mod.AnyWrapper],
     component_client: alluka.Injected[yuyo.ComponentClient],
 ) -> None:
     definitions = await urban.fetch_definitions(name)
@@ -129,19 +126,17 @@ async def define(
 @tanjun.as_message_command("dog")
 async def doggo(
     ctx: tanjun.abc.MessageContext,
-    net: alluka.Injected[net_.HTTPNet],
+    net: alluka.Injected[traits.NetRunner],
 ) -> None:
-    try:
-        async with net as client:
-            resp = await client.request(
-                "GET",
-                "https://some-random-api.ml/animal/dog",
-            )
-            assert isinstance(resp, dict)
-            embed = hikari.Embed(description=resp["fact"])
-            embed.set_image(resp["image"])
-    except net_.Error:
-        pass
+
+    async with net as client:
+        resp = await client.request(
+            "GET",
+            "https://some-random-api.ml/animal/dog",
+        )
+        assert isinstance(resp, dict)
+        embed = hikari.Embed(description=resp["fact"])
+        embed.set_image(resp["image"])
 
     await ctx.respond(embed=embed)
 
@@ -149,19 +144,18 @@ async def doggo(
 @tanjun.as_message_command("cat")
 async def kittie(
     ctx: tanjun.abc.MessageContext,
-    net: alluka.Injected[net_.HTTPNet],
+    net: alluka.Injected[traits.NetRunner],
 ) -> None:
-    try:
-        async with net as client:
-            resp = await client.request(
-                "GET",
-                "https://some-random-api.ml/animal/cat",
-            )
-            assert isinstance(resp, dict)
-            embed = hikari.Embed(description=resp["fact"])
-            embed.set_image(resp["image"])
-    except net_.Error:
-        pass
+
+    async with net as client:
+        resp = await client.request(
+            "GET",
+            "https://some-random-api.ml/animal/cat",
+        )
+        assert isinstance(resp, dict)
+        embed = hikari.Embed(description=resp["fact"])
+        embed.set_image(resp["image"])
+
     await ctx.respond(embed=embed)
 
 
@@ -171,20 +165,19 @@ async def kittie(
 async def wink(
     ctx: tanjun.abc.MessageContext,
     member: hikari.Member | None,
-    net: alluka.Injected[net_.HTTPNet],
+    net: alluka.Injected[traits.NetRunner],
 ) -> None:
-    try:
-        async with net as client:
-            resp = await client.request(
-                "GET", "https://some-random-api.ml/animu/wink", getter="link"
-            )
-            assert isinstance(resp, str)
-            embed = hikari.Embed(
-                description=f"{ctx.author.username} winked at {member.username if member else 'their self'} UwU!"
-            )
-            embed.set_image(resp)
-    except net_.Error:
-        pass
+
+    async with net as client:
+        resp = await client.request(
+            "GET", "https://some-random-api.ml/animu/wink", getter="link"
+        )
+        assert isinstance(resp, str)
+        embed = hikari.Embed(
+            description=f"{ctx.author.username} winked at {member.username if member else 'their self'} UwU!"
+        )
+        embed.set_image(resp)
+
     await ctx.respond(embed=embed)
 
 
@@ -194,20 +187,18 @@ async def wink(
 async def pat(
     ctx: tanjun.abc.MessageContext,
     member: hikari.Member | None,
-    net: alluka.Injected[net_.HTTPNet],
+    net: alluka.Injected[traits.NetRunner],
 ) -> None:
-    try:
-        async with net as client:
-            resp = await client.request(
-                "GET", "https://some-random-api.ml/animu/pat", getter="link"
-            )
-            assert isinstance(resp, str)
-            embed = hikari.Embed(
-                description=f"{ctx.author.username} pats {member.username if member else 'their self'} UwU!"
-            )
-            embed.set_image(resp)
-    except net_.Error:
-        pass
+    async with net as client:
+        resp = await client.request(
+            "GET", "https://some-random-api.ml/animu/pat", getter="link"
+        )
+        assert isinstance(resp, str)
+        embed = hikari.Embed(
+            description=f"{ctx.author.username} pats {member.username if member else 'their self'} UwU!"
+        )
+        embed.set_image(resp)
+
     await ctx.respond(embed=embed)
 
 
@@ -217,24 +208,23 @@ async def pat(
 async def jail(
     ctx: tanjun.abc.MessageContext,
     member: hikari.Member | None,
-    net: alluka.Injected[net_.HTTPNet],
+    net: alluka.Injected[traits.NetRunner],
 ) -> None:
     member = member or ctx.member
-    try:
-        async with net as client:
-            assert member is not None
-            resp = await client.request(
-                "GET",
-                f"https://some-random-api.ml/canvas/jail?avatar={member.avatar_url}",
-                unwrap_bytes=True,
-            )
-            assert isinstance(resp, bytes)
-            embed = hikari.Embed(
-                description=f"{ctx.author.username} jails {member.username if member else 'their self'}"
-            )
-            embed.set_image(resp)
-    except net_.Error:
-        pass
+
+    async with net as client:
+        assert member is not None
+        resp = await client.request(
+            "GET",
+            f"https://some-random-api.ml/canvas/jail?avatar={member.avatar_url}",
+            unwrap_bytes=True,
+        )
+        assert isinstance(resp, bytes)
+        embed = hikari.Embed(
+            description=f"{ctx.author.username} jails {member.username if member else 'their self'}"
+        )
+        embed.set_image(resp)
+
     await ctx.respond(embed=embed)
 
 
@@ -248,15 +238,17 @@ async def run_net(
     ctx: tanjun.abc.MessageContext,
     url: str,
     getter: str | None,
-    net: alluka.Injected[net_.HTTPNet],
+    net: alluka.Injected[traits.NetRunner],
     method: typing.Literal["GET", "POST"],
 ) -> None:
+
     async with net as cli:
         try:
             result = await cli.request(method, url, getter=getter)
-        except net_.Error:
+        except Exception:
             await ctx.respond(boxed.error(str=True))
             return
+
         formatted = boxed.with_block(result, lang="json")
         await ctx.respond(formatted)
 

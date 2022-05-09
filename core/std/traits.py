@@ -39,6 +39,7 @@ from hikari.internal import fast_protocol as fast  # too long >:
 if typing.TYPE_CHECKING:
     import collections.abc as collections
     import pathlib
+    import types
 
     import aiobungie
     import aiohttp
@@ -131,21 +132,48 @@ class PartialPool(fast.FastProtocolChecking, typing.Protocol):
         """Returns the source of the tables that this pool will build."""
         raise NotImplementedError
 
-    @property
-    def pool(self) -> asyncpg.Pool:
+    async def execute(
+        self, sql: str, /, *args: typing.Any, timeout: float | None = None
+    ) -> None:
         raise NotImplementedError
 
-    @property
-    def pools(self) -> int:
-        """Return the count of all running pools."""
+    async def fetch(
+        self,
+        sql: str,
+        /,
+        *args: typing.Any,
+        timeout: float | None = None,
+    ) -> list[typing.Any]:
+        raise NotImplementedError
+
+    async def fetchrow(
+        self,
+        sql: str,
+        /,
+        *args: typing.Any,
+        timeout: float | None = None,
+    ) -> list[typing.Any] | collections.Mapping[str, typing.Any] | tuple[typing.Any]:
+        raise NotImplementedError
+
+    async def fetchval(
+        self,
+        sql: str,
+        /,
+        *args: typing.Any,
+        column: int | None = 0,
+        timeout: float | None = None,
+    ) -> typing.Any:
         raise NotImplementedError
 
 
 @typing.runtime_checkable
-class PoolRunner(PartialPool, fast.FastProtocolChecking, typing.Protocol):
+class PoolRunner(fast.FastProtocolChecking, typing.Protocol):
     """Core pool trait that include all methods."""
 
     __slots__ = ()
+
+    if typing.TYPE_CHECKING:
+        _pool: PartialPool
 
     async def fetch_destiny_member(
         self, user_id: snowflakes.Snowflake
@@ -224,6 +252,19 @@ class NetRunner(fast.FastProtocolChecking, typing.Protocol):
 
     __slots__ = ()
 
+    if typing.TYPE_CHECKING:
+
+        async def __aenter__(self) -> NetRunner:
+            ...
+
+        async def __aexit__(
+            self,
+            _: BaseException | None,
+            __: BaseException | None,
+            ___: types.TracebackType | None,
+        ) -> None:
+            ...
+
     async def acquire(self) -> aiohttp.ClientSession:
         """Acquires a new session if its closed or set to `hikari.UNDEFINED`"""
         raise NotImplementedError
@@ -262,8 +303,3 @@ class NetRunner(fast.FastProtocolChecking, typing.Protocol):
         **kwargs : `Any`
             Other keyword arguments you can pass to the request.
         """
-
-    @staticmethod
-    async def acquire_errors(response: aiohttp.ClientResponse, /) -> typing.NoReturn:
-        """Handling the request errors."""
-        raise NotImplementedError

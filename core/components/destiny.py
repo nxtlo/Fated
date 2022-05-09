@@ -21,25 +21,24 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-"""Commands references aiobungie and makes my life easier."""
+"""Commands references aiobungie."""
 
 from __future__ import annotations
 
-__all__: tuple[str, ...] = ("destiny",)
+__all__: tuple[str] = ("destiny",)
 
 import asyncio
 import typing
 import urllib.parse
-import functools
 
 import aiobungie
+import alluka
 import hikari
 import tanjun
-import alluka
 import yuyo
 
 from core.psql import pool
-from core.utils import boxed, cache, traits
+from core.std import boxed, cache, traits
 
 if typing.TYPE_CHECKING:
     import collections.abc as collections
@@ -109,11 +108,6 @@ search_group = destiny_group.with_command(
     tanjun.slash_command_group("search", "Commands search for stuff in the API.")
 )
 
-raid_group = destiny_group.with_command(
-    tanjun.slash_command_group(
-        "raid", "Commands that shows information about your raids."
-    )
-)
 
 D2_SETS: typing.Final[str] = "https://data.destinysets.com/i/InventoryItem:{hash}"
 STAR: typing.Final[str] = "⭐"
@@ -128,13 +122,17 @@ _slots: collections.Callable[[aiobungie.crate.Fireteam], str] = (
 async def _handle_errors(
     ctx: tanjun.abc.Context, exc: aiobungie.InternalServerError, /
 ) -> None:
-    if exc.error_status == "SystemDisabled":
-        msg = (
-            exc.message
-            if exc.message
-            else "An unknown error has occurred while making the request."
-        )
-        await ctx.respond(msg)
+
+    try:
+        if exc.error_status == "SystemDisabled":
+            msg = (
+                exc.message
+                if exc.message
+                else "An unknown error has occurred while making the request."
+            )
+            await ctx.respond(msg)
+    except AttributeError:
+        pass
 
 
 async def _get_destiny_player(
@@ -701,91 +699,6 @@ async def acquired_items_command(
             for entity in reversed(items)
         )
         await boxed.generate_component(ctx, pages, component_client)
-
-@functools.cache
-def _calc_time(millis: int) -> str:
-    secs, _ = divmod(millis, 1000)
-    mins, seconds = divmod(secs, 60)
-    return f"{mins:02d}:{seconds:02d}"
-
-
-def _this_or_0(obj: int | None) -> int:
-    return 0 if obj is None else obj
-
-
-async def _get_metrics(component: aiobungie.crate.Component) -> list[str]:
-    # Fastest -> Total clears -> sherpas
-    crypt_hashes: set[int] = {3679202587, 954805812, 2330596844}
-    buffer: list[aiobungie.crate.Objective] = []
-
-    if metrics := component.metrics:
-        for metric in metrics:
-            for metric_id, metric_obj in metric.items():
-
-                if metric_id in crypt_hashes:
-                    objective = metric_obj[1]
-
-                    if objective is not None:
-                        buffer.append(objective)
-
-    fields: list[str] = []
-
-    for objective in buffer:
-        match objective.hash:
-            case 2824062586:
-                fields.append(f"Fastest: {_calc_time(_this_or_0(objective.progress))}")
-            case 1428773193:
-                fields.append(f"Total Clears: {_this_or_0(objective.progress)}")
-            case 806830593:
-                fields.append(f"Sherpas: {_this_or_0(objective.progress)}")
-            case _:
-                pass
-
-    return fields
-
-# * Raids commands.
-
-# Can we speed things up here?
-@tanjun.with_cooldown("destiny")
-@raid_group.with_command
-@tanjun.with_user_slash_option(
-    "user", "An optional Discord user to see their stats.", default=None
-)
-@tanjun.with_str_slash_option(
-    "username", "An optional Bungie username to search for.", default=None
-)
-@tanjun.as_slash_command(
-    "dsc", "Returns information about your Deep Stone Crypt journy."
-)
-async def dsc(
-    ctx: tanjun.abc.SlashContext,
-    user: hikari.Member | hikari.User | None,
-    username: str | None,
-    client: alluka.Injected[aiobungie.Client],
-    pool_: alluka.Injected[traits.PoolRunner],
-) -> None:
-
-    user = user or ctx.author
-
-    id, platform, name = await _pool_or_rest(client, pool_, user.id, username)
-
-    try:
-        profile = await client.fetch_profile(
-            id,
-            platform,
-            components=[aiobungie.ComponentType.METRICS],
-        )
-    except aiobungie.HTTPError as e:
-        raise tanjun.CommandError(e.message)
-
-    embed = hikari.Embed(title=name, description="Deep Stone Crypt information.").set_thumbnail(
-        _ACTIVITIES["Deep Stone Crypt"][0]
-    )
-
-    if metrics := await _get_metrics(profile):
-        embed.add_field("Clear Information", "\n".join(metrics))
-
-    await ctx.respond(embed=embed)
 
 
 # * Search commands.

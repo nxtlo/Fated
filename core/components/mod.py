@@ -25,27 +25,20 @@ from __future__ import annotations
 
 from yuyo import backoff
 
-__all__: tuple[str, ...] = ("mod",)
+__all__: tuple[str] = ("mod",)
 
 import datetime
 import sys
 import typing
 
-import asyncpg
+import alluka
 import hikari
 import tanjun
-import alluka
 import yuyo
 
-from core.utils import boxed, cache, traits
+from core.std import boxed, cache, traits
 
 STDOUT: typing.Final[hikari.Snowflake] = hikari.Snowflake(789614938247266305)
-
-
-@tanjun.with_owner_check
-@tanjun.as_message_command("reload")
-async def reload(ctx: tanjun.abc.MessageContext) -> None:
-    await ctx.client.clear_application_commands()
 
 
 @tanjun.with_owner_check(halt_execution=True)
@@ -60,19 +53,14 @@ async def run_sql(
     """Run sql code to the database pool."""
 
     query = boxed.parse_code(code=query)
-    result: None | list[asyncpg.Record] = None
 
     try:
-        result = await pool._fetch(query)  # type: ignore
+        result = await pool._pool.fetch(query)  # type: ignore
         # SQL Code error
-    except asyncpg.exceptions.PostgresSyntaxError:
+    except Exception:
         raise tanjun.CommandError(boxed.with_block(sys.exc_info()[1]))
 
-        # Tables doesn't exists.
-    except asyncpg.exceptions.UndefinedTableError:
-        raise tanjun.CommandError(boxed.with_block(sys.exc_info()[1]))
-
-    if result is None:
+    if not result:
         await ctx.respond("Nothing found.", delete_after=5)
         return
 
@@ -99,7 +87,6 @@ async def kick(
     assert ctx.guild_id
     guild = ctx.get_guild()
 
-    # In case the guild wasn't cached for somereason.
     await ctx.defer()
 
     if guild is None:
@@ -145,7 +132,6 @@ async def ban(
     assert ctx.guild_id
     guild = ctx.get_guild()
 
-    # In case the guild wasn't cached for somereason.
     await ctx.defer()
 
     if guild is None:
@@ -157,7 +143,7 @@ async def ban(
         try:
             await guild.ban(member.id, reason=reason)
         except hikari.InternalServerError:
-            pass
+            continue
 
         except hikari.HTTPError as exc:
             await ctx.create_followup(
@@ -241,14 +227,11 @@ async def fetch_guild(ctx: tanjun.abc.MessageContext, id: hikari.Snowflake) -> N
 @tanjun.with_owner_check
 @tanjun.as_message_command("guilds")
 async def get_guilds(ctx: tanjun.abc.MessageContext) -> None:
-    guilds = ctx.cache.get_available_guilds_view()
-    assert guilds is not None
+    guilds = {guild.id: guild async for guild in ctx.rest.fetch_my_guilds().limit(70)}
+
     embed = hikari.Embed(
         description=boxed.with_block(
-            "\n".join(
-                f"{id}::{guild.name}::{len(guild.get_members())}"
-                for id, guild in guilds.items()
-            ),
+            "\n".join(f"{id}::{guild.name}" for id, guild in guilds.items()),
             lang="css",
         )
     )

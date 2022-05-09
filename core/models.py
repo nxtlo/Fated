@@ -21,7 +21,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-"""Dataclass models provides Pytohnic classes which represents data fethced from Database / APIs / etc."""
+"""Dataclass models which represents records fethced from database / APIs / etc."""
 
 from __future__ import annotations
 

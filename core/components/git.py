@@ -25,15 +25,14 @@
 
 from __future__ import annotations
 
-__all__: tuple[str, ...] = ("git",)
+__all__: tuple[str] = ("git",)
 
-
+import alluka
 import hikari
 import tanjun
 import yuyo
-import alluka
 
-from core.utils import boxed, cache, net
+from core.std import api, boxed, cache
 
 git_group = tanjun.slash_command_group("git", "Commands related to github.")
 
@@ -44,7 +43,7 @@ git_group = tanjun.slash_command_group("git", "Commands related to github.")
 async def git_user(
     ctx: tanjun.abc.SlashContext,
     name: str,
-    git: alluka.Injected[net.AnyWrapper],
+    git: alluka.Injected[api.AnyWrapper],
     cache: alluka.Injected[cache.Memory[str, hikari.Embed]],
 ) -> None:
     if cached_user := cache.get(name):
@@ -54,7 +53,7 @@ async def git_user(
     await ctx.defer()
     try:
         user = await git.fetch_git_user(name)
-    except net.NotFound:
+    except Exception:
         raise tanjun.CommandError(f"User {name} was not found.")
 
     if user is not None:
@@ -85,13 +84,13 @@ async def git_user(
 async def git_repo(
     ctx: tanjun.abc.SlashContext,
     name: str,
-    git: alluka.Injected[net.AnyWrapper],
+    git: alluka.Injected[api.AnyWrapper],
     component_client: alluka.Injected[yuyo.ComponentClient],
 ) -> None:
 
     try:
         repos = await git.fetch_git_repo(name)
-    except net.NotFound:
+    except Exception:
         raise tanjun.CommandError("Nothing was found.")
 
     if repos:
@@ -141,14 +140,14 @@ async def get_release(
     user: str,
     repo: str,
     limit: int | None,
-    git: alluka.Injected[net.AnyWrapper],
+    git: alluka.Injected[api.AnyWrapper],
     component_client: alluka.Injected[yuyo.ComponentClient],
 ) -> None:
 
     try:
         embeds = await git.git_release(user, repo, limit)
-    except net.Error as exc:
-        raise tanjun.CommandError(f"`{exc.data['message']}`")
+    except Exception:
+        raise tanjun.CommandError(f"Couldn't find any releases for {user}/{repo}.")
 
     await boxed.generate_component(
         ctx, ((hikari.UNDEFINED, embed) for embed in embeds), component_client
