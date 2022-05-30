@@ -35,7 +35,7 @@ import typing
 import aiobungie
 import aioredis
 import hikari
-from hikari.internal import collections as hikari_collections
+from hikari.internal import collections as hikari_collections, cache as hikari_cache
 
 from . import boxed, traits
 
@@ -89,40 +89,10 @@ class Hash(traits.HashRunner):
         self._lock = asyncio.Lock()
 
     def __repr__(self) -> str:
-        return f"Hash(client: {self.__connection.client!r})"
+        return f"Hash(client: {self.__connection!r})"
 
     def set_aiobungie_client(self, client: aiobungie.Client) -> None:
         self._aiobungie_client = client
-
-    async def set_prefix(self, guild_id: hikari.Snowflake, prefix: str) -> None:
-        await self.__connection.hset("prefixes", str(guild_id), prefix)  # type: ignore
-
-    async def get_prefix(self, guild_id: hikari.Snowflake) -> str:
-        if prefix := typing.cast(
-            str, await self.__connection.hget("prefixes", str(guild_id))
-        ):
-            return prefix
-
-        raise LookupError
-
-    async def remove_prefix(self, *guild_ids: hikari.Snowflake) -> None:
-        await self.__connection.hdel("prefixes", *list(map(str, guild_ids)))
-
-    async def set_mute_roles(
-        self, guild_id: hikari.Snowflake, role_id: hikari.Snowflake
-    ) -> None:
-        await self.__connection.hset("mutes", str(guild_id), role_id)  # type: ignore
-
-    async def get_mute_role(self, guild_id: hikari.Snowflake) -> hikari.Snowflake:
-        if role_id := typing.cast(
-            str, await self.__connection.hget("mutes", str(guild_id))
-        ):
-            return hikari.Snowflake(role_id)
-
-        raise LookupError
-
-    async def remove_mute_role(self, guild_id: hikari.Snowflake) -> None:
-        await self.__connection.hdel("mutes", str(guild_id))
 
     async def set_bungie_tokens(
         self, user: hikari.Snowflake, respons: aiobungie.builders.OAuth2Response
@@ -221,30 +191,44 @@ class Hash(traits.HashRunner):
             raise RuntimeError(f"Couldn't refresh tokens for {owner}.") from err
         return response
 
+    # Not used anymore.
 
-class Memory(hikari_collections.FreezableDict[MKT, MVT]):
+    if typing.TYPE_CHECKING:
+        async def set_prefix(self, guild_id: hikari.Snowflake, prefix: str) -> None:
+            raise NotImplementedError
+
+        async def get_prefix(self, guild_id: hikari.Snowflake) -> str:
+            raise NotImplementedError
+
+        async def remove_prefix(self, *guild_ids: hikari.Snowflake) -> None:
+            raise NotImplementedError
+
+        async def set_mute_roles(
+            self, guild_id: hikari.Snowflake, role_id: hikari.Snowflake
+        ) -> None:
+            raise NotImplementedError
+
+        async def get_mute_role(self, guild_id: hikari.Snowflake) -> hikari.Snowflake:
+            raise NotImplementedError
+
+        async def remove_mute_role(self, guild_id: hikari.Snowflake) -> None:
+            # await self.__connection.hdel("mutes", str(guild_id))
+            raise NotImplementedError
+
+class Memory(hikari_collections.FreezableDict[MKT, hikari_cache.Cell[MVT]]):
     """In-Memory cache."""
 
     if typing.TYPE_CHECKING:
-        _data: dict[MKT, MVT]
+        _data: dict[MKT, hikari_cache.Cell[MVT]]
 
     def __init__(self) -> None:
         super().__init__()
-
-    def iter(
-        self, predicate: collections.Callable[[MKT], typing.Any], /
-    ) -> hikari.LazyIterator[MVT]:
-        """Returns a flat lazy iterator of this cache's values based on the predicate keys."""
-        for k, _ in self._data.items():
-            if predicate(k):
-                return hikari.FlatLazyIterator(tuple(self._data.values()))
-        return hikari.FlatLazyIterator(())
 
     def view(self) -> str:
         return repr(self)
 
     def put(self, key: MKT, value: MVT) -> Memory[MKT, MVT]:
-        self[key] = value
+        self[key] = hikari_cache.Cell(value)
         return self
 
     def __repr__(self) -> str:

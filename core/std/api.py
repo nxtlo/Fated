@@ -43,7 +43,7 @@ if typing.TYPE_CHECKING:
     import collections.abc as collections
     import datetime
 
-# We spawn a new client. AKA pooling.
+# We spawn a new client for each individual.
 def _spawn_client() -> net.HTTPNet:
     return net.HTTPNet()
 
@@ -197,7 +197,7 @@ class AnyWrapper:
         super().__init__()
 
     def __repr__(self) -> str:
-        return f"AnyWrapper(net: {_spawn_client()!r})"
+        return f"<{type(self).__name__}>"
 
     async def fetch_anime(
         self,

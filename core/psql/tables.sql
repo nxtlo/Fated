@@ -29,15 +29,15 @@ CREATE TABLE IF NOT EXISTS Destiny (
     membership_type VARCHAR(6)
 );
 
-CREATE TABLE IF NOT EXISTS Mutes (
-    member_id   BIGINT PRIMARY KEY NOT NULL,
-    guild_id    BIGINT NOT NULL,
-    author_id   BIGINT NOT NULL,
-    muted_at    TIMESTAMP NOT NULL,
-    why         TEXT,
-    duration    BIGINT NOT NULL
-);
-
+-- CREATE TABLE IF NOT EXISTS Mutes (
+--     member_id   BIGINT PRIMARY KEY NOT NULL,
+--     guild_id    BIGINT NOT NULL,
+--     author_id   BIGINT NOT NULL,
+--     muted_at    TIMESTAMP NOT NULL,
+--     why         TEXT,
+--     duration    BIGINT NOT NULL
+-- );
+-- 
 -- This is supposed to be self-notes not like tags.
 CREATE TABLE IF NOT EXISTS Notes (
     id          SERIAL NOT NULL,

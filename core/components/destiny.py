@@ -125,12 +125,7 @@ async def _handle_errors(
 
     try:
         if exc.error_status == "SystemDisabled":
-            msg = (
-                exc.message
-                if exc.message
-                else "An unknown error has occurred while making the request."
-            )
-            await ctx.respond(msg)
+            await ctx.respond(exc.message)
     except AttributeError:
         pass
 
@@ -676,10 +671,7 @@ async def acquired_items_command(
             raise tanjun.CommandError(f"No items found for {membership.name}")
 
         items = await boxed.spawn(
-            *[
-                client.rest.fetch_entity("DestinyCollectibleDefinition", item)
-                for item in recent_items
-            ]
+            *(client.rest.fetch_entity("DestinyCollectibleDefinition", item) for item in recent_items)
         )
         pages = (
             (
@@ -844,7 +836,7 @@ async def item_definition_command(
 ) -> None:
 
     if cached_item := cache_.get(item_hash):
-        await ctx.respond(embed=cached_item)
+        await ctx.respond(embed=cached_item.copy())
         return
 
     try:
@@ -871,7 +863,7 @@ async def post_activity_command(
 ) -> None:
 
     if cached_instance := cache.get(instance):
-        await ctx.respond(embed=cached_instance)
+        await ctx.respond(embed=cached_instance.copy())
         return
 
     embed = await _fetch_instance(client, instance)

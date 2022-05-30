@@ -37,7 +37,6 @@ __all__: list[str] = [
     "error",
     "parse_code",
     "with_block",
-    "add_help",
 ]
 
 import collections.abc as collections
@@ -56,7 +55,6 @@ if typing.TYPE_CHECKING:
     import types
 
     _T = typing.TypeVar("_T")
-    _SlashT = tanjun.commands.SlashCommand[typing.Any]
 
 COLOR: typing.Final[
     collections.Mapping[typing.Literal["invis", "random"], hikari.Colourish]
@@ -99,24 +97,6 @@ GENRES: typing.Final[collections.Mapping[str, int]] = {
 
 def naive_datetime(datetime_: datetime.datetime) -> datetime.datetime:
     return datetime_.astimezone(datetime.timezone.utc)
-
-
-def add_help(
-    summary: str, *, options: dict[str, str] | None = None
-) -> collections.Callable[[_SlashT], _SlashT]:
-    def decorator(command: _SlashT) -> _SlashT:
-        command.set_metadata("summary", f"**Summary**: {summary}")
-
-        if options is not None:
-            ok_options = [
-                f"**Options**:\n{oname}: {osumm}" for oname, osumm in options.items()
-            ]
-            command.set_metadata("options", "\n".join(ok_options))
-
-        return command
-
-    return decorator
-
 
 async def generate_component(
     ctx: tanjun.abc.SlashContext | tanjun.abc.MessageContext,
@@ -169,15 +149,7 @@ async def spawn(
 
 
 def parse_code(*, code: str, lang: str = "sql") -> str:
-    """Parse and replace a language specific codeblock.
-
-    Example
-    -------
-    ```sql
-    SELECT * FROM table WHERE id = $1
-    ```
-    This removes the ```sql``` code blocks and returns the original code.
-    """
+    """Remove codeblock from code."""
     if code.startswith(f"```{lang}") and code.endswith("```"):
         code = code.replace("```", "").replace(lang, "")
     return code

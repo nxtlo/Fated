@@ -59,11 +59,11 @@ class HTTPNet(traits.NetRunner):
     __slots__: typing.Sequence[str] = ("_session", "_lock")
 
     def __init__(self, lock: asyncio.Lock | None = None) -> None:
-        self._session: hikari.UndefinedOr[aiohttp.ClientSession] = hikari.UNDEFINED
+        self._session: typing.Optional[aiohttp.ClientSession] = None
         self._lock = lock
 
     async def acquire(self) -> aiohttp.ClientSession:
-        if isinstance(self._session, hikari.UndefinedType):
+        if self._session is None:
             http_settings = hikari.impl.HTTPSettings()
             connector = net.create_tcp_connector(http_settings)
             self._session = net.create_client_session(
@@ -77,12 +77,12 @@ class HTTPNet(traits.NetRunner):
         raise RuntimeError("Session is already running...")
 
     async def close(self) -> None:
-        if self._session is not hikari.UNDEFINED and not self._session.closed:
+        if self._session is not None and not self._session.closed:
             try:
                 await self._session.close()
             except aiohttp.ClientOSError as e:
                 raise RuntimeError("Couldn't close session.") from e
-        self._session = hikari.UNDEFINED
+        self._session = None
 
     @typing.final
     async def request(
@@ -115,17 +115,17 @@ class HTTPNet(traits.NetRunner):
         method: typing.Literal["GET", "POST", "PUT", "DELETE", "PATCH"],
         url: str | yarl.URL,
         getter: str | None = None,
-        json: typing.Optional[data_binding.JSONObjectBuilder] = None,
-        auth: typing.Optional[str] = None,
+        json: data_binding.JSONObjectBuilder | None = None,
+        auth: str | None = None,
         unwrap_bytes: bool = False,
         **kwargs: typing.Any,
     ) -> data_binding.JSONObject | data_binding.JSONArray | hikari.Resourceish | None:
 
+        assert self._session is not None
         data: data_binding.JSONObject | data_binding.JSONArray | hikari.Resourceish | None = (
             None
         )
         backoff_ = backoff.Backoff(max_retries=6)
-        response: aiohttp.ClientResponse
 
         user_agent: typing.Final[
             str
@@ -141,11 +141,11 @@ class HTTPNet(traits.NetRunner):
 
         while True:
             async for _ in backoff_:
-                assert self._session is not hikari.UNDEFINED
                 try:
                     response = await stack.enter_async_context(
                         self._session.request(method, url, json=json, **kwargs)
                     )
+
                     if (
                         http.HTTPStatus.MULTIPLE_CHOICES
                         > response.status
@@ -186,7 +186,8 @@ class HTTPNet(traits.NetRunner):
                         )
                         backoff_.set_next_backoff(float(random.random() / 2))
 
-                    response.raise_for_status()
+                    else:
+                        response.raise_for_status()
 
                 except (aiohttp.ContentTypeError, aiohttp.ClientPayloadError):
                     raise

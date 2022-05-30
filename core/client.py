@@ -29,7 +29,6 @@ import traceback
 import typing
 
 import aiobungie
-import alluka
 import click
 import hikari
 import tanjun
@@ -43,19 +42,6 @@ from core.std import net, traits
 
 if typing.TYPE_CHECKING:
     from hikari import traits as hikari_traits
-
-
-async def _get_prefix(
-    ctx: tanjun.abc.MessageContext,
-    hash: alluka.Injected[traits.HashRunner],
-) -> str:
-    if ctx.guild_id:
-        try:
-            return await hash.get_prefix(ctx.guild_id)
-        except LookupError:
-            pass
-    # Probably will switch to all slash soon.
-    return "."
 
 
 def _setup_client(
@@ -96,7 +82,6 @@ def _setup_client(
         .load_modules("core.components")
         .set_human_only(True)
         # Prefix stuff.
-        .set_prefix_getter(_get_prefix)
         .add_prefix(".")
     )
 

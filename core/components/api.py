@@ -46,14 +46,6 @@ from core.std import boxed, traits
     choices=boxed.iter(boxed.GENRES),
     default=boxed.randomize_genres,
 )
-@boxed.add_help(
-    "Get a random information about the anime!",
-    options={
-        "name": "An anime name to lookup",
-        "random": "Whether to get you a random anime or not.",
-        "genre": "The genre of the anime to return information about.",
-    },
-)
 @tanjun.as_slash_command("anime", "Returns basic information about an anime.")
 async def get_anime(
     ctx: tanjun.abc.SlashContext,

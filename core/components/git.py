@@ -47,7 +47,7 @@ async def git_user(
     cache: alluka.Injected[cache.Memory[str, hikari.Embed]],
 ) -> None:
     if cached_user := cache.get(name):
-        await ctx.respond(embed=cached_user)
+        await ctx.respond(embed=cached_user.copy())
         return
 
     await ctx.defer()
@@ -94,36 +94,34 @@ async def git_repo(
         raise tanjun.CommandError("Nothing was found.")
 
     if repos:
-        pages = iter(
+        pages = (
             (
-                (
-                    hikari.UNDEFINED,
-                    hikari.Embed(
-                        title=repo.name,
-                        url=repo.url,
-                        timestamp=repo.created_at,
-                        description=repo.description or hikari.UNDEFINED,
-                    )
-                    .set_author(
-                        name=str(repo.owner.name) or None, url=repo.owner.url or None
-                    )
-                    .set_thumbnail(repo.owner.avatar_url if repo.owner else None)
-                    .add_field("Stars", str(repo.stars), inline=True)
-                    .add_field("Forks", str(repo.forks), inline=True)
-                    .add_field("Is Archived", str(repo.is_archived), inline=True)
-                    .add_field(
-                        "Stats:",
-                        f"**Last push**: {repo.last_push}\n"
-                        f"**Size**: {repo.size}\n"
-                        f"**Is Forked**: {repo.is_forked}\n"
-                        f"**Top Language**: {repo.language}\n"
-                        f"**Open Issues**: {repo.open_issues}\n"
-                        f"**License**: {repo.license}\n"
-                        f"**Pages**: {repo.page}",
-                    ),
+                hikari.UNDEFINED,
+                hikari.Embed(
+                    title=repo.name,
+                    url=repo.url,
+                    timestamp=repo.created_at,
+                    description=repo.description or hikari.UNDEFINED,
                 )
-                for repo in repos
+                .set_author(
+                    name=str(repo.owner.name) or None, url=repo.owner.url or None
+                )
+                .set_thumbnail(repo.owner.avatar_url if repo.owner else None)
+                .add_field("Stars", str(repo.stars), inline=True)
+                .add_field("Forks", str(repo.forks), inline=True)
+                .add_field("Is Archived", str(repo.is_archived), inline=True)
+                .add_field(
+                    "Stats:",
+                    f"**Last push**: {repo.last_push}\n"
+                    f"**Size**: {repo.size}\n"
+                    f"**Is Forked**: {repo.is_forked}\n"
+                    f"**Top Language**: {repo.language}\n"
+                    f"**Open Issues**: {repo.open_issues}\n"
+                    f"**License**: {repo.license}\n"
+                    f"**Pages**: {repo.page}",
+                ),
             )
+            for repo in repos
         )
         await boxed.generate_component(ctx, pages, component_client)
 

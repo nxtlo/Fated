@@ -83,7 +83,7 @@ class PartialPool(traits.PartialPool):
         if not p.exists():
             raise FileNotFoundError(f"Tables file not found in {p!r}")
 
-        with p.open() as schema:
+        with p.open('r') as schema:
             return schema.read()
 
     @classmethod
@@ -232,46 +232,6 @@ class PgxPool(traits.PoolRunner):
         except asyncpg.NoDataFoundError:
             raise ExistsError
 
-    # This is not used and probably will be Removed soonish.
-    async def fetch_mutes(self) -> iterators.LazyIterator[models.Mutes]:
-        query = await self._pool.fetch("SELECT * FROM Mutes;")
-        if not query:
-            raise ExistsError("No mutes found.")
-
-        return iterators.FlatLazyIterator(
-            [models.Mutes.into(dict(entry)) for entry in query]
-        )
-
-    async def put_mute(
-        self,
-        member_id: snowflakes.Snowflake,
-        author_id: snowflakes.Snowflake,
-        guild_id: snowflakes.Snowflake,
-        duration: float,
-        why: str,
-    ) -> None:
-        try:
-            await self._pool.execute(
-                "INSERT INTO Mutes(member_id, guild_id, author_id, muted_at, duration, why) "
-                "VALUES($1, $2, $3, $4, $5, $6)",
-                int(member_id),
-                int(guild_id),
-                int(author_id),
-                datetime.datetime.utcnow(),
-                duration,
-                why,
-            )
-        except asyncpg.UniqueViolationError:
-            raise ExistsError(f"Member {member_id} is already muted.")
-
-    async def remove_mute(self, user_id: snowflakes.Snowflake) -> None:
-        try:
-            await self._pool.execute(
-                "DELETE FROM Mutes WHERE member_id = $1", int(user_id)
-            )
-        except asyncpg.NoDataFoundError:
-            raise ExistsError(f"User {user_id} is not muted.")
-
     async def fetch_notes(self) -> iterators.LazyIterator[models.Notes]:
         """Fetch all notes and return a lazy iterator of notes."""
         query = await self._pool.fetch("SELECT * FROM Notes;")
@@ -341,3 +301,47 @@ class PgxPool(traits.PoolRunner):
         if name is not None:
             sql += " AND name = $2"
             await self._pool.execute("".join(sql), author_id, name)
+
+    # This is not used and probably will be Removed soonish.
+    if typing.TYPE_CHECKING:
+        async def fetch_mutes(self) -> iterators.LazyIterator[models.Mutes]:
+            # query = await self._pool.fetch("SELECT * FROM Mutes;")
+            # if not query:
+            #     raise ExistsError("No mutes found.")
+
+            # return iterators.FlatLazyIterator(
+            #     [models.Mutes.into(dict(entry)) for entry in query]
+            # )
+            raise NotImplementedError
+
+        async def put_mute(
+            self,
+            member_id: snowflakes.Snowflake,
+            author_id: snowflakes.Snowflake,
+            guild_id: snowflakes.Snowflake,
+            duration: float,
+            why: str,
+        ) -> None:
+            # try:
+            #     await self._pool.execute(
+            #         "INSERT INTO Mutes(member_id, guild_id, author_id, muted_at, duration, why) "
+            #         "VALUES($1, $2, $3, $4, $5, $6)",
+            #         int(member_id),
+            #         int(guild_id),
+            #         int(author_id),
+            #         datetime.datetime.utcnow(),
+            #         duration,
+            #         why,
+            #     )
+            # except asyncpg.UniqueViolationError:
+            #     raise ExistsError(f"Member {member_id} is already muted.")
+            raise NotImplementedError
+
+        async def remove_mute(self, user_id: snowflakes.Snowflake) -> None:
+            # try:
+            #     await self._pool.execute(
+            #         "DELETE FROM Mutes WHERE member_id = $1", int(user_id)
+            #     )
+            # except asyncpg.NoDataFoundError:
+            #     raise ExistsError(f"User {user_id} is not muted.")
+            raise NotImplementedError
