@@ -37,15 +37,14 @@ import aioredis
 import hikari
 from hikari.internal import collections as hikari_collections, cache as hikari_cache
 
+from core import models
+
 from . import boxed, traits
 
 try:
     import ujson as json  # type: ignore
 except ImportError:
     import json  # type: ignore
-
-if typing.TYPE_CHECKING:
-    import collections.abc as collections
 
 
 _LOG: typing.Final[logging.Logger] = logging.getLogger("fated.cache")
@@ -105,11 +104,7 @@ class Hash(traits.HashRunner):
         await self.__connection.hdel("tokens", str(user))
 
     # This impl hikari's client creds strat.
-    async def get_bungie_tokens(
-        self, user: hikari.Snowflake
-    ) -> collections.Mapping[
-        typing.Literal["access", "refresh", "date", "expires"], str | float
-    ]:
+    async def get_bungie_tokens(self, user: hikari.Snowflake) -> models.Tokens:
         is_expired = await self._is_expired(user)
 
         if (tokens := await self.__loads_tokens(user)) and not is_expired:
@@ -125,10 +120,9 @@ class Hash(traits.HashRunner):
             raise
 
         expiry = time.monotonic() + math.floor(response.expires_in * 0.99)
-        tokens_ = await self.__dump_tokens(
+        return await self.__dump_tokens(
             user, response.access_token, response.refresh_token, expiry
         )
-        return json.loads(tokens_)
 
     # Check whether the Bungie OAuth tokens are expired or not.
     # If expired we refresh them.
@@ -143,27 +137,24 @@ class Hash(traits.HashRunner):
         access_token: str,
         refresh_token: str,
         expires_in: float,
-    ) -> str:
-        body = json.dumps(
-            {
-                "access": access_token,
-                "refresh": refresh_token,
-                "expires": expires_in,
-                "date": str(datetime.datetime.now()),
-            }
-        )
-        await self.__connection.hset(name="tokens", key=owner, value=body)  # type: ignore
-        return body
+    ) -> models.Tokens:
+        now = str(datetime.datetime.now())
+        payload = {
+            "access": access_token,
+            "refresh": refresh_token,
+            "date": now,
+            "expires": expires_in,
+        }
+        await self.__connection.hset(name="tokens", key=owner, value=json.loads(payload))  # type: ignore
+        return models.Tokens(access=access_token, refresh=refresh_token, expires=expires_in, date=now)
 
     # Loads the authorized data from a string JSON object to a Python dict object.
     async def __loads_tokens(
         self, owner: hikari.Snowflake
-    ) -> collections.Mapping[
-        typing.Literal["access", "refresh", "date", "expires"], str | float
-    ]:
+    ) -> models.Tokens:
         resp: hikari.Snowflake = await self.__connection.hget("tokens", owner)
         if resp:
-            return json.loads(str(resp))
+            return models.Tokens(**json.loads(str(resp)))
 
         raise LookupError
 
@@ -179,8 +170,7 @@ class Hash(traits.HashRunner):
         except LookupError:
             raise
 
-        refresh = tokens["refresh"]
-        assert isinstance(refresh, str)
+        refresh = tokens.get("refresh")
 
         try:
             response = await self._aiobungie_client.rest.refresh_access_token(refresh)

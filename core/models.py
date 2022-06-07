@@ -25,7 +25,7 @@
 
 from __future__ import annotations
 
-__all__: tuple[str, ...] = ("Destiny", "Mutes", "Notes")
+__all__: tuple[str, ...] = ("Destiny", "Mutes", "Notes", "Tokens")
 
 import dataclasses
 import typing
@@ -36,6 +36,13 @@ if typing.TYPE_CHECKING:
     import collections.abc as collections
     import datetime
 
+class Tokens(typing.TypedDict):
+    """Bungie user tokens fetched from a redis hash."""
+
+    access: str
+    refresh: str
+    date: str
+    expires: float
 
 @dataclasses.dataclass(slots=True)
 class Destiny:
@@ -131,11 +138,11 @@ class GithubUser:
 
     name: hikari.UndefinedOr[str] = dataclasses.field(repr=True)
     id: int = dataclasses.field(repr=True, hash=True)
-    avatar_url: typing.Optional[str]
+    avatar_url: str | None
     url: str
     type: str
-    email: typing.Optional[str]
-    location: typing.Optional[str] | None
+    email: str | None
+    location: str | None
     public_repors: int | hikari.UndefinedType
     bio: hikari.UndefinedOr[str] | None
     followers: int | hikari.UndefinedType

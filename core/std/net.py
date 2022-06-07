@@ -59,7 +59,7 @@ class HTTPNet(traits.NetRunner):
     __slots__: typing.Sequence[str] = ("_session", "_lock")
 
     def __init__(self, lock: asyncio.Lock | None = None) -> None:
-        self._session: typing.Optional[aiohttp.ClientSession] = None
+        self._session: aiohttp.ClientSession | None = None
         self._lock = lock
 
     async def acquire(self) -> aiohttp.ClientSession:
@@ -90,8 +90,8 @@ class HTTPNet(traits.NetRunner):
         method: typing.Literal["GET", "POST", "PUT", "DELETE", "PATCH"],
         url: str | yarl.URL,
         getter: str | None = None,
-        json: typing.Optional[data_binding.JSONObjectBuilder] = None,
-        auth: typing.Optional[str] = None,
+        json: data_binding.JSONObjectBuilder | None = None,
+        auth: str | None = None,
         unwrap_bytes: bool = False,
         **kwargs: typing.Any,
     ) -> data_binding.JSONObject | data_binding.JSONArray | hikari.Resourceish | None:

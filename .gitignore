@@ -4,6 +4,7 @@ config.py
 
 # venv
 .venv/
+.v/
 
 # cache
 __pycache__/

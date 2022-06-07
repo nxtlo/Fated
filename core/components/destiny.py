@@ -412,9 +412,8 @@ async def user_command(
             "Youre not authorized. Type `/destiny sync` to sync your account."
         )
 
-    access_token = str(tokens["access"])
     try:
-        user = await client.fetch_current_user_memberships(access_token)
+        user = await client.fetch_current_user_memberships(tokens.get('access'))
     except aiobungie.Unauthorized:
         raise
 
@@ -462,9 +461,8 @@ async def friend_list_command(
             "Youre not authorized. Type `/destiny sync` to sync your account."
         )
 
-    access = str(tokens["access"])
     try:
-        friend_list = await client.fetch_friends(access)
+        friend_list = await client.fetch_friends(tokens.get("access"))
     except aiobungie.HTTPError as e:
         raise tanjun.CommandError(e.message)
 
@@ -491,7 +489,7 @@ async def friend_list_command(
     if friend_list:
         embed.add_field("Friends", build_friends(friend_list))
 
-    requests = await client.fetch_friend_requests(access)
+    requests = await client.fetch_friend_requests(tokens.get("access"))
     if incoming := requests.incoming:
         embed.add_field("Incoming requests", build_friends(incoming))
 

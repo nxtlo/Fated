@@ -203,7 +203,7 @@ def format_code() -> None:
 def install_requirements() -> None:
     with subprocess.Popen(
         [
-            "python",
+            "py",
             "-m",
             "pip",
             "install",

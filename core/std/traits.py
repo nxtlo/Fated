@@ -88,17 +88,8 @@ class HashRunner(fast.FastProtocolChecking, typing.Protocol):
 
     async def get_bungie_tokens(
         self, user: snowflakes.Snowflake
-    ) -> collections.Mapping[
-        typing.Literal["access", "refresh", "date", "expires"], str | float
-    ]:
-        """Gets loaded dict object of the user snowflake tokens.
-
-        This dictionary contains 4 keys:
-            * access: str -> The access token for the snowflake
-            * refresh: str -> The refresh token for the snowflake
-            * expires: float -> When's this token going to expire. This is handled internally
-            * date: ISO string datetime -> When was this snowflake cached/refreshed at.
-        """
+    ) -> models.Tokens:
+        """Gets a linked Discord user's Bungie tokens."""
         raise NotImplementedError
 
     async def remove_bungie_tokens(self, user: snowflakes.Snowflake) -> None:
