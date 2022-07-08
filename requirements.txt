@@ -2,7 +2,7 @@ git+https://github.com/nxtlo/aiobungie@master
 hikari[speedups]~=2.0.0.dev108
 hikari-tanjun~=2.5.1a1
 hikari-yuyo~=1.0.5a1.post1
-asyncpg~=0.25.0
+asyncpg~=0.26.0
 aioredis~=2.0.1
 sain~=0.0.3
 click~=8.1.3
