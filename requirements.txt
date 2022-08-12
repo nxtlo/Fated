@@ -1,6 +1,6 @@
 git+https://github.com/nxtlo/aiobungie@master
 hikari[speedups]~=2.0.0.dev109
-hikari-tanjun~=2.5.3a1
+hikari-tanjun~=2.5.4a1
 hikari-yuyo~=1.0.6a1
 asyncpg~=0.26.0
 aioredis~=2.0.1
