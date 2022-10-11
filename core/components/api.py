@@ -44,7 +44,7 @@ from core.std import boxed, traits
     "genre",
     "The anime genre. This can be used with the random option.",
     choices=boxed.iter(boxed.GENRES),
-    default=boxed.randomize_genres,
+    default=boxed.RANDOM_GENRE,
 )
 @tanjun.as_slash_command("anime", "Returns basic information about an anime.")
 async def get_anime(
@@ -130,7 +130,7 @@ async def doggo(
         embed = hikari.Embed(description=resp["fact"])
         embed.set_image(resp["image"])
 
-    await ctx.respond(embed=embed)
+        await ctx.respond(embed=embed)
 
 
 @tanjun.as_message_command("cat")
@@ -148,7 +148,7 @@ async def kittie(
         embed = hikari.Embed(description=resp["fact"])
         embed.set_image(resp["image"])
 
-    await ctx.respond(embed=embed)
+        await ctx.respond(embed=embed)
 
 
 @tanjun.with_argument("member", converters=tanjun.to_member, default=None)
@@ -170,7 +170,7 @@ async def wink(
         )
         embed.set_image(resp)
 
-    await ctx.respond(embed=embed)
+        await ctx.respond(embed=embed)
 
 
 @tanjun.with_argument("member", converters=tanjun.to_member, default=None)
@@ -191,7 +191,7 @@ async def pat(
         )
         embed.set_image(resp)
 
-    await ctx.respond(embed=embed)
+        await ctx.respond(embed=embed)
 
 
 @tanjun.with_argument("member", converters=tanjun.to_member, default=None)
@@ -217,7 +217,7 @@ async def jail(
         )
         embed.set_image(resp)
 
-    await ctx.respond(embed=embed)
+        await ctx.respond(embed=embed)
 
 
 @tanjun.with_owner_check(halt_execution=True)

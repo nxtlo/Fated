@@ -26,11 +26,11 @@ from __future__ import annotations
 
 __all__: list[str] = [
     "COLOR",
-    "API",
+    "ENDPOINT",
     "GENRES",
     "iter",
     "randomize",
-    "randomize_genres",
+    "RANDOM_GENRE",
     "generate_component",
     "naive_datetime",
     "spawn",
@@ -64,7 +64,7 @@ COLOR: typing.Final[
 }
 """Colors."""
 
-API: typing.Final[
+ENDPOINT: typing.Final[
     collections.Mapping[typing.Literal["anime", "urban", "git"], typing.Any]
 ] = {
     "anime": "https://api.jikan.moe/v3",
@@ -97,6 +97,7 @@ GENRES: typing.Final[collections.Mapping[str, int]] = {
 
 def naive_datetime(datetime_: datetime.datetime) -> datetime.datetime:
     return datetime_.astimezone(datetime.timezone.utc)
+
 
 async def generate_component(
     ctx: tanjun.abc.SlashContext | tanjun.abc.MessageContext,
@@ -136,7 +137,7 @@ def randomize(seq: collections.Sequence[_T]) -> _T:
     return random.choice(list(seq))
 
 
-randomize_genres: typing.Final[str] = randomize(iter(GENRES))
+RANDOM_GENRE: typing.Final[str] = randomize(iter(GENRES))
 
 
 # Since this module is mostly imported everywhere its worth

@@ -45,7 +45,6 @@ if typing.TYPE_CHECKING:
 
 _LOG: typing.Final[logging.Logger] = logging.getLogger("fated.pool")
 
-
 class ExistsError(RuntimeError):
     """A runtime error raised when either the data exists or not found."""
 
@@ -67,12 +66,6 @@ class PartialPool(traits.PartialPool):
     def __init__(self) -> None:
         self._pool: asyncpg.Pool | None = None
 
-    async def __call__(self) -> asyncpg.Pool:
-        return await self.create_pool()
-
-    def __await__(self) -> collections.Generator[typing.Any, None, asyncpg.Pool]:
-        return self.create_pool().__await__()
-
     def __repr__(self) -> str:
         return f"<PartialPool>"
 
@@ -83,29 +76,29 @@ class PartialPool(traits.PartialPool):
         if not p.exists():
             raise FileNotFoundError(f"Tables file not found in {p!r}")
 
-        with p.open('r') as schema:
+        with p.open("r") as schema:
             return schema.read()
 
-    @classmethod
-    async def create_pool(
-        cls, *, build: bool = False, schema_path: pathlib.Path | None = None
-    ) -> asyncpg.Pool:
+    async def open(
+        self, build: bool = False, schema_path: pathlib.Path | None = None
+    ) -> None:
         """Creates a new connection pool and create the tables if build is True."""
 
         from core.std import config
 
         config_ = config.Config.into_dotenv()
 
-        cls._pool = pool = await asyncpg.create_pool(
+        self._pool = pool = await asyncpg.create_pool(
             database=config_.DB_NAME,
             user=config_.DB_USER,
             password=config_.DB_PASSWORD,
             host=config_.DB_HOST,
             port=config_.DB_PORT,
         )
+        _LOG.debug("Created database pool.")
 
         if build:
-            tables = cls.tables(schema_path)
+            tables = self.tables(schema_path)
 
             async with pool.acquire() as conn:
                 try:
@@ -117,20 +110,25 @@ class PartialPool(traits.PartialPool):
 
                 finally:
                     await pool.release(conn)
-        return pool
 
     async def close(self) -> None:
-        if self._pool:
-            await self._pool.close()
+        if self._pool is None:
+            raise RuntimeError("Cant close pool not created.")
 
+        await self._pool.close()
+        _LOG.debug("Database pool closed.")
         self._pool = None
-        _LOG.debug("Pool closed.")
+
+    def _get_pool(self) -> asyncpg.Pool:
+        if self._pool:
+            return self._pool
+
+        raise RuntimeError("Cant return pool not created.")
 
     async def execute(
         self, sql: str, /, *args: typing.Any, timeout: float | None = None
     ) -> None:
-        assert self._pool is not None
-        async with self._pool.acquire() as conn:
+        async with self._get_pool().acquire() as conn:
             await conn.execute(
                 sql, *args, timeout=typing.cast(float, timeout)
             )  # asyncpg has weird typings.
@@ -143,8 +141,7 @@ class PartialPool(traits.PartialPool):
         timeout: float | None = None,
     ) -> list[typing.Any]:
 
-        assert self._pool is not None
-        async with self._pool.acquire() as conn:
+        async with self._get_pool().acquire() as conn:
             return await conn.fetch(sql, *args, timeout=timeout)
 
     async def fetchrow(
@@ -154,8 +151,7 @@ class PartialPool(traits.PartialPool):
         *args: typing.Any,
         timeout: float | None = None,
     ) -> list[typing.Any] | collections.Mapping[str, typing.Any] | tuple[typing.Any]:
-        assert self._pool is not None
-        async with self._pool.acquire() as conn:
+        async with self._get_pool().acquire() as conn:
             return await conn.fetchrow(sql, *args, timeout=timeout)
 
     async def fetchval(
@@ -166,8 +162,7 @@ class PartialPool(traits.PartialPool):
         column: int | None = 0,
         timeout: float | None = None,
     ) -> typing.Any:
-        assert self._pool is not None
-        async with self._pool.acquire() as conn:
+        async with self._get_pool().acquire() as conn:
             return await conn.fetchval(sql, *args, column=column, timeout=timeout)
 
 
@@ -182,6 +177,10 @@ class PgxPool(traits.PoolRunner):
 
     def __repr__(self) -> str:
         return f"<PgxPool>"
+
+    @property
+    def partial(self) -> traits.PartialPool:
+        return self._pool
 
     async def fetch_destiny_member(
         self, user_id: snowflakes.Snowflake
@@ -242,10 +241,35 @@ class PgxPool(traits.PoolRunner):
             models.Notes.into(dict(note)) for note in query
         )
 
+    @typing.overload
+    async def fetch_notes_for(
+        self, user_id: snowflakes.Snowflake, filter_name: str
+    ) -> models.Notes:
+        ...
+
+    @typing.overload
     async def fetch_notes_for(
         self, user_id: snowflakes.Snowflake
     ) -> collections.Collection[models.Notes]:
+        ...
+
+    async def fetch_notes_for(
+        self, user_id: snowflakes.Snowflake, filter_name: str | None = None
+    ) -> collections.Collection[models.Notes] | models.Notes:
         """Fetch notes for a specific snowflake ID."""
+
+        if filter_name:
+            query = await self._pool.fetchrow(
+                "SELECT * FROM Notes WHERE author_id = $1 AND name = $2",
+                user_id,
+                filter_name,
+            )
+
+            if not query:
+                raise ExistsError(f"Note {filter_name} not found.")
+
+            return models.Notes.into(dict(query))
+
         query = await self._pool.fetch(
             "SELECT * FROM Notes WHERE author_id = $1", user_id
         )
@@ -299,49 +323,49 @@ class PgxPool(traits.PoolRunner):
             return
 
         if name is not None:
-            sql += " AND name = $2"
+            sql.append(" AND name = $2")
             await self._pool.execute("".join(sql), author_id, name)
 
     # This is not used and probably will be Removed soonish.
-    if typing.TYPE_CHECKING:
-        async def fetch_mutes(self) -> iterators.LazyIterator[models.Mutes]:
-            # query = await self._pool.fetch("SELECT * FROM Mutes;")
-            # if not query:
-            #     raise ExistsError("No mutes found.")
 
-            # return iterators.FlatLazyIterator(
-            #     [models.Mutes.into(dict(entry)) for entry in query]
-            # )
-            raise NotImplementedError
+    async def fetch_mutes(self) -> iterators.LazyIterator[models.Mutes]:
+        # query = await self._pool.fetch("SELECT * FROM Mutes;")
+        # if not query:
+        #     raise ExistsError("No mutes found.")
 
-        async def put_mute(
-            self,
-            member_id: snowflakes.Snowflake,
-            author_id: snowflakes.Snowflake,
-            guild_id: snowflakes.Snowflake,
-            duration: float,
-            why: str,
-        ) -> None:
-            # try:
-            #     await self._pool.execute(
-            #         "INSERT INTO Mutes(member_id, guild_id, author_id, muted_at, duration, why) "
-            #         "VALUES($1, $2, $3, $4, $5, $6)",
-            #         int(member_id),
-            #         int(guild_id),
-            #         int(author_id),
-            #         datetime.datetime.utcnow(),
-            #         duration,
-            #         why,
-            #     )
-            # except asyncpg.UniqueViolationError:
-            #     raise ExistsError(f"Member {member_id} is already muted.")
-            raise NotImplementedError
+        # return iterators.FlatLazyIterator(
+        #     [models.Mutes.into(dict(entry)) for entry in query]
+        # )
+        raise NotImplementedError
 
-        async def remove_mute(self, user_id: snowflakes.Snowflake) -> None:
-            # try:
-            #     await self._pool.execute(
-            #         "DELETE FROM Mutes WHERE member_id = $1", int(user_id)
-            #     )
-            # except asyncpg.NoDataFoundError:
-            #     raise ExistsError(f"User {user_id} is not muted.")
-            raise NotImplementedError
+    async def put_mute(
+        self,
+        member_id: snowflakes.Snowflake,
+        author_id: snowflakes.Snowflake,
+        guild_id: snowflakes.Snowflake,
+        duration: float,
+        why: str,
+    ) -> None:
+        # try:
+        #     await self._pool.execute(
+        #         "INSERT INTO Mutes(member_id, guild_id, author_id, muted_at, duration, why) "
+        #         "VALUES($1, $2, $3, $4, $5, $6)",
+        #         int(member_id),
+        #         int(guild_id),
+        #         int(author_id),
+        #         datetime.datetime.utcnow(),
+        #         duration,
+        #         why,
+        #     )
+        # except asyncpg.UniqueViolationError:
+        #     raise ExistsError(f"Member {member_id} is already muted.")
+        raise NotImplementedError
+
+    async def remove_mute(self, user_id: snowflakes.Snowflake) -> None:
+        # try:
+        #     await self._pool.execute(
+        #         "DELETE FROM Mutes WHERE member_id = $1", int(user_id)
+        #     )
+        # except asyncpg.NoDataFoundError:
+        #     raise ExistsError(f"User {user_id} is not muted.")
+        raise NotImplementedError

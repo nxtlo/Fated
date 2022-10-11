@@ -47,7 +47,7 @@ async def git_user(
     cache: alluka.Injected[cache.Memory[str, hikari.Embed]],
 ) -> None:
     if cached_user := cache.get(name):
-        await ctx.respond(embed=cached_user.copy())
+        await ctx.respond(embed=cached_user)
         return
 
     await ctx.defer()

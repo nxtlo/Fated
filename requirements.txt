@@ -1,8 +1,7 @@
-git+https://github.com/nxtlo/aiobungie@master
-hikari[speedups]~=2.0.0.dev109
-hikari-tanjun~=2.5.3a1
-hikari-yuyo~=1.0.6a1
+aiobungie~=0.2.7
+hikari[speedups]~=2.0.0.dev111
+hikari-tanjun~=2.7.0a1
+hikari-yuyo~=1.1.1a1
 asyncpg~=0.26.0
 aioredis~=2.0.1
-sain~=0.0.3
 click~=8.1.3

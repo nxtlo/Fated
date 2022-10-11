@@ -413,7 +413,7 @@ async def user_command(
         )
 
     try:
-        user = await client.fetch_current_user_memberships(tokens.get('access'))
+        user = await client.fetch_current_user_memberships(tokens.get("access"))
     except aiobungie.Unauthorized:
         raise
 
@@ -669,7 +669,10 @@ async def acquired_items_command(
             raise tanjun.CommandError(f"No items found for {membership.name}")
 
         items = await boxed.spawn(
-            *(client.rest.fetch_entity("DestinyCollectibleDefinition", item) for item in recent_items)
+            *(
+                client.rest.fetch_entity("DestinyCollectibleDefinition", item)
+                for item in recent_items
+            )
         )
         pages = (
             (
@@ -834,7 +837,7 @@ async def item_definition_command(
 ) -> None:
 
     if cached_item := cache_.get(item_hash):
-        await ctx.respond(embed=cached_item.copy())
+        await ctx.respond(embed=cached_item)
         return
 
     try:
@@ -861,7 +864,7 @@ async def post_activity_command(
 ) -> None:
 
     if cached_instance := cache.get(instance):
-        await ctx.respond(embed=cached_instance.copy())
+        await ctx.respond(embed=cached_instance)
         return
 
     embed = await _fetch_instance(client, instance)

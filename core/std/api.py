@@ -211,9 +211,9 @@ class AnyWrapper:
 
             if random and name is None:
                 # This is True by default in case the name is None.
-                path = f"{boxed.API['anime']}/genre/anime/{boxed.GENRES[genre]}/1"
+                path = f"{boxed.ENDPOINT['anime']}/genre/anime/{boxed.GENRES[genre]}/1"
             else:
-                path = f'{boxed.API["anime"]}/search/anime?q={str(name).lower()}/Zero&page=1&limit=1'
+                path = f'{boxed.ENDPOINT["anime"]}/search/anime?q={str(name).lower()}/Zero&page=1&limit=1'
 
             # This kinda brain fuck but it will raise KeyError
             # error if we don't check before we make the actual request.
@@ -249,7 +249,7 @@ class AnyWrapper:
             if not (
                 raw_mangas := await cli.request(
                     "GET",
-                    f'{boxed.API["anime"]}/search/manga?q={name}/Zero&page=1&limit=1',
+                    f'{boxed.ENDPOINT["anime"]}/search/manga?q={name}/Zero&page=1&limit=1',
                     getter="results",
                 )
             ):
@@ -293,7 +293,7 @@ class AnyWrapper:
             resp = (
                 await cli.request(
                     "GET",
-                    boxed.API["urban"],
+                    boxed.ENDPOINT["urban"],
                     params={"term": name.lower()},
                     getter="list",
                 )
@@ -329,18 +329,17 @@ class AnyWrapper:
     async def fetch_git_user(self, name: str, /) -> models.GithubUser | None:
         async with _spawn_client() as cli:
             if raw_user := await cli.request(
-                "GET", f'{boxed.API["git"]["user"]}/{name}'
+                "GET", f'{boxed.ENDPOINT["git"]["user"]}/{name}'
             ):
                 assert isinstance(raw_user, dict)
                 return _set_repo_owner_attrs(raw_user)
-            return
 
     async def fetch_git_repo(
         self, name: str
     ) -> collections.Sequence[models.GithubRepo] | None:
         async with _spawn_client() as cli:
             if raw_repo := await cli.request(
-                "GET", boxed.API["git"]["repo"].format(name)
+                "GET", boxed.ENDPOINT["git"]["repo"].format(name)
             ):
                 assert isinstance(raw_repo, dict)
                 return _set_repo_attrs(raw_repo)
@@ -354,4 +353,4 @@ class AnyWrapper:
                 "GET", f"https://api.github.com/repos/{user}/{repo_name}/releases"
             )
             assert isinstance(repos, list)
-        return (_make_git_releases(repo, user, repo_name) for repo in repos[:limit])
+            return (_make_git_releases(repo, user, repo_name) for repo in repos[:limit])

@@ -38,7 +38,7 @@ import alluka
 import hikari
 import tanjun
 
-from core.std import boxed, traits
+from core.std import boxed
 
 _LOGGER: typing.Final[logging.Logger] = logging.getLogger("fated.meta")
 prefix_group = (
@@ -58,49 +58,6 @@ async def on_ready(
 ) -> None:
     client.metadata["uptime"] = datetime.datetime.now()
     _LOGGER.info("Bot ready.")
-
-
-@prefix_group.with_command
-@tanjun.with_str_slash_option("prefix", "The prefix to set.")
-@tanjun.as_slash_command("set", "Change the bot prefix to a custom one.")
-async def set_prefix(
-    ctx: tanjun.abc.SlashContext,
-    prefix: str,
-    hash: alluka.Injected[traits.HashRunner],
-) -> None:
-
-    assert ctx.guild_id
-    if len(prefix) > 5:
-        raise tanjun.CommandError("Prefix length cannot be more than 5 letters.")
-
-    await ctx.defer()
-    try:
-        await hash.set_prefix(ctx.guild_id, prefix)
-
-    except Exception as err:
-        raise tanjun.CommandError(f"Couldn't change bot prefix: {err!s}")
-
-    await ctx.edit_initial_response(f"Prefix set to {prefix}")
-
-
-@prefix_group.with_command
-@tanjun.as_slash_command("clear", "Clear the bot prefix to a custom one.")
-async def clear_prefix(
-    ctx: tanjun.abc.SlashContext,
-    hash: alluka.Injected[traits.HashRunner],
-) -> None:
-
-    guild = ctx.get_guild() or await ctx.fetch_guild()
-    await ctx.defer()
-
-    try:
-        await hash.remove_prefix(guild.id)
-    except Exception as err:
-        raise tanjun.CommandError(f"Couldn't clear the prefix: {err!s}")
-
-    await ctx.edit_initial_response(
-        f"Cleared prefix. You can still use the main prefix which's `.`"
-    )
 
 
 @tanjun.as_slash_command("about", "Information about the bot itself.")

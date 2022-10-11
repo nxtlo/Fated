@@ -43,6 +43,7 @@ from core.std import net, traits
 if typing.TYPE_CHECKING:
     from hikari import traits as hikari_traits
 
+_LOGGER = logging.getLogger("fated.client")
 
 def _setup_client(
     client: tanjun.Client,
@@ -65,8 +66,9 @@ def _setup_client(
         client
         # pg pool
         .set_type_dependency(traits.PoolRunner, pg_pool)
-        # .add_client_callback(tanjun.ClientCallbackNames.STARTING, pg_pool.create_pool)
-        # own aiohttp client session and API AnyWrapper.
+        .add_client_callback(tanjun.ClientCallbackNames.STARTING, pg_pool.partial.open)
+        .add_client_callback(tanjun.ClientCallbackNames.CLOSING, pg_pool.partial.close)
+        # HTTP.
         .set_type_dependency(traits.NetRunner, client_session)
         .set_type_dependency(api.AnyWrapper, wrapper)
         # Cache. This is kinda overkill but we need the memory cache for api requests
@@ -86,6 +88,7 @@ def _setup_client(
     )
 
     if config.verify_bungie_tokens():
+        _LOGGER.debug("aiobungie tokens found.")
         aiobungie_client = aiobungie.Client(
             str(config.BUNGIE_TOKEN),
             config.BUNGIE_CLIENT_SECRET,
@@ -96,6 +99,8 @@ def _setup_client(
         client.set_type_dependency(aiobungie.Client, aiobungie_client)
         client.add_client_callback(
             tanjun.ClientCallbackNames.CLOSING, aiobungie_client.rest.close
+        ).add_client_callback(
+            tanjun.ClientCallbackNames.STARTING, aiobungie_client.rest.open
         )
         (
             tanjun.InMemoryCooldownManager()
@@ -150,6 +155,7 @@ def _enable_logging(
             logging.getLogger("core.net"),
             logging.getLogger("fated.cache"),
             logging.getLogger("fated.pool"),
+            logging.getLogger("fated.client"),
         ]:
             logger.setLevel(logging.DEBUG)
 
@@ -169,7 +175,7 @@ def _enable_logging(
 @click.group(name="main", invoke_without_command=True, options_metavar="[options]")
 @click.pass_context
 def main(ctx: click.Context) -> None:
-    _enable_logging(tanjun=True, us=True, aiobungie=True, hikari=True)
+    _enable_logging(tanjun=True, us=True, aiobungie=True)
     if ctx.invoked_subcommand is None:
         _build_bot().run(status=hikari.Status.DO_NOT_DISTURB)
 
@@ -184,10 +190,12 @@ def init() -> None:
     loop = aio.get_or_make_loop()
     pool_ = pool.PartialPool()
     try:
-        loop.run_until_complete(pool_.create_pool(build=True))  # type: ignore
+        loop.run_until_complete(pool_.open(build=True))  # type: ignore
     except Exception:
         click.echo("Couldn't build the daatabse tables.", err=True, color=True)
         traceback.print_exc()
+    finally:
+        loop.run_until_complete(pool_.close())
 
 
 @main.command(name="format", short_help="Format the bot code.")

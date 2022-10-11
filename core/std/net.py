@@ -62,29 +62,15 @@ class HTTPNet(traits.NetRunner):
         self._session: aiohttp.ClientSession | None = None
         self._lock = lock
 
-    async def acquire(self) -> aiohttp.ClientSession:
-        if self._session is None:
-            http_settings = hikari.impl.HTTPSettings()
-            connector = net.create_tcp_connector(http_settings)
-            self._session = net.create_client_session(
-                connector,
-                connector_owner=False,
-                http_settings=http_settings,
-                raise_for_status=False,
-                trust_env=False,
-            )
-            return self._session
-        raise RuntimeError("Session is already running...")
-
     async def close(self) -> None:
-        if self._session is not None and not self._session.closed:
-            try:
-                await self._session.close()
-            except aiohttp.ClientOSError as e:
-                raise RuntimeError("Couldn't close session.") from e
+        if self._session is None:
+            raise RuntimeError("Cannot close a session thats already running.")
+        try:
+            await self._session.close()
+        except aiohttp.ClientOSError as e:
+            raise RuntimeError("Couldn't close session.") from e
         self._session = None
 
-    @typing.final
     async def request(
         self,
         method: typing.Literal["GET", "POST", "PUT", "DELETE", "PATCH"],
@@ -109,7 +95,21 @@ class HTTPNet(traits.NetRunner):
                 **kwargs,
             )
 
-    @typing.final
+    async def _create_session(self) -> aiohttp.ClientSession:
+        if self._session is not None:
+            raise RuntimeError("Session is already running...")
+
+        http_settings = hikari.impl.HTTPSettings()
+        connector = net.create_tcp_connector(http_settings)
+        self._session = net.create_client_session(
+            connector,
+            connector_owner=False,
+            http_settings=http_settings,
+            raise_for_status=False,
+            trust_env=False,
+        )
+        return self._session
+
     async def _request(
         self,
         method: typing.Literal["GET", "POST", "PUT", "DELETE", "PATCH"],
@@ -131,11 +131,11 @@ class HTTPNet(traits.NetRunner):
             str
         ] = f"Fated DiscordBot(https://github.com/nxtlo/Fated) Hikari/{about.__version__}"
 
-        kwargs["headers"] = headers = data_binding.StringMapBuilder()
-        headers.put("User-Agent", user_agent)
+        kwargs["headers"] = headers = {}
+        headers["User-Agent"] = user_agent
 
         if auth is not None:
-            headers.put("Authorization", f"Bearer {auth}")
+            headers["Authorization"] = f"Bearer {auth}"
 
         stack = contextlib.AsyncExitStack()
 
@@ -193,7 +193,7 @@ class HTTPNet(traits.NetRunner):
                     raise
 
     async def __aenter__(self):
-        await self.acquire()
+        await self._create_session()
         _LOG.debug("Acquired client session %s", datetime.datetime.now().astimezone())
         return self
 

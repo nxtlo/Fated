@@ -79,13 +79,11 @@ class Config:
             (self.BUNGIE_CLIENT_ID, self.BUNGIE_TOKEN, self.BUNGIE_CLIENT_SECRET)
         )
 
-
     @staticmethod
     def cache_settings() -> hikari_config.CacheComponents:
         return (
-        hikari_config.CacheComponents.GUILD_CHANNELS
-        | hikari_config.CacheComponents.GUILDS
-        | hikari_config.CacheComponents.MEMBERS
-        | hikari_config.CacheComponents.ROLES
-    )
-
+            hikari_config.CacheComponents.GUILD_CHANNELS
+            | hikari_config.CacheComponents.GUILDS
+            | hikari_config.CacheComponents.MEMBERS
+            | hikari_config.CacheComponents.ROLES
+        )

@@ -69,25 +69,12 @@ async def get_note(
 ) -> None:
 
     try:
-        notes = await pool.fetch_notes()
+        note = await pool.fetch_notes_for(ctx.author.id, name)
     except pgpool.ExistsError as exc:
         raise tanjun.CommandError(exc.message)
 
-    # fmt: off
-    notes_ = [
-        note
-        async for note in (
-            notes
-            .filter(lambda note_: note_.author_id == ctx.author.id and note_.name == name)
-        )
-    ]
-    # fmt: on
-    if not notes_:
-        raise tanjun.CommandError(f"Note with name {name} not found.")
-
-    origin = notes_[0]
-    embed = hikari.Embed(title=f"{origin.name}", description=origin.content)
-    embed.set_footer(f"ID: {origin.id}")
+    embed = hikari.Embed(title=f"{note.name}", description=note.content)
+    embed.set_footer(f"ID: {note.id}")
     await ctx.respond(embed=embed)
 
 

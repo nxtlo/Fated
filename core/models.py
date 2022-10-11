@@ -36,6 +36,7 @@ if typing.TYPE_CHECKING:
     import collections.abc as collections
     import datetime
 
+
 class Tokens(typing.TypedDict):
     """Bungie user tokens fetched from a redis hash."""
 
@@ -43,6 +44,7 @@ class Tokens(typing.TypedDict):
     refresh: str
     date: str
     expires: float
+
 
 @dataclasses.dataclass(slots=True)
 class Destiny:

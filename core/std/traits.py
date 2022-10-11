@@ -42,8 +42,6 @@ if typing.TYPE_CHECKING:
     import types
 
     import aiobungie
-    import aiohttp
-    import asyncpg
     import yarl
     from hikari import files, iterators, snowflakes
     from hikari.internal import data_binding
@@ -86,9 +84,7 @@ class HashRunner(fast.FastProtocolChecking, typing.Protocol):
     ) -> None:
         """Cache a hikari snowflake to the returned OAuth2 response object tokens."""
 
-    async def get_bungie_tokens(
-        self, user: snowflakes.Snowflake
-    ) -> models.Tokens:
+    async def get_bungie_tokens(self, user: snowflakes.Snowflake) -> models.Tokens:
         """Gets a linked Discord user's Bungie tokens."""
         raise NotImplementedError
 
@@ -103,14 +99,7 @@ class PartialPool(fast.FastProtocolChecking, typing.Protocol):
 
     __slots__ = ()
 
-    async def __call__(self) -> asyncpg.Pool:
-        raise NotImplementedError
-
-    def __await__(self) -> collections.Generator[typing.Any, None, asyncpg.Pool]:
-        raise NotImplementedError
-
-    @classmethod
-    async def create_pool(cls, *, build: bool = False) -> asyncpg.Pool:
+    async def open(self, build: bool = False) -> None:
         """Initialize and creates a new connection pool."""
         raise NotImplementedError
 
@@ -163,8 +152,9 @@ class PoolRunner(fast.FastProtocolChecking, typing.Protocol):
 
     __slots__ = ()
 
-    if typing.TYPE_CHECKING:
-        _pool: PartialPool
+    @property
+    def partial(self) -> PartialPool:
+        raise NotImplementedError
 
     async def fetch_destiny_member(
         self, user_id: snowflakes.Snowflake
@@ -208,9 +198,21 @@ class PoolRunner(fast.FastProtocolChecking, typing.Protocol):
         """Fetch all notes and return a lazy iterator of notes."""
         raise NotImplementedError
 
+    @typing.overload
+    async def fetch_notes_for(
+        self, user_id: snowflakes.Snowflake, filter_name: str
+    ) -> models.Notes:
+        ...
+
+    @typing.overload
     async def fetch_notes_for(
         self, user_id: snowflakes.Snowflake
     ) -> collections.Collection[models.Notes]:
+        ...
+
+    async def fetch_notes_for(
+        self, user_id: snowflakes.Snowflake, filter_name: str | None = None
+    ) -> models.Notes | collections.Collection[models.Notes]:
         """Fetch notes for a specific snowflake ID."""
         raise NotImplementedError
 
@@ -255,10 +257,6 @@ class NetRunner(fast.FastProtocolChecking, typing.Protocol):
             ___: types.TracebackType | None,
         ) -> None:
             ...
-
-    async def acquire(self) -> aiohttp.ClientSession:
-        """Acquires a new session if its closed or set to `hikari.UNDEFINED`"""
-        raise NotImplementedError
 
     async def close(self) -> None:
         """Closes the HTTP client session."""

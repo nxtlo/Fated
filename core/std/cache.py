@@ -33,13 +33,12 @@ import time
 import typing
 
 import aiobungie
-import aioredis
 import hikari
-from hikari.internal import collections as hikari_collections, cache as hikari_cache
+from hikari.internal import collections as hikari_collections
 
 from core import models
 
-from . import boxed, traits
+from . import boxed, config, traits
 
 try:
     import ujson as json  # type: ignore
@@ -53,17 +52,19 @@ MKT = typing.TypeVar("MKT")
 MVT = typing.TypeVar("MVT")
 
 
+_STATIC_CONFIG = config.Config.into_dotenv()
+
+
 class Hash(traits.HashRunner):
     """A Redis hash. This is used to store fast key -> value objects for our needs."""
 
     __slots__: typing.Sequence[str] = ("__connection", "_aiobungie_client", "_lock")
-    from .config import Config as __Config
 
     def __init__(
         self,
-        host: str = __Config().REDIS_HOST,
-        port: int = __Config().REDIS_PORT,
-        password: str | None = __Config().REDIS_PASSWORD,
+        host: str = _STATIC_CONFIG.REDIS_HOST,
+        port: int = _STATIC_CONFIG.REDIS_PORT,
+        password: str | None = _STATIC_CONFIG.REDIS_PASSWORD,
         /,
         aiobungie_client: aiobungie.Client | None = None,
         *,
@@ -73,6 +74,8 @@ class Hash(traits.HashRunner):
         decode_responses: bool = True,
         **kwargs: typing.Any,
     ) -> None:
+        import aioredis
+
         pool_conn = aioredis.ConnectionPool(
             host=host,
             port=port,
@@ -88,7 +91,7 @@ class Hash(traits.HashRunner):
         self._lock = asyncio.Lock()
 
     def __repr__(self) -> str:
-        return f"Hash(client: {self.__connection!r})"
+        return f"<Hash>"
 
     def set_aiobungie_client(self, client: aiobungie.Client) -> None:
         self._aiobungie_client = client
@@ -146,13 +149,12 @@ class Hash(traits.HashRunner):
             "expires": expires_in,
         }
         await self.__connection.hset(name="tokens", key=owner, value=json.loads(payload))  # type: ignore
-        return models.Tokens(access=access_token, refresh=refresh_token, expires=expires_in, date=now)
-
+        return models.Tokens(
+            access=access_token, refresh=refresh_token, expires=expires_in, date=now
+        )
     # Loads the authorized data from a string JSON object to a Python dict object.
-    async def __loads_tokens(
-        self, owner: hikari.Snowflake
-    ) -> models.Tokens:
-        resp: hikari.Snowflake = await self.__connection.hget("tokens", owner)
+    async def __loads_tokens(self, owner: hikari.Snowflake) -> models.Tokens:
+        resp: str = await self.__connection.hget("tokens", owner)
         if resp:
             return models.Tokens(**json.loads(str(resp)))
 
@@ -182,34 +184,33 @@ class Hash(traits.HashRunner):
         return response
 
     # Not used anymore.
+    async def set_prefix(self, guild_id: hikari.Snowflake, prefix: str) -> None:
+        raise NotImplementedError
 
-    if typing.TYPE_CHECKING:
-        async def set_prefix(self, guild_id: hikari.Snowflake, prefix: str) -> None:
-            raise NotImplementedError
+    async def get_prefix(self, guild_id: hikari.Snowflake) -> str:
+        raise NotImplementedError
 
-        async def get_prefix(self, guild_id: hikari.Snowflake) -> str:
-            raise NotImplementedError
+    async def remove_prefix(self, *guild_ids: hikari.Snowflake) -> None:
+        raise NotImplementedError
 
-        async def remove_prefix(self, *guild_ids: hikari.Snowflake) -> None:
-            raise NotImplementedError
+    async def set_mute_roles(
+        self, guild_id: hikari.Snowflake, role_id: hikari.Snowflake
+    ) -> None:
+        raise NotImplementedError
 
-        async def set_mute_roles(
-            self, guild_id: hikari.Snowflake, role_id: hikari.Snowflake
-        ) -> None:
-            raise NotImplementedError
+    async def get_mute_role(self, guild_id: hikari.Snowflake) -> hikari.Snowflake:
+        raise NotImplementedError
 
-        async def get_mute_role(self, guild_id: hikari.Snowflake) -> hikari.Snowflake:
-            raise NotImplementedError
+    async def remove_mute_role(self, guild_id: hikari.Snowflake) -> None:
+        # await self.__connection.hdel("mutes", str(guild_id))
+        raise NotImplementedError
 
-        async def remove_mute_role(self, guild_id: hikari.Snowflake) -> None:
-            # await self.__connection.hdel("mutes", str(guild_id))
-            raise NotImplementedError
 
-class Memory(hikari_collections.FreezableDict[MKT, hikari_cache.Cell[MVT]]):
+class Memory(hikari_collections.FreezableDict[MKT, MVT]):
     """In-Memory cache."""
 
     if typing.TYPE_CHECKING:
-        _data: dict[MKT, hikari_cache.Cell[MVT]]
+        _data: dict[MKT, MVT]
 
     def __init__(self) -> None:
         super().__init__()
@@ -218,7 +219,7 @@ class Memory(hikari_collections.FreezableDict[MKT, hikari_cache.Cell[MVT]]):
         return repr(self)
 
     def put(self, key: MKT, value: MVT) -> Memory[MKT, MVT]:
-        self[key] = hikari_cache.Cell(value)
+        self[key] = value
         return self
 
     def __repr__(self) -> str:
