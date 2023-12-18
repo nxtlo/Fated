@@ -1,22 +1,24 @@
-// Some errors are disables due to pyright crying over anything
-// Like asyncpg for an example
 {
-    "reportGeneralTypeIssues": "error",
+    "pythonVersion": "3.11",
+    "reportUnnecessaryTypeIgnoreComment": "warning",
+    "reportMissingTypeStubs": "none",
+    "reportIncompatibleVariableOverride": "none",
+    "reportMissingImports": "warning",
+    "reportImportCycles": "none",
+    "reportOverlappingOverload": "none",
     "typeCheckingMode": "strict",
-    "venvPath": ".",
-    "venv": ".venv",
-    // Some modules doesn't have stubs
-    // so we just ignore them.
-    "reportUndefinedVariable": true,
+    "reportUnboundVariable": "error",
+    "reportUnknownParameterType": "error",
+    "reportUnknownLambdaType": "warning",
+    "reportUnknownMemberType": "error",
+    "reportUnknownArgumentType": "warning",
+    "reportUnknownVariableType": "warning",
+    "reportMissingModuleSource": "error",
     "reportMissingParameterType": "error",
     "reportMissingTypeArgument": "error",
-    "reportUnboundVariable": false,
-    "reportMissingTypeStubs": false,
-    "reportUnknownMemberType": false,
-    "reportUnknownVariableType": "none",
-    "reportUnknownArgumentType": "error",
-    "reportUnknownParameterType": "error",
-    "reportUnusedImport": "warning",
+    "reportGeneralTypeIssues": "warning",
+    "reportPrivateUsage": "error",
+    "reportIncompatibleMethodOverride": "none",
     "reportUnusedVariable": "error",
-    "reportOptionalMemberAccess": "information"
+    "reportUnusedImport": "warning",
 }

@@ -1,4 +1,4 @@
-# -*- cofing: utf-8 -*-
+# -*- config: utf-8 -*-
 # MIT License
 #
 # Copyright (c) 2021 - Present nxtlo
@@ -67,12 +67,8 @@ async def about_command(
 ) -> None:
     """Info about the bot itself."""
 
-    from aiobungie import __version__ as aiobungie_version
+    from aiobungie.metadata import __version__ as aiobungie_version
     from hikari._about import __version__ as hikari_version
-    from tanjun import __version__ as tanjun_version
-
-    if ctx.cache:
-        cache = ctx.cache
 
     bot = bot_.get_me() or await bot_.rest.fetch_my_user()
 
@@ -90,20 +86,22 @@ async def about_command(
 
     embed.set_author(name=str(bot.id))
 
-    embed.add_field(
-        "Cache",
-        f"**Members**: {len(cache.get_members_view())}\n"
-        f"**Users**: {len(cache.get_users_view())}\n"
-        f"**Available guilds**: {len(cache.get_available_guilds_view())}\n"
-        f"**Guild Channels**: {len(cache.get_guild_channels_view())}\n"
-        f"**Roles**: {len(cache.get_roles_view())}\n"
-        f"**Emojis**: {len(cache.get_emojis_view())}\n"
-        f"**Messages**: {len(cache.get_messages_view())}\n"
-        f"**Voice states**: {len(cache.get_voice_states_view())}\n"
-        f"**Presences**: {len(cache.get_presences_view())}\n"
-        f"**Invites**: {len(cache.get_invites_view())}",
-        inline=False,
-    )
+    if (cache := ctx.cache) is not None:
+        embed.add_field(
+            "Cache",
+            f"**Members**: {len(cache.get_members_view())}\n"
+            f"**Users**: {len(cache.get_users_view())}\n"
+            f"**Available guilds**: {len(cache.get_available_guilds_view())}\n"
+            f"**Guild Channels**: {len(cache.get_guild_channels_view())}\n"
+            f"**Roles**: {len(cache.get_roles_view())}\n"
+            f"**Emojis**: {len(cache.get_emojis_view())}\n"
+            f"**Messages**: {len(cache.get_messages_view())}\n"
+            f"**Voice states**: {len(cache.get_voice_states_view())}\n"
+            f"**Presences**: {len(cache.get_presences_view())}\n"
+            f"**Invites**: {len(cache.get_invites_view())}",
+            inline=False,
+        )
+
     embed.add_field(
         "Bot",
         f"**Creation Date**: {create_date}\n" f"**Uptime**: {uptime[1:]}",
@@ -115,7 +113,6 @@ async def about_command(
     embed.add_field(
         "Versions",
         f"**Hikari**: {hikari_version}\n"
-        f"**Tanjun**: {tanjun_version}\n"
         f"**Aiobungie**: {aiobungie_version}\n"
         f"**Python**: {sys.version}",
         inline=False,
@@ -124,15 +121,15 @@ async def about_command(
 
 
 @tanjun.with_member_slash_option("member", "The discord member.", default=None)
-@tanjun.as_slash_command("member", "Gets you information about a discord member.")
+@tanjun.as_slash_command("member", "Gets you information about a discord guild member.")
 async def member_view(
     ctx: tanjun.abc.SlashContext, member: hikari.InteractionMember | None
 ) -> None:
-
     assert ctx.guild_id is not None
 
     member = ctx.member or typing.cast(
-        hikari.InteractionMember, await ctx.rest.fetch_member(ctx.guild_id, member.id)
+        hikari.InteractionMember,
+        await ctx.rest.fetch_member(ctx.guild_id, ctx.author),
     )
     embed = hikari.Embed(title=member.id)
 
@@ -142,8 +139,7 @@ async def member_view(
     if member.banner_url:
         embed.set_image(member.banner_url)
 
-    colour = member.accent_colour or boxed.COLOR["invis"]
-    embed.colour = colour
+    embed.colour = member.accent_colour or boxed.COLOR["invis"]
 
     info = [
         f'Nickname: {member.nickname or "N/A"}',
@@ -156,7 +152,7 @@ async def member_view(
     roles = [
         f"{role.mention}: {role.id}"
         for role in member.get_roles()
-        if not "everyone" in role.name
+        if "everyone" not in role.name
     ]
     embed.add_field("Roles", "\n".join(roles))
 
@@ -173,7 +169,6 @@ async def member_view(
 @tanjun.with_user_slash_option("user", "The discord user.", default=None)
 @tanjun.as_slash_command("user", "Gets you information about a discord user.")
 async def user_view(ctx: tanjun.abc.SlashContext, user: hikari.User | None) -> None:
-
     id_ = user.id if user is not None else ctx.author.id
     user = await ctx.rest.fetch_user(id_)
     embed = hikari.Embed(title=user.id)
@@ -211,7 +206,6 @@ async def ping_command(
     ctx: tanjun.abc.MessageContext,
     client: alluka.Injected[aiobungie.Client],
 ) -> None:
-
     aiobungie_start = time.perf_counter()
     _ = await client.rest.fetch_common_settings()
     aiobungie_stop = (time.perf_counter() - aiobungie_start) * 1_000

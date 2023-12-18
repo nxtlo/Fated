@@ -1,4 +1,4 @@
-# -*- cofing: utf-8 -*-
+# -*- config: utf-8 -*-
 # MIT License
 #
 # Copyright (c) 2021 - Present nxtlo
@@ -37,9 +37,8 @@ import typing
 
 import aiohttp
 import hikari
-import yarl
 from hikari import _about as about
-from hikari.internal import data_binding, net, ux
+from hikari.internal import data_binding, net
 from yuyo import backoff
 
 from . import traits
@@ -49,7 +48,6 @@ if typing.TYPE_CHECKING:
 
 
 _LOG: typing.Final[logging.Logger] = logging.getLogger("core.net")
-_strigify = hikari.impl.RESTClientImpl._stringify_http_message  # type: ignore
 
 
 @typing.final
@@ -64,38 +62,11 @@ class HTTPNet(traits.NetRunner):
 
     async def close(self) -> None:
         if self._session is None:
-            raise RuntimeError("Cannot close a session thats already running.")
-        try:
-            await self._session.close()
-        except aiohttp.ClientOSError as e:
-            raise RuntimeError("Couldn't close session.") from e
+            raise RuntimeError("Cannot close a session that's already running.")
+        await self._session.close()
         self._session = None
 
-    async def request(
-        self,
-        method: typing.Literal["GET", "POST", "PUT", "DELETE", "PATCH"],
-        url: str | yarl.URL,
-        getter: str | None = None,
-        json: data_binding.JSONObjectBuilder | None = None,
-        auth: str | None = None,
-        unwrap_bytes: bool = False,
-        **kwargs: typing.Any,
-    ) -> data_binding.JSONObject | data_binding.JSONArray | hikari.Resourceish | None:
-        if not self._lock:
-            self._lock = asyncio.Lock()
-
-        async with self._lock:
-            return await self._request(
-                method=method,
-                url=url,
-                getter=getter,
-                unwrap_bytes=unwrap_bytes,
-                json=json,
-                auth=auth,
-                **kwargs,
-            )
-
-    async def _create_session(self) -> aiohttp.ClientSession:
+    async def _create_session(self):
         if self._session is not None:
             raise RuntimeError("Session is already running...")
 
@@ -108,34 +79,69 @@ class HTTPNet(traits.NetRunner):
             raise_for_status=False,
             trust_env=False,
         )
-        return self._session
+
+    @typing.overload
+    async def request(
+        self,
+        method: typing.Literal["GET", "POST", "PUT", "DELETE", "PATCH"],
+        url: str,
+        getter: str | None = None,
+        json: data_binding.JSONObjectBuilder | None = None,
+        *,
+        unwrap_bytes: bool = True,
+    ) -> bytes | None:
+        ...
+
+    @typing.overload
+    async def request(
+        self,
+        method: typing.Literal["GET", "POST", "PUT", "DELETE", "PATCH"],
+        url: str,
+        getter: str | None = None,
+        json: data_binding.JSONObjectBuilder | None = None,
+    ) -> data_binding.JSONArray | data_binding.JSONObject | None:
+        ...
+
+    async def request(
+        self,
+        method: typing.Literal["GET", "POST", "PUT", "DELETE", "PATCH"],
+        url: str,
+        getter: str | None = None,
+        json: data_binding.JSONObjectBuilder | None = None,
+        *,
+        unwrap_bytes: bool = False,
+    ) -> data_binding.JSONObject | data_binding.JSONArray | bytes | None:
+        if not self._lock:
+            self._lock = asyncio.Lock()
+
+        async with self._lock:
+            return await self._request(
+                method=method,
+                url=url,
+                getter=getter,
+                unwrap_bytes=unwrap_bytes,
+                json=json,
+            )
 
     async def _request(
         self,
         method: typing.Literal["GET", "POST", "PUT", "DELETE", "PATCH"],
-        url: str | yarl.URL,
+        url: str,
         getter: str | None = None,
         json: data_binding.JSONObjectBuilder | None = None,
-        auth: str | None = None,
-        unwrap_bytes: bool = False,
-        **kwargs: typing.Any,
-    ) -> data_binding.JSONObject | data_binding.JSONArray | hikari.Resourceish | None:
-
+        *,
+        unwrap_bytes: bool | None = False,
+    ) -> data_binding.JSONObject | data_binding.JSONArray | bytes | None:
         assert self._session is not None
-        data: data_binding.JSONObject | data_binding.JSONArray | hikari.Resourceish | None = (
-            None
-        )
-        backoff_ = backoff.Backoff(max_retries=6)
+        data: data_binding.JSONObject | data_binding.JSONArray | bytes | None = None
+        backoff_ = backoff.Backoff(max_retries=4)
 
         user_agent: typing.Final[
             str
         ] = f"Fated DiscordBot(https://github.com/nxtlo/Fated) Hikari/{about.__version__}"
 
-        kwargs["headers"] = headers = {}
+        headers = {}
         headers["User-Agent"] = user_agent
-
-        if auth is not None:
-            headers["Authorization"] = f"Bearer {auth}"
 
         stack = contextlib.AsyncExitStack()
 
@@ -143,7 +149,7 @@ class HTTPNet(traits.NetRunner):
             async for _ in backoff_:
                 try:
                     response = await stack.enter_async_context(
-                        self._session.request(method, url, json=json, **kwargs)
+                        self._session.request(method, url, json=json, headers=headers)
                     )
 
                     if (
@@ -151,43 +157,41 @@ class HTTPNet(traits.NetRunner):
                         > response.status
                         >= http.HTTPStatus.OK
                     ):
+                        if not data:
+                            return None
+
                         if unwrap_bytes:
                             return await response.read()
 
-                        data = await response.json(encoding="utf-8")
-                        _LOG.debug(
-                            "%s Success from %s\n%s",
-                            method,
-                            response.real_url.human_repr(),
-                            _strigify(response.headers, data)  # type: ignore
-                            if _LOG.isEnabledFor(ux.TRACE)
-                            else "",
-                        )
+                        if response.content_type == "application/json":
+                            data = data_binding.default_json_loads(
+                                await response.read()
+                            )
+                            _LOG.debug(
+                                "%s Success from %s\n%s",
+                                method,
+                                response.real_url.human_repr(),
+                            )
 
-                        if data is None:
-                            return None
+                            if getter:
+                                try:
+                                    return data[getter]  # type: ignore
+                                except KeyError:
+                                    raise LookupError(
+                                        f"Key {getter} not found in {data!r}"
+                                        f"{response.real_url!s}",
+                                    )
 
-                        if getter is not None:
-                            try:
-                                return data[getter]  # type: ignore
-                            except KeyError:
-                                raise LookupError(
-                                    f"{response.real_url!s}",
-                                    f"{response.headers!r}",
-                                    data,
-                                )
-
-                        return data
+                            return data
 
                     # Handle the ratelimiting.
                     if response.status == http.HTTPStatus.TOO_MANY_REQUESTS:
                         _LOG.warning(
                             f"We're being ratelimited {response.headers}, {method}::{response.url.human_repr()}"
                         )
-                        backoff_.set_next_backoff(float(random.random() / 2))
+                        backoff_.set_next_backoff(random.random() / 2)
 
-                    else:
-                        response.raise_for_status()
+                    response.raise_for_status()
 
                 except (aiohttp.ContentTypeError, aiohttp.ClientPayloadError):
                     raise

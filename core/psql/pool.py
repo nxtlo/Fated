@@ -1,4 +1,4 @@
-# -*- cofing: utf-8 -*-
+# -*- config: utf-8 -*-
 # MIT License
 #
 # Copyright (c) 2021 - Present nxtlo
@@ -25,7 +25,6 @@ from __future__ import annotations
 
 __all__: tuple[str, ...] = ("PgxPool", "PartialPool")
 
-import datetime
 import logging
 import pathlib
 import typing
@@ -35,7 +34,7 @@ import asyncpg.exceptions
 from hikari import iterators
 
 from core import models
-from core.std import traits
+from core.std import config, traits
 
 if typing.TYPE_CHECKING:
     import collections.abc as collections
@@ -45,10 +44,14 @@ if typing.TYPE_CHECKING:
 
 _LOG: typing.Final[logging.Logger] = logging.getLogger("fated.pool")
 
+
 class ExistsError(RuntimeError):
     """A runtime error raised when either the data exists or not found."""
 
-    def __init__(self, message: str = "") -> None:
+    __slots__ = ("message",)
+
+    def __init__(self, message: str = "", *args: typing.Any) -> None:
+        super().__init__(*args)
         self.message = message
 
     def __repr__(self) -> str:
@@ -61,13 +64,14 @@ class ExistsError(RuntimeError):
 class PartialPool(traits.PartialPool):
     """Partial pool implementation. A low-level wrapper around asyncpg.Pool."""
 
-    __slots__: tuple[str, ...] = ("_pool",)
+    __slots__ = ("_pool", "_config")
 
-    def __init__(self) -> None:
+    def __init__(self, cfg: config.Config) -> None:
         self._pool: asyncpg.Pool | None = None
+        self._config = cfg
 
     def __repr__(self) -> str:
-        return f"<PartialPool>"
+        return hex(id(self._pool))
 
     @staticmethod
     def tables(path: pathlib.Path | None = None) -> str:
@@ -84,16 +88,12 @@ class PartialPool(traits.PartialPool):
     ) -> None:
         """Creates a new connection pool and create the tables if build is True."""
 
-        from core.std import config
-
-        config_ = config.Config.into_dotenv()
-
         self._pool = pool = await asyncpg.create_pool(
-            database=config_.DB_NAME,
-            user=config_.DB_USER,
-            password=config_.DB_PASSWORD,
-            host=config_.DB_HOST,
-            port=config_.DB_PORT,
+            database=self._config.DB_NAME,
+            user=self._config.DB_USER,
+            password=self._config.DB_PASSWORD,
+            host=self._config.DB_HOST,
+            port=self._config.DB_PORT,
         )
         _LOG.debug("Created database pool.")
 
@@ -113,7 +113,7 @@ class PartialPool(traits.PartialPool):
 
     async def close(self) -> None:
         if self._pool is None:
-            raise RuntimeError("Cant close pool not created.")
+            raise RuntimeError("Can't close pool not created.")
 
         await self._pool.close()
         _LOG.debug("Database pool closed.")
@@ -123,7 +123,7 @@ class PartialPool(traits.PartialPool):
         if self._pool:
             return self._pool
 
-        raise RuntimeError("Cant return pool not created.")
+        raise RuntimeError("Can't return pool not created.")
 
     async def execute(
         self, sql: str, /, *args: typing.Any, timeout: float | None = None
@@ -140,7 +140,6 @@ class PartialPool(traits.PartialPool):
         *args: typing.Any,
         timeout: float | None = None,
     ) -> list[typing.Any]:
-
         async with self._get_pool().acquire() as conn:
             return await conn.fetch(sql, *args, timeout=timeout)
 
@@ -172,11 +171,11 @@ class PgxPool(traits.PoolRunner):
 
     __slots__: tuple[str, ...] = ("_pool",)
 
-    def __init__(self) -> None:
-        self._pool = PartialPool()
+    def __init__(self, cfg: config.Config) -> None:
+        self._pool = PartialPool(cfg)
 
     def __repr__(self) -> str:
-        return f"<PgxPool>"
+        return f"<PgxPool(ref: {self._pool!r})>"
 
     @property
     def partial(self) -> traits.PartialPool:
@@ -184,22 +183,22 @@ class PgxPool(traits.PoolRunner):
 
     async def fetch_destiny_member(
         self, user_id: snowflakes.Snowflake
-    ) -> models.Destiny:
+    ) -> models.Membership:
         query = await self._pool.fetchrow(
             "SELECT * FROM Destiny WHERE ctx_id = $1;", user_id
         )
         if not query:
             raise ExistsError(f"User <@!{user_id}> not found.")
 
-        return models.Destiny.into(dict(query))
+        return models.Membership.as_membership(dict(query))
 
-    async def fetch_destiny_members(self) -> iterators.LazyIterator[models.Destiny]:
+    async def fetch_destiny_members(self) -> iterators.LazyIterator[models.Membership]:
         query = await self._pool.fetch("SELECT * FROM Destiny;")
         if not query:
             raise ExistsError("No users found in Destiny tables.")
 
         return iterators.FlatLazyIterator(
-            [models.Destiny.into(dict(member)) for member in query]
+            models.Membership.as_membership(dict(member)) for member in query
         )
 
     async def put_destiny_member(
@@ -230,142 +229,3 @@ class PgxPool(traits.PoolRunner):
             )
         except asyncpg.NoDataFoundError:
             raise ExistsError
-
-    async def fetch_notes(self) -> iterators.LazyIterator[models.Notes]:
-        """Fetch all notes and return a lazy iterator of notes."""
-        query = await self._pool.fetch("SELECT * FROM Notes;")
-        if not query:
-            raise ExistsError("No notes found.")
-
-        return iterators.FlatLazyIterator(
-            models.Notes.into(dict(note)) for note in query
-        )
-
-    @typing.overload
-    async def fetch_notes_for(
-        self, user_id: snowflakes.Snowflake, filter_name: str
-    ) -> models.Notes:
-        ...
-
-    @typing.overload
-    async def fetch_notes_for(
-        self, user_id: snowflakes.Snowflake
-    ) -> collections.Collection[models.Notes]:
-        ...
-
-    async def fetch_notes_for(
-        self, user_id: snowflakes.Snowflake, filter_name: str | None = None
-    ) -> collections.Collection[models.Notes] | models.Notes:
-        """Fetch notes for a specific snowflake ID."""
-
-        if filter_name:
-            query = await self._pool.fetchrow(
-                "SELECT * FROM Notes WHERE author_id = $1 AND name = $2",
-                user_id,
-                filter_name,
-            )
-
-            if not query:
-                raise ExistsError(f"Note {filter_name} not found.")
-
-            return models.Notes.into(dict(query))
-
-        query = await self._pool.fetch(
-            "SELECT * FROM Notes WHERE author_id = $1", user_id
-        )
-        if not query:
-            raise ExistsError("No notes found.")
-
-        return [models.Notes.into(dict(note)) for note in query]
-
-    async def put_note(
-        self,
-        name: str,
-        content: str,
-        author_id: snowflakes.Snowflake,
-    ) -> None:
-        try:
-            await self._pool.execute(
-                "INSERT INTO Notes(name, content, author_id, created_at) "
-                "VALUES($1, $2, $3, $4)",
-                name,
-                content,
-                int(author_id),
-                datetime.datetime.utcnow(),
-            )
-        except asyncpg.UniqueViolationError as exc:
-            raise ExistsError(f"You already have a note with name {name}.") from exc
-
-    async def update_note(
-        self, note_name: str, new_content: str, author_id: snowflakes.Snowflake
-    ) -> None:
-        await self._pool.execute(
-            "UPDATE Notes SET content = $1 WHERE name = $2 AND author_id = $3",
-            new_content,
-            note_name,
-            author_id,
-        )
-
-    async def remove_note(
-        self,
-        author_id: snowflakes.Snowflake,
-        /,
-        strict: bool = False,
-        name: str | None = None,
-    ) -> None:
-
-        sql = ["DELETE FROM Notes WHERE author_id = $1"]
-
-        # We will remove this whether a name is passed or not since
-        # Its strict.
-        if strict:
-            await self._pool.execute("".join(sql), author_id)
-            return
-
-        if name is not None:
-            sql.append(" AND name = $2")
-            await self._pool.execute("".join(sql), author_id, name)
-
-    # This is not used and probably will be Removed soonish.
-
-    async def fetch_mutes(self) -> iterators.LazyIterator[models.Mutes]:
-        # query = await self._pool.fetch("SELECT * FROM Mutes;")
-        # if not query:
-        #     raise ExistsError("No mutes found.")
-
-        # return iterators.FlatLazyIterator(
-        #     [models.Mutes.into(dict(entry)) for entry in query]
-        # )
-        raise NotImplementedError
-
-    async def put_mute(
-        self,
-        member_id: snowflakes.Snowflake,
-        author_id: snowflakes.Snowflake,
-        guild_id: snowflakes.Snowflake,
-        duration: float,
-        why: str,
-    ) -> None:
-        # try:
-        #     await self._pool.execute(
-        #         "INSERT INTO Mutes(member_id, guild_id, author_id, muted_at, duration, why) "
-        #         "VALUES($1, $2, $3, $4, $5, $6)",
-        #         int(member_id),
-        #         int(guild_id),
-        #         int(author_id),
-        #         datetime.datetime.utcnow(),
-        #         duration,
-        #         why,
-        #     )
-        # except asyncpg.UniqueViolationError:
-        #     raise ExistsError(f"Member {member_id} is already muted.")
-        raise NotImplementedError
-
-    async def remove_mute(self, user_id: snowflakes.Snowflake) -> None:
-        # try:
-        #     await self._pool.execute(
-        #         "DELETE FROM Mutes WHERE member_id = $1", int(user_id)
-        #     )
-        # except asyncpg.NoDataFoundError:
-        #     raise ExistsError(f"User {user_id} is not muted.")
-        raise NotImplementedError

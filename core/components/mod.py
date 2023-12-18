@@ -1,4 +1,4 @@
-# -*- cofing: utf-8 -*-
+# -*- config: utf-8 -*-
 # MIT License
 #
 # Copyright (c) 2021 - Present nxtlo
@@ -23,9 +23,7 @@
 
 from __future__ import annotations
 
-from yuyo import backoff
-
-__all__: tuple[str] = ("mod",)
+__all__ = ("mod",)
 
 import datetime
 import sys
@@ -34,7 +32,6 @@ import typing
 import alluka
 import hikari
 import tanjun
-import yuyo
 
 from core.std import boxed, cache, traits
 
@@ -55,7 +52,7 @@ async def run_sql(
     query = boxed.parse_code(code=query)
 
     try:
-        result = await pool._pool.fetch(query)  # type: ignore
+        result = await pool.partial.fetch(query)
         # SQL Code error
     except Exception:
         raise tanjun.CommandError(boxed.with_block(sys.exc_info()[1]))
@@ -83,35 +80,36 @@ async def kick(
     member: hikari.InteractionMember,
     reason: hikari.UndefinedOr[str],
 ) -> None:
-
     assert ctx.guild_id
-    guild = ctx.get_guild()
 
     await ctx.defer()
 
-    if guild is None:
+    if ctx.cache is not None:
+        guild = ctx.cache.get_guild(ctx.guild_id)
+
+    else:
         guild = await ctx.rest.fetch_guild(ctx.guild_id)
 
-    backoff_ = backoff.Backoff(3)
-    async for _ in backoff_:
-        try:
+    assert guild
+
+    try:
+        async with ctx.rest.trigger_typing(ctx.channel_id):
             await guild.kick(member.id, reason=reason)
-        except hikari.InternalServerError:
-            pass
+    except hikari.InternalServerError:
+        pass
 
-        except hikari.HTTPError as exc:
-            await ctx.create_followup(
-                f"Couldn't kick member for {exc.message}, Trying again.",
-                flags=hikari.MessageFlag.EPHEMERAL,
-            )
-            backoff_.set_next_backoff(2.0)
+    except hikari.HTTPError as exc:
+        await ctx.create_followup(
+            f"Couldn't kick member for {exc.message}, Trying again.",
+            flags=hikari.MessageFlag.EPHEMERAL,
+        )
+        return
 
-        else:
-            to_respond = [f"Member {member.user.mention} has been kicked."]
-            if reason:
-                to_respond += f" For {reason}."
-            await ctx.respond("".join(to_respond))
-            return
+    to_respond = (
+        f"Member {member.user.mention} has been kicked. {reason if reason else ''}"
+    )
+    await ctx.respond(to_respond)
+    return
 
 
 @tanjun.with_guild_check
@@ -128,36 +126,31 @@ async def ban(
     member: hikari.InteractionMember,
     reason: hikari.UndefinedOr[str],
 ) -> None:
-
     assert ctx.guild_id
-    guild = ctx.get_guild()
 
     await ctx.defer()
+    if ctx.cache is not None:
+        guild = ctx.cache.get_guild(ctx.guild_id)
 
-    if guild is None:
+    else:
         guild = await ctx.rest.fetch_guild(ctx.guild_id)
 
-    backoff_ = backoff.Backoff(3)
+    assert guild is not None
 
-    async for _ in backoff_:
-        try:
+    try:
+        async with ctx.rest.trigger_typing(ctx.channel_id):
             await guild.ban(member.id, reason=reason)
-        except hikari.InternalServerError:
-            continue
+    except hikari.HTTPError as exc:
+        await ctx.create_followup(
+            f"Couldn't banned member for {exc.message}, Try again.",
+            flags=hikari.MessageFlag.EPHEMERAL,
+        )
+        return
 
-        except hikari.HTTPError as exc:
-            await ctx.create_followup(
-                f"Couldn't banned member for {exc.message}, Try again.",
-                flags=hikari.MessageFlag.EPHEMERAL,
-            )
-            backoff_.set_next_backoff(2.0)
-
-        else:
-            to_respond = [f"Member {member.user.mention} has been banned."]
-            if reason:
-                to_respond += f" For {reason}."
-            await ctx.respond("".join(to_respond))
-            return
+    to_respond = (
+        f"Member {member.user.mention} has been banned. {reason if reason else ''}"
+    )
+    await ctx.respond(to_respond)
 
 
 @tanjun.with_owner_check
@@ -172,62 +165,15 @@ async def close_bot(
         raise
 
 
-# This command perform rest calls to get an up-to-date
-# data instead of the cache.
-@tanjun.with_owner_check
-@tanjun.with_argument("id", default=None, converters=(hikari.Snowflake, int))
-@tanjun.with_parser
-@tanjun.as_message_command("guild")
-async def fetch_guild(ctx: tanjun.abc.MessageContext, id: hikari.Snowflake) -> None:
-
-    id = id or ctx.guild_id if ctx.guild_id else hikari.Snowflake(411804307302776833)
-    backoff = yuyo.Backoff(2)
-    async for _ in backoff:
-        try:
-            guild = await ctx.rest.fetch_guild(hikari.Snowflake(id))
-            guild_owner = await guild.fetch_owner()
-
-        except hikari.ForbiddenError as exc:
-            # not in guild most likely or missin access.
-            await ctx.respond(exc.message + ".")
-            return
-
-        # Ratelimited... somehow.
-        except hikari.RateLimitedError as exc:
-            backoff.set_next_backoff(exc.retry_after)
-
-        # 5xx, continue.
-        except hikari.InternalServerError:
-            pass
-
-        else:
-            embed = hikari.Embed(title=guild.name, description=guild.id)
-            if ctx.cache:
-                guild_snowflakes = set(ctx.cache.get_available_guilds_view().keys())
-                users_snowflakes = set(ctx.cache.get_users_view().keys())
-            if guild.icon_url:
-                embed.set_thumbnail(guild.icon_url)
-            (
-                embed.add_field(
-                    "Information",
-                    f"Members: {len(guild.get_members())}\n"
-                    f"Created at: {tanjun.conversion.from_datetime(guild.created_at, style='R')}\n"
-                    f"Cached: {guild.id in guild_snowflakes or False}",  # type: ignore
-                ).add_field(
-                    "Owner",
-                    f"Name: {guild_owner.username}\n"
-                    f"ID: {guild_owner.id}\n"
-                    f"Cached: {ctx.author.id in users_snowflakes or False}",  # type: ignore
-                )
-            )
-            await ctx.respond(embed=embed)
-            return
-
-
 @tanjun.with_owner_check
 @tanjun.as_message_command("guilds")
 async def get_guilds(ctx: tanjun.abc.MessageContext) -> None:
-    guilds = {guild.id: guild async for guild in ctx.rest.fetch_my_guilds().limit(70)}
+    if ctx.cache is not None:
+        guilds = ctx.cache.get_guilds_view()
+    else:
+        guilds = {
+            guild.id: guild async for guild in ctx.rest.fetch_my_guilds().limit(70)
+        }
 
     embed = hikari.Embed(
         description=boxed.with_block(
@@ -273,7 +219,7 @@ async def get(
     key: typing.Any,
     cache_: alluka.Injected[cache.Memory[typing.Any, typing.Any]],
 ) -> None:
-    await ctx.respond(cache_.get(key, "NOT_FOUND"))
+    await ctx.respond(cache_.get(key, "null"))
 
 
 @cacher.with_command
@@ -285,11 +231,11 @@ async def remove(
     key: typing.Any,
     cache_: alluka.Injected[cache.Memory[typing.Any, typing.Any]],
 ) -> None:
-    try:
-        del cache_[key]
-        await ctx.respond("Ok")
-    except KeyError:
-        raise tanjun.CommandError("Key not found in cache.")
+    if key not in cache_:
+        return
+
+    del cache_[key]
+    await ctx.respond("Ok")
 
 
 @cacher.with_command

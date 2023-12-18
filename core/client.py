@@ -1,4 +1,4 @@
-# -*- cofing: utf-8 -*-
+# -*- config: utf-8 -*-
 # MIT License
 #
 # Copyright (c) 2021 - Present nxtlo
@@ -33,10 +33,10 @@ import click
 import hikari
 import tanjun
 import yuyo
-from hikari.internal import aio, ux
+from hikari.internal import aio
 
 from core.psql import pool
-from core.std import api, cache
+from core.std import cache
 from core.std import config as __config
 from core.std import net, traits
 
@@ -45,6 +45,7 @@ if typing.TYPE_CHECKING:
 
 _LOGGER = logging.getLogger("fated.client")
 
+
 def _setup_client(
     client: tanjun.Client,
     bot: hikari_traits.GatewayBotAware,
@@ -52,12 +53,11 @@ def _setup_client(
     /,
 ) -> None:
     # Database pool.
-    pg_pool = pool.PgxPool()
+    pg_pool = pool.PgxPool(config)
     # Networking.
     client_session = net.HTTPNet()
-    wrapper = api.AnyWrapper()
     # Cache
-    redis_hash = cache.Hash()
+    redis_hash = cache.Hash(config)
     mem_cache = cache.Memory[typing.Any, typing.Any]()
     # yuyo client
     yuyo_client = yuyo.ComponentClient.from_gateway_bot(bot, event_managed=False)
@@ -70,7 +70,6 @@ def _setup_client(
         .add_client_callback(tanjun.ClientCallbackNames.CLOSING, pg_pool.partial.close)
         # HTTP.
         .set_type_dependency(traits.NetRunner, client_session)
-        .set_type_dependency(api.AnyWrapper, wrapper)
         # Cache. This is kinda overkill but we need the memory cache for api requests
         # And the redis hash for stuff that are not worth storing in a database for the sake of speed.
         # i.e., OAuth2 tokens
@@ -91,11 +90,11 @@ def _setup_client(
         _LOGGER.debug("aiobungie tokens found.")
         aiobungie_client = aiobungie.Client(
             str(config.BUNGIE_TOKEN),
-            config.BUNGIE_CLIENT_SECRET,
-            config.BUNGIE_CLIENT_ID,
+            client_secret=config.BUNGIE_CLIENT_SECRET,
+            client_id=config.BUNGIE_CLIENT_ID,
             max_retries=1,
         )
-        redis_hash.set_aiobungie_client(aiobungie_client)
+        redis_hash.client(aiobungie_client)
         client.set_type_dependency(aiobungie.Client, aiobungie_client)
         client.add_client_callback(
             tanjun.ClientCallbackNames.CLOSING, aiobungie_client.rest.close
@@ -138,49 +137,36 @@ def _build_bot() -> hikari.impl.GatewayBot:
     return bot
 
 
-def _enable_logging(
-    *,
-    hikari: bool = False,
-    tanjun: bool = False,
-    us: bool = False,
-    aiobungie: bool = False,
-) -> None:
+def _enable_logging() -> None:
+    logging.getLogger("hikari.cache").setLevel(logging.DEBUG)
+    logging.getLogger("aiobungie.rest").setLevel(logging.DEBUG)
 
-    if hikari:
-        logging.getLogger("hikari.rest").setLevel(ux.TRACE)
-        logging.getLogger("hikari.cache").setLevel(logging.DEBUG)
+    for logger in (
+        logging.getLogger("core.net"),
+        logging.getLogger("fated.cache"),
+        logging.getLogger("fated.pool"),
+        logging.getLogger("fated.client"),
+    ):
+        logger.setLevel(logging.DEBUG)
 
-    if us:
-        for logger in [
-            logging.getLogger("core.net"),
-            logging.getLogger("fated.cache"),
-            logging.getLogger("fated.pool"),
-            logging.getLogger("fated.client"),
-        ]:
-            logger.setLevel(logging.DEBUG)
-
-    if tanjun:
-        for logger in [
-            logging.getLogger("hikari.tanjun"),
-            logging.getLogger("hikari.tanjun.context"),
-            logging.getLogger("hikari.tanjun.clients"),
-            logging.getLogger("hikari.tanjun.components"),
-        ]:
-            logger.setLevel(logging.DEBUG)
-
-    if aiobungie:
-        logging.getLogger("aiobungie.rest").setLevel(logging.DEBUG)
+    for logger in (
+        logging.getLogger("hikari.tanjun"),
+        logging.getLogger("hikari.tanjun.context"),
+        logging.getLogger("hikari.tanjun.clients"),
+        logging.getLogger("hikari.tanjun.components"),
+    ):
+        logger.setLevel(logging.DEBUG)
 
 
 @click.group(name="main", invoke_without_command=True, options_metavar="[options]")
 @click.pass_context
 def main(ctx: click.Context) -> None:
-    _enable_logging(tanjun=True, us=True, aiobungie=True)
+    _enable_logging()
     if ctx.invoked_subcommand is None:
         _build_bot().run(status=hikari.Status.DO_NOT_DISTURB)
 
 
-@main.group(short_help="Handles the db configs.", options_metavar="[options]")
+@main.group(short_help="Database related commands.", options_metavar="[options]")
 def db() -> None:
     pass
 
@@ -188,11 +174,15 @@ def db() -> None:
 @db.command(name="init", short_help="Build the database tables.")
 def init() -> None:
     loop = aio.get_or_make_loop()
-    pool_ = pool.PartialPool()
+    pool_ = pool.PartialPool(__config.Config.into_dotenv())
     try:
-        loop.run_until_complete(pool_.open(build=True))  # type: ignore
+        loop.run_until_complete(pool_.open(build=True))
     except Exception:
-        click.echo("Couldn't build the daatabse tables.", err=True, color=True)
+        click.echo(
+            "Encountered an error while building the database tables.",
+            err=True,
+            color=True,
+        )
         traceback.print_exc()
     finally:
         loop.run_until_complete(pool_.close())
@@ -200,16 +190,14 @@ def init() -> None:
 
 @main.command(name="format", short_help="Format the bot code.")
 def format_code() -> None:
-    subprocess.run(
-        "black core; isort core; codespell core -w -L crate;",
-        capture_output=True,
-        shell=True,
-    )
+    commands = ("ruff format", "isort core", "codespell core -w -L crates")
+    for command in commands:
+        subprocess.run(command, shell=True)
 
 
 @main.command(name="install", short_help="Install the requirements")
 def install_requirements() -> None:
-    with subprocess.Popen(
+    subprocess.run(
         [
             "py",
             "-m",
@@ -219,9 +207,4 @@ def install_requirements() -> None:
             "requirements.txt",
             "--upgrade",
         ]
-    ) as proc:
-        ok, err = proc.communicate()
-        if ok:
-            click.echo("Installed requirements.")
-        elif err:
-            click.echo("Couldn't install requirements")
+    )

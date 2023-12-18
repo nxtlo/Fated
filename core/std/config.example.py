@@ -1,4 +1,4 @@
-# -*- cofing: utf-8 -*-
+# -*- config: utf-8 -*-
 # MIT License
 #
 # Copyright (c) 2021 - Present nxtlo
@@ -25,12 +25,13 @@ from __future__ import annotations
 
 __all__: tuple[str] = ("Config",)
 
-import dataclasses
+import functools
 
+import attrs
 from hikari.api import config as hikari_config
 
 
-@dataclasses.dataclass(repr=False, frozen=True, slots=True)
+@attrs.frozen
 class Config:
     """Main shared configuration between the bot, client, database and other."""
 
@@ -51,6 +52,7 @@ class Config:
     REDIS_PASSWORD: str | None = None
 
     @classmethod
+    @functools.cache
     def into_dotenv(cls) -> Config:
         """Loads the configs from `.env` file if installed and set."""
         import os as _os

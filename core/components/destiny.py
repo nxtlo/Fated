@@ -1,4 +1,4 @@
-# -*- cofing: utf-8 -*-
+# -*- config: utf-8 -*-
 # MIT License
 #
 # Copyright (c) 2021 - Present nxtlo
@@ -112,17 +112,19 @@ search_group = destiny_group.with_command(
 D2_SETS: typing.Final[str] = "https://data.destinysets.com/i/InventoryItem:{hash}"
 STAR: typing.Final[str] = "⭐"
 
-_slots: collections.Callable[[aiobungie.crate.Fireteam], str] = (
-    lambda fireteam: "Full"
-    if fireteam.available_player_slots == 0
-    else f"{fireteam.available_player_slots}/{fireteam.player_slot_count}"
-)
+
+def _slots(fireteam: aiobungie.crates.Fireteam) -> str:
+    return (
+        "Full"
+        if fireteam.available_player_slots == 0
+        else f"{fireteam.available_player_slots}/{fireteam.player_slot_count}"
+    )
+
 
 # This is sent when the API is down.
 async def _handle_errors(
     ctx: tanjun.abc.Context, exc: aiobungie.InternalServerError, /
 ) -> None:
-
     try:
         if exc.error_status == "SystemDisabled":
             await ctx.respond(exc.message)
@@ -134,14 +136,13 @@ async def _get_destiny_player(
     client: aiobungie.Client,
     name: str,
     type: aiobungie.MembershipType = aiobungie.MembershipType.ALL,
-) -> aiobungie.crate.DestinyMembership:
-    names = name.split("#")
-    name_, code = names
+) -> aiobungie.crates.DestinyMembership:
+    name, code = name.split("#")
 
-    player = await client.fetch_player(name_, int(code), type)
+    player = await client.fetch_membership(name, int(code), type)
     if not player:
         raise LookupError(
-            f"Player name `{name}` not found. "
+            f"Player name `{name}#{code}` not found. "
             "Make sure you include the full name looks like this `Fate#1234`"
         ) from None
 
@@ -154,7 +155,6 @@ async def _pool_or_rest(
     author_id: hikari.Snowflake,
     name: str | None = None,
 ) -> tuple[int, aiobungie.MembershipType, str]:
-
     if name is not None:
         try:
             membership = await _get_destiny_player(client, name)
@@ -238,7 +238,7 @@ async def _fetch_instance(client: aiobungie.Client, instance_id: int) -> hikari.
 
 
 def _build_inventory_item_embed(
-    entity: aiobungie.crate.InventoryEntity,
+    entity: aiobungie.crates.InventoryEntity,
 ) -> hikari.Embed:
     sets = D2_SETS.format(hash=entity.hash)
 
@@ -249,7 +249,7 @@ def _build_inventory_item_embed(
             colour=boxed.COLOR["invis"],
             description=(
                 entity.description
-                if entity.description is not aiobungie.Undefined
+                if entity.description is not entity.description
                 else entity.about
             ),
         )
@@ -271,12 +271,12 @@ def _build_inventory_item_embed(
         embed.set_thumbnail(entity.icon.url)
 
     if entity.type is aiobungie.ItemType.EMBLEM:
-        if entity.secondary_icon is not aiobungie.Undefined:
-            embed.set_image(str(entity.secondary_icon))
+        if entity.secondary_icon:
+            embed.set_image(entity.secondary_icon.url)
 
     else:
-        if entity.screenshot is not aiobungie.Undefined:
-            embed.set_image(str(entity.screenshot))
+        if entity.screenshot:
+            embed.set_image(entity.screenshot.url)
 
     return embed
 
@@ -343,7 +343,7 @@ async def sync_command(
             user = await client.fetch_current_user_memberships(response.access_token)
 
             try:
-                membership = user.destiny[0]
+                membership = user.memberships[0]
             except IndexError:
                 # They don't have a Destiny membership aperantly ¯\_(ツ)_/¯
                 raise tanjun.CommandError("You don't have any Destiny 2 memberships!")
@@ -371,9 +371,9 @@ async def sync_command(
                 embed=(
                     hikari.Embed(
                         title=membership.unique_name,
-                        description=f"Synced successfully.",
-                        url=user.bungie.profile_url,
-                    ).set_thumbnail(str(user.bungie.picture))
+                        description="Synced successfully.",
+                        url=user.bungie_user.profile_url,
+                    ).set_thumbnail(user.bungie_user.picture.url)
                 )
             )
 
@@ -385,7 +385,6 @@ async def desync(
     pool_: alluka.Injected[traits.PoolRunner],
     redis: alluka.Injected[traits.HashRunner],
 ) -> None:
-
     # Redis will remove if the tokens exists and fallback if not
     await redis.remove_bungie_tokens(ctx.author.id)
 
@@ -404,7 +403,6 @@ async def user_command(
     redis: alluka.Injected[traits.HashRunner],
     client: alluka.Injected[aiobungie.Client],
 ) -> None:
-
     try:
         tokens = await redis.get_bungie_tokens(ctx.author.id)
     except LookupError:
@@ -417,7 +415,7 @@ async def user_command(
     except aiobungie.Unauthorized:
         raise
 
-    bungie = user.bungie
+    bungie = user.bungie_user
 
     embed = hikari.Embed(
         title=f"{bungie.unique_name} - {bungie.id}", description=bungie.about
@@ -438,9 +436,11 @@ async def user_command(
         .add_field("Connections", "\n".join(connections))
         .add_field(
             "Memberships",
-            "\n".join([f"[{m.type}: {m.unique_name}]({m.link})" for m in user.destiny]),
+            "\n".join(
+                [f"[{m.type}: {m.unique_name}]({m.link})" for m in user.memberships]
+            ),
         )
-        .set_footer(f"{boxed.naive_datetime(user.bungie.created_at)}")
+        .set_footer(f"{boxed.naive_datetime(bungie.created_at)}")
     )
     await ctx.respond(embed=embed)
 
@@ -453,7 +453,6 @@ async def friend_list_command(
     redis: alluka.Injected[traits.HashRunner],
     client: alluka.Injected[aiobungie.Client],
 ) -> None:
-
     try:
         tokens = await redis.get_bungie_tokens(ctx.author.id)
     except LookupError:
@@ -466,26 +465,31 @@ async def friend_list_command(
     except aiobungie.HTTPError as e:
         raise tanjun.CommandError(e.message)
 
-    check_status: collections.Callable[[aiobungie.Presence], str] = (
-        lambda status: "<:online2:464520569975603200>"
-        if status is aiobungie.Presence.ONLINE
-        else "<:offline2:464520569929334784>"
-    )
-    build_friends: collections.Callable[
-        [collections.Sequence[aiobungie.crate.Friend]], str
-    ] = lambda friend_list_: "\n".join(
-        [
-            f"{check_status(friend.online_status)} `{friend.unique_name}`"
-            for friend in friend_list_[:15]
-        ]
-    )
-    filtered_length = aiobungie.into_iter(friend_list).filter(
-        lambda friend: friend.online_status is aiobungie.Presence.ONLINE
+    def check_status(status: aiobungie.Presence) -> str:
+        return (
+            "<:online2:464520569975603200>"
+            if status is aiobungie.Presence.ONLINE
+            else "<:offline2:464520569929334784>"
+        )
+
+    def build_friends(
+        friend_list_: collections.Sequence[aiobungie.crates.Friend],
+    ) -> str:
+        return "\n".join(
+            [
+                f"{check_status(friend.online_status)} `{friend.unique_name}`"
+                for friend in friend_list_[:15]
+            ]
+        )
+
+    filtered_length = tuple(
+        filter(
+            lambda friend: friend.online_status is aiobungie.Presence.ONLINE,
+            friend_list,
+        )
     )
 
-    embed = hikari.Embed(
-        title=f"({filtered_length.count()}/{len(friend_list)}) Online."
-    )
+    embed = hikari.Embed(title=f"({len(filtered_length)}/{len(friend_list)}) Online.")
     if friend_list:
         embed.add_field("Friends", build_friends(friend_list))
 
@@ -517,7 +521,6 @@ async def guardians(
     pool_: alluka.Injected[traits.PoolRunner],
     component_client: alluka.Injected[yuyo.ComponentClient],
 ) -> None:
-
     user = user or ctx.author
 
     id, platform, name = await _pool_or_rest(client, pool_, user.id, username)
@@ -538,8 +541,12 @@ async def guardians(
                     title=f"{name}'s {char.class_type.name.title()}",
                     colour=boxed.COLOR["invis"],
                 )
-                .set_thumbnail(char.emblem_icon.url)
-                .set_author(name=str(char.id), url=char.url, icon=char.emblem_icon.url)
+                .set_thumbnail(char.emblem_icon.url if char.emblem_icon else None)
+                .set_author(
+                    name=str(char.id),
+                    url=char.url,
+                    icon=char.emblem_icon.url if char.emblem_icon else None,
+                )
                 .add_field(
                     "Information",
                     f"{char.race.name.title()} {char.gender.name.title()} {char.class_type.name.title()}\n"
@@ -579,7 +586,6 @@ async def lfg_command(
     client: alluka.Injected[aiobungie.Client],
     component_client: alluka.Injected[yuyo.ComponentClient],
 ) -> None:
-
     # Different platforms from the normal ones.
     match platform:
         case "Steam":
@@ -642,7 +648,6 @@ async def acquired_items_command(
     pool_: alluka.Injected[traits.PoolRunner],
     component_client: alluka.Injected[yuyo.ComponentClient],
 ) -> None:
-
     member = member or ctx.author
     # This is kinda repeatable :\.
     if username is not None and "#" in username:
@@ -706,7 +711,6 @@ async def search_players(
     client: alluka.Injected[aiobungie.Client],
     component_client: alluka.Injected[yuyo.ComponentClient],
 ) -> None:
-
     results = (await client.search_users(name)).collect()
 
     if not results:
@@ -746,7 +750,6 @@ async def search_entities(
     client: alluka.Injected[aiobungie.Client],
     component_client: alluka.Injected[yuyo.ComponentClient],
 ) -> None:
-
     try:
         results = await client.search_entities(
             name, definition or "DestinyInventoryItemDefinition"
@@ -781,7 +784,6 @@ async def get_clan(
     query: str,
     client: alluka.Injected[aiobungie.Client],
 ) -> None:
-
     await ctx.defer()
 
     try:
@@ -835,7 +837,6 @@ async def item_definition_command(
     client: alluka.Injected[aiobungie.Client],
     cache_: alluka.Injected[cache.Memory[int, hikari.Embed]],
 ) -> None:
-
     if cached_item := cache_.get(item_hash):
         await ctx.respond(embed=cached_item)
         return
@@ -862,7 +863,6 @@ async def post_activity_command(
     client: alluka.Injected[aiobungie.Client],
     cache: alluka.Injected[cache.Memory[int, hikari.Embed]],
 ) -> None:
-
     if cached_instance := cache.get(instance):
         await ctx.respond(embed=cached_instance)
         return

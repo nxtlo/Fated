@@ -1,4 +1,4 @@
-# -*- cofing: utf-8 -*-
+# -*- config: utf-8 -*-
 # MIT License
 #
 # Copyright (c) 2021 - Present nxtlo
@@ -23,10 +23,8 @@
 
 from __future__ import annotations
 
-__all__: tuple[str, ...] = ("api", "git", "meta", "mod", "notes_component")
+__all__: tuple[str, ...] = ("api", "meta", "mod")
 
 from .api import api
-from .git import git
 from .meta import meta
 from .mod import mod
-from .notes import notes_component

@@ -1,4 +1,4 @@
-# -*- cofing: utf-8 -*-
+# -*- config: utf-8 -*-
 # MIT License
 #
 # Copyright (c) 2021 - Present nxtlo
@@ -34,84 +34,7 @@ import hikari
 import tanjun
 import yuyo
 
-from core.std import api as api_mod
 from core.std import boxed, traits
-
-
-@tanjun.with_str_slash_option("name", "The anime's name.", default=None)
-@tanjun.with_bool_slash_option("random", "Get a random anime.", default=True)
-@tanjun.with_str_slash_option(
-    "genre",
-    "The anime genre. This can be used with the random option.",
-    choices=boxed.iter(boxed.GENRES),
-    default=boxed.RANDOM_GENRE,
-)
-@tanjun.as_slash_command("anime", "Returns basic information about an anime.")
-async def get_anime(
-    ctx: tanjun.abc.SlashContext,
-    name: str,
-    random: bool | None,
-    genre: str,
-    jian: alluka.Injected[api_mod.AnyWrapper],
-    component_client: alluka.Injected[yuyo.ComponentClient],
-) -> None:
-    await ctx.defer()
-
-    anime_embed = await jian.fetch_anime(name, random=random, genre=genre)
-
-    assert anime_embed is not None
-    if not isinstance(anime_embed, typing.Generator):
-        await ctx.respond(embed=anime_embed)
-        return
-
-    await boxed.generate_component(
-        ctx, ((hikari.UNDEFINED, embed) for embed in anime_embed), component_client
-    )
-
-
-@tanjun.as_slash_command("help", "Get help about the bot.")
-async def help_(ctx: tanjun.abc.SlashContext) -> None:
-    emb = hikari.Embed(title="Bot help menu.")
-    for command in ctx.client.iter_slash_commands():
-        summary: str = command.metadata.get("summary", "No Summary")
-        options: str = command.metadata.get("options", "No Options")
-
-        emb.add_field(command.name, "\n".join([f"{summary}\n\n{options}"]))
-
-    await ctx.respond(embed=emb)
-
-
-@tanjun.with_str_slash_option("name", "The manga name")
-@tanjun.as_slash_command("manga", "Returns basic information about a manga.")
-async def get_manga(
-    ctx: tanjun.abc.SlashContext,
-    name: str,
-    jian: alluka.Injected[api_mod.AnyWrapper],
-    component_client: alluka.Injected[yuyo.ComponentClient],
-) -> None:
-    await ctx.defer()
-
-    manga_embeds = await jian.fetch_manga(name)
-    if manga_embeds:
-        await boxed.generate_component(
-            ctx, ((hikari.UNDEFINED, embed) for embed in manga_embeds), component_client
-        )
-
-
-@tanjun.with_str_slash_option("name", "The name of the definition.")
-@tanjun.as_slash_command("def", "Returns a definition given a name.")
-async def define(
-    ctx: tanjun.abc.SlashContext,
-    name: str,
-    urban: alluka.Injected[api_mod.AnyWrapper],
-    component_client: alluka.Injected[yuyo.ComponentClient],
-) -> None:
-    definitions = await urban.fetch_definitions(name)
-
-    if definitions:
-        pages = ((hikari.UNDEFINED, embed) for embed in definitions)
-
-        await boxed.generate_component(ctx, pages, component_client)
 
 
 # Fun stuff.
@@ -120,7 +43,6 @@ async def doggo(
     ctx: tanjun.abc.MessageContext,
     net: alluka.Injected[traits.NetRunner],
 ) -> None:
-
     async with net as client:
         resp = await client.request(
             "GET",
@@ -134,16 +56,12 @@ async def doggo(
 
 
 @tanjun.as_message_command("cat")
-async def kittie(
+async def cat(
     ctx: tanjun.abc.MessageContext,
     net: alluka.Injected[traits.NetRunner],
 ) -> None:
-
     async with net as client:
-        resp = await client.request(
-            "GET",
-            "https://some-random-api.ml/animal/cat",
-        )
+        resp = await client.request("GET", "https://some-random-api.ml/animal/cat")
         assert isinstance(resp, dict)
         embed = hikari.Embed(description=resp["fact"])
         embed.set_image(resp["image"])
@@ -159,7 +77,6 @@ async def wink(
     member: hikari.Member | None,
     net: alluka.Injected[traits.NetRunner],
 ) -> None:
-
     async with net as client:
         resp = await client.request(
             "GET", "https://some-random-api.ml/animu/wink", getter="link"
@@ -211,10 +128,10 @@ async def jail(
             f"https://some-random-api.ml/canvas/jail?avatar={member.avatar_url}",
             unwrap_bytes=True,
         )
-        assert isinstance(resp, bytes)
         embed = hikari.Embed(
             description=f"{ctx.author.username} jails {member.username if member else 'their self'}"
         )
+        assert resp is not None
         embed.set_image(resp)
 
         await ctx.respond(embed=embed)
@@ -233,7 +150,6 @@ async def run_net(
     net: alluka.Injected[traits.NetRunner],
     method: typing.Literal["GET", "POST"],
 ) -> None:
-
     async with net as cli:
         try:
             result = await cli.request(method, url, getter=getter)
