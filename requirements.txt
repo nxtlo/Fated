@@ -1,7 +1,8 @@
-aiobungie~=0.2.8
-hikari[speedups]~=2.0.0.dev116
-hikari-tanjun~=2.11.4
-hikari-yuyo~=1.14.2
-asyncpg~=0.27.0
+hikari-yuyo~=1.19.0
+aiobungie~=0.2.10
+hikari[speedups]~=2.0.0.dev122
+hikari-tanjun~=2.17.1
+hikari-yuyo~=1.9.0a1
+asyncpg~=0.29.0
 aioredis~=2.0.1
 click~=8.1.3
