@@ -4,5 +4,5 @@ hikari[speedups]~=2.0.0.dev122
 hikari-tanjun~=2.17.2
 hikari-yuyo~=1.19.1
 asyncpg~=0.29.0
-redis~=5.0.1
+redis~=5.0.2
 click~=8.1.7
